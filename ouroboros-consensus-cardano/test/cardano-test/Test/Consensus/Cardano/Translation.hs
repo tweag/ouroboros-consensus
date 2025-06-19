@@ -142,6 +142,11 @@ tests =
         babbageToConwayLedgerStateTranslation
         utxoTablesAreEmpty
         (\st -> cover 50 (nonEmptyUtxosShelley st) "UTxO set is not empty")
+    , testTablesTranslation
+        "Conway to Dijkstra"
+        conwayToDijkstraLedgerStateTranslation
+        utxoTablesAreEmpty
+        (\st -> cover 50 (nonEmptyUtxosShelley st) "UTxO set is not empty")
     ]
 
 {-------------------------------------------------------------------------------
@@ -180,6 +185,12 @@ alonzoToBabbageLedgerStateTranslation ::
     TranslateLedgerState
     (ShelleyBlock (TPraos Crypto) AlonzoEra)
     (ShelleyBlock (Praos Crypto) BabbageEra)
+babbageToConwayLedgerStateTranslation ::
+  RequiringBoth
+    WrapLedgerConfig
+    TranslateLedgerState
+    (ShelleyBlock (Praos Crypto) BabbageEra)
+    (ShelleyBlock (Praos Crypto) ConwayEra)
 PCons
   byronToShelleyLedgerStateTranslation
   ( PCons
@@ -191,8 +202,11 @@ PCons
               ( PCons
                   alonzoToBabbageLedgerStateTranslation
                   ( PCons
-                      _
-                      PNil
+                      babbageToConwayLedgerStateTranslation
+                      ( PCons
+                          _
+                          PNil
+                        )
                     )
                 )
             )
@@ -205,32 +219,47 @@ PCons
         (CardanoEras Crypto)
     tls = translateLedgerState hardForkEraTranslation
 
-babbageToConwayLedgerStateTranslation ::
+conwayToDijkstraLedgerStateTranslation ::
   RequiringBoth
     WrapLedgerConfig
     TranslateLedgerState
-    (ShelleyBlock (Praos Crypto) BabbageEra)
     (ShelleyBlock (Praos Crypto) ConwayEra)
-babbageToConwayLedgerStateTranslation = translateLedgerStateBabbageToConwayWrapper
+    (ShelleyBlock (Praos Crypto) DijkstraEra)
+conwayToDijkstraLedgerStateTranslation = translateLedgerStateConwayToDijkstraWrapper
 
 -- | Tech debt: The babbage to conway translation performs a tick, and we would
 -- need to create a reasonable ledger state. Instead this is just a copy-paste
 -- of the code without the tick.
 --
 -- This should be fixed once the real translation is fixed.
-translateLedgerStateBabbageToConwayWrapper ::
+-- translateLedgerStateBabbageToConwayWrapper ::
+--   RequiringBoth
+--     WrapLedgerConfig
+--     TranslateLedgerState
+--     (ShelleyBlock (Praos Crypto) BabbageEra)
+--     (ShelleyBlock (Praos Crypto) ConwayEra)
+-- translateLedgerStateBabbageToConwayWrapper =
+--   RequireBoth $ \_ cfgConway ->
+--     TranslateLedgerState $ \_ ->
+--       noNewTickingDiffs
+--         . unFlip
+--         . unComp
+--         . Core.translateEra' (getConwayTranslationContext cfgConway)
+--         . Comp
+--         . Flip
+translateLedgerStateConwayToDijkstraWrapper ::
   RequiringBoth
     WrapLedgerConfig
     TranslateLedgerState
-    (ShelleyBlock (Praos Crypto) BabbageEra)
     (ShelleyBlock (Praos Crypto) ConwayEra)
-translateLedgerStateBabbageToConwayWrapper =
-  RequireBoth $ \_ cfgConway ->
+    (ShelleyBlock (Praos Crypto) DijkstraEra)
+translateLedgerStateConwayToDijkstraWrapper =
+  RequireBoth $ \_ cfgDijkstra ->
     TranslateLedgerState $ \_ ->
       noNewTickingDiffs
         . unFlip
         . unComp
-        . Core.translateEra' (getConwayTranslationContext cfgConway)
+        . Core.translateEra' (getDijkstraTranslationContext cfgDijkstra)
         . Comp
         . Flip
 
@@ -440,6 +469,20 @@ instance
   arbitrary =
     TestSetup
       <$> (pure $ fixedShelleyLedgerConfig Genesis.NoGenesis)
+      <*> (fixedShelleyLedgerConfig <$> arbitrary)
+      <*> arbitrary
+      <*> (EpochNo <$> arbitrary)
+
+instance
+  Arbitrary
+    ( TestSetup
+        (ShelleyBlock (Praos Crypto) ConwayEra)
+        (ShelleyBlock (Praos Crypto) DijkstraEra)
+    )
+  where
+  arbitrary =
+    TestSetup
+      <$> (fixedShelleyLedgerConfig <$> arbitrary)
       <*> (fixedShelleyLedgerConfig <$> arbitrary)
       <*> arbitrary
       <*> (EpochNo <$> arbitrary)
