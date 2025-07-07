@@ -1,6 +1,11 @@
 # Consensus benchmarks
 
 We are in the process of adding component level microbenchmarks for Consensus.
+
+We check for regressions in performance on CI.
+
+## Mempool Benchmark
+
 We started with microbenchmarks for adding transactions to the mempool. The
 mempool benchmarks can be run using the following command.
 
@@ -8,4 +13,10 @@ mempool benchmarks can be run using the following command.
 cabal new-run ouroboros-consensus:mempool-bench
 ```
 
-We check for regressions in performance on CI. We might publish benchmark results in this site shortly.
+## ChainSync Client Benchmark
+
+During the work on Ouroboros Genesis, we added a ChainSync benchmark which uses test blocks:
+
+```sh
+cabal new-run ouroboros-consensus:ChainSync-client-bench -- 10 10
+```
