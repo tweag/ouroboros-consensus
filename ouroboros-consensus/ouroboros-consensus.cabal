@@ -836,6 +836,40 @@ benchmark ChainSync-client-bench
     unstable-consensus-testlib,
     with-utf8,
 
+benchmark PerasCertDB-bench
+  import: common-bench
+  type: exitcode-stdio-1.0
+  hs-source-dirs: bench/PerasCertDB-bench
+  main-is: Main.hs
+  other-modules:
+  build-depends:
+    aeson,
+    base,
+    containers,
+    criterion,
+    deepseq,
+    ouroboros-consensus,
+    ouroboros-network-api,
+    unstable-consensus-testlib,
+
+-- bytestring,
+-- cardano-ledger-core,
+-- cardano-slotting,
+-- cassava,
+-- contra-tracer,
+-- mempack,
+-- nothunks,
+-- ouroboros-consensus,
+-- serialise,
+-- tasty,
+-- tasty-bench,
+-- tasty-hunit,
+-- text,
+-- transformers,
+-- tree-diff,
+-- unstable-consensus-testlib,
+-- unstable-mempool-test-utils,
+-- with-utf8,
 test-suite doctest
   import: common-test
   main-is: doctest.hs
