@@ -16,6 +16,9 @@ import Options.Applicative
 import Ouroboros.Consensus.Node.ProtocolInfo (ProtocolInfo (..))
 import Text.Read (readMaybe)
 
+import Control.Tracer (stdoutTracer, traceWith)
+import Data.List (intercalate)
+
 main :: IO ()
 main = withStdTerminalHandles $ do
   cryptoInit
@@ -26,6 +29,7 @@ main = withStdTerminalHandles $ do
         hostAddr = Socket.tupleToHostAddress addr
       args = Cardano.CardanoBlockArgs configFile Nothing
   ProtocolInfo{pInfoConfig} <- mkProtocolInfo args
+  traceWith stdoutTracer $ "ImmDB server running on " ++ printHost (addr, port)
   absurd <$> ImmDBServer.run immDBDir sockAddr pInfoConfig
 
 type HostAddr = (Word8, Word8, Word8, Word8)
@@ -36,6 +40,11 @@ data Opts = Opts
   , port :: Socket.PortNumber
   , configFile :: FilePath
   }
+
+printHost :: (HostAddr, Socket.PortNumber) -> String
+printHost ((a, b, c, d), port) = intercalate "." subs ++ ":" ++ show port
+ where
+  subs = map show [a, b, c, d]
 
 parseAddr :: String -> Either String HostAddr
 parseAddr s = first contextualize $ traverse tryParse chunks >>= extractResult
