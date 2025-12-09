@@ -690,10 +690,12 @@ executable immdb-server
   build-depends:
     base,
     cardano-crypto-class,
+    contra-tracer,
     network,
     optparse-applicative,
     ouroboros-consensus,
     ouroboros-consensus-cardano:unstable-cardano-tools,
+    trace-resources,
     with-utf8,
 
 executable snapshot-converter
