@@ -2,6 +2,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE PackageImports #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
 
@@ -14,7 +15,7 @@ import Control.Monad
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.Trans.Maybe (MaybeT (..))
 import Control.ResourceRegistry (runWithTempRegistry, withRegistry)
-import Control.Tracer
+import "contra-tracer" Control.Tracer
 import Data.Foldable (asum)
 import Data.Functor ((<&>))
 import Data.Functor.Identity

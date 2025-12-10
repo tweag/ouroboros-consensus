@@ -1,4 +1,5 @@
 {-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE PackageImports #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module Cardano.Tools.DBSynthesizer.Run
@@ -21,7 +22,7 @@ import Control.Monad.Trans.Except.Extra
   , runExceptT
   )
 import Control.ResourceRegistry
-import Control.Tracer
+import "contra-tracer" Control.Tracer
 import Data.Aeson as Aeson
   ( FromJSON
   , Result (..)

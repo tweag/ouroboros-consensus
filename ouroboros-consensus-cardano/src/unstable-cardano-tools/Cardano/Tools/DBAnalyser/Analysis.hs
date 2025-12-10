@@ -7,6 +7,7 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PackageImports #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeApplications #-}
@@ -39,7 +40,7 @@ import Cardano.Tools.DBAnalyser.Types
 import Control.Monad (unless, void, when)
 import Control.Monad.Except (runExcept)
 import Control.ResourceRegistry
-import Control.Tracer (Tracer (..), nullTracer, traceWith)
+import "contra-tracer" Control.Tracer (Tracer (..), nullTracer, traceWith)
 import Data.Int (Int64)
 import Data.List (intercalate)
 import qualified Data.Map.Strict as Map

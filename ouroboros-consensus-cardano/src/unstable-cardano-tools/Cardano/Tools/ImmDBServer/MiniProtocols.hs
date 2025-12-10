@@ -6,6 +6,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE PackageImports #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -18,7 +19,7 @@ import qualified Codec.CBOR.Decoding as CBOR
 import qualified Codec.CBOR.Encoding as CBOR
 import Control.Monad (forever)
 import Control.ResourceRegistry
-import Control.Tracer
+import "contra-tracer" Control.Tracer
 import Data.Bifunctor (bimap)
 import qualified Data.ByteString.Lazy as BL
 import Data.Functor ((<&>))

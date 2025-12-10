@@ -1,5 +1,6 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE PackageImports #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
@@ -18,7 +19,7 @@ import Control.Monad.Except (runExcept)
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Trans.Except (ExceptT, runExceptT, throwE)
 import Control.ResourceRegistry
-import Control.Tracer as Trace (nullTracer)
+import "contra-tracer" Control.Tracer as Trace (nullTracer)
 import Data.Either (isRight)
 import Data.Maybe (isJust)
 import Data.Proxy
