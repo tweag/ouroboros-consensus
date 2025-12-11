@@ -3,6 +3,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE PackageImports #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE UndecidableInstances #-}
@@ -24,7 +25,7 @@ import qualified Cardano.Tools.DBAnalyser.Block.Cardano as Cardano
 import Cardano.Tools.DBAnalyser.HasAnalysis (mkProtocolInfo)
 import Control.Monad (unless)
 import Control.ResourceRegistry
-import Control.Tracer (Tracer (..), stdoutTracer, traceWith)
+import "contra-tracer" Control.Tracer (Tracer (..), stdoutTracer, traceWith)
 import Data.Foldable (for_)
 import Data.Functor.Contravariant ((>$<))
 import Data.List (intercalate, sortOn)

@@ -1,13 +1,14 @@
 {-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE PackageImports #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module Cardano.Tools.ImmDBServer.Diffusion (run) where
 
 import Cardano.Tools.ImmDBServer.MiniProtocols (immDBServer)
 import Control.ResourceRegistry
-import Control.Tracer
+import "contra-tracer" Control.Tracer
 import qualified Data.ByteString.Lazy as BL
 import Data.Functor.Contravariant ((>$<))
 import Data.Void (Void)

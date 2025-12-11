@@ -1,5 +1,7 @@
 {-# LANGUAGE ApplicativeDo #-}
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE PackageImports #-}
 
 module Main (main) where
 
@@ -16,29 +18,39 @@ import Options.Applicative
 import Ouroboros.Consensus.Node.ProtocolInfo (ProtocolInfo (..))
 import Text.Read (readMaybe)
 
-import Control.Tracer (stdoutTracer, traceWith)
+import Cardano.Node.Tracing (
+  getResourceTracer',
+  startResourceTracer', 
+  traceResources'',
+  )
+import "contra-tracer" Control.Tracer (stdoutTracer, traceWith)
 import Data.List (intercalate)
 
 main :: IO ()
 main = withStdTerminalHandles $ do
   cryptoInit
-  Opts{immDBDir, addr, port, configFile} <- execParser optsParser
+  Opts{immDBDir, addr, port, configFile, rtsFrequency} <- execParser optsParser
   let sockAddr = Socket.SockAddrInet port hostAddr
        where
         -- could also be passed in
         hostAddr = Socket.tupleToHostAddress addr
       args = Cardano.CardanoBlockArgs configFile Nothing
   ProtocolInfo{pInfoConfig} <- mkProtocolInfo args
-  traceWith stdoutTracer $ "ImmDB server running on " ++ printHost (addr, port)
+  traceWith stdoutTracer $ "Running ImmDB server at " ++ printHost (addr, port)
+  traceWith stdoutTracer "Polling resources"
+  traceResources'' stdoutTracer (getResourceTracer' stdoutTracer)
+  startResourceTracer' stdoutTracer rtsFrequency
   absurd <$> ImmDBServer.run immDBDir sockAddr pInfoConfig
 
 type HostAddr = (Word8, Word8, Word8, Word8)
+type RTSFrequency = Int
 
 data Opts = Opts
   { immDBDir :: FilePath
   , addr :: HostAddr
   , port :: Socket.PortNumber
   , configFile :: FilePath
+  , rtsFrequency :: RTSFrequency
   }
 
 printHost :: (HostAddr, Socket.PortNumber) -> String
@@ -95,4 +107,12 @@ optsParser =
           , help "Path to config file, in the same format as for the node or db-analyser"
           , metavar "PATH"
           ]
-    pure Opts{immDBDir, addr, port, configFile}
+    rtsFrequency <- 
+      option auto $
+        mconcat 
+          [ long "rts-frequency"
+          , help "Frequency (in milliseconds) to poll GHC RTS statistics"
+          , value 1000
+          , showDefault
+          ]
+    pure Opts{immDBDir, addr, port, configFile, rtsFrequency}

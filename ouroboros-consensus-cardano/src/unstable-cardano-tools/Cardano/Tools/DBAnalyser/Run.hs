@@ -3,6 +3,7 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE PackageImports #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
@@ -14,7 +15,7 @@ import Cardano.Tools.DBAnalyser.Analysis
 import Cardano.Tools.DBAnalyser.HasAnalysis
 import Cardano.Tools.DBAnalyser.Types
 import Control.ResourceRegistry
-import Control.Tracer (Tracer (..), nullTracer)
+import "contra-tracer" Control.Tracer (Tracer (..), nullTracer)
 import qualified Data.SOP.Dict as Dict
 import Data.Singletons (Sing, SingI (..))
 import Data.Void
