@@ -17,11 +17,7 @@ import Options.Applicative
 import Ouroboros.Consensus.Node.ProtocolInfo (ProtocolInfo (..))
 import Text.Read (readMaybe)
 
-import Cardano.Node.Tracing
-  ( getResourceTracer
-  , startResourceTracer
-  , traceResources
-  )
+import Cardano.Node.Tracing (startResourceTracer)
 import Data.List (intercalate)
 import "contra-tracer" Control.Tracer (stdoutTracer, traceWith)
 
@@ -36,8 +32,6 @@ main = withStdTerminalHandles $ do
       args = Cardano.CardanoBlockArgs configFile Nothing
   ProtocolInfo{pInfoConfig} <- mkProtocolInfo args
   traceWith stdoutTracer $ "Running ImmDB server at " ++ printHost (addr, port)
-  traceWith stdoutTracer "Polling resources"
-  traceResources stdoutTracer (getResourceTracer stdoutTracer)
   startResourceTracer stdoutTracer rtsFrequency
   absurd <$> ImmDBServer.run immDBDir sockAddr pInfoConfig
 

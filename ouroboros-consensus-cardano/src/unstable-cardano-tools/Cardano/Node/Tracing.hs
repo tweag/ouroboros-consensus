@@ -1,10 +1,6 @@
 {-# LANGUAGE PackageImports #-}
 
-module Cardano.Node.Tracing
-  ( getResourceTracer
-  , startResourceTracer
-  , traceResources
-  ) where
+module Cardano.Node.Tracing (startResourceTracer) where
 
 import Cardano.Logging.Resources (ResourceStats, readResourceStats)
 import Cardano.Logging.Types (LogFormatting (..))
