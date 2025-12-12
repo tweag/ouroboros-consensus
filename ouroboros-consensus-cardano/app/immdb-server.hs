@@ -1,5 +1,4 @@
 {-# LANGUAGE ApplicativeDo #-}
-{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE PackageImports #-}
 
@@ -19,9 +18,9 @@ import Ouroboros.Consensus.Node.ProtocolInfo (ProtocolInfo (..))
 import Text.Read (readMaybe)
 
 import Cardano.Node.Tracing (
-  getResourceTracer',
-  startResourceTracer', 
-  traceResources'',
+  getResourceTracer,
+  startResourceTracer, 
+  traceResources,
   )
 import "contra-tracer" Control.Tracer (stdoutTracer, traceWith)
 import Data.List (intercalate)
@@ -38,8 +37,8 @@ main = withStdTerminalHandles $ do
   ProtocolInfo{pInfoConfig} <- mkProtocolInfo args
   traceWith stdoutTracer $ "Running ImmDB server at " ++ printHost (addr, port)
   traceWith stdoutTracer "Polling resources"
-  traceResources'' stdoutTracer (getResourceTracer' stdoutTracer)
-  startResourceTracer' stdoutTracer rtsFrequency
+  traceResources stdoutTracer (getResourceTracer stdoutTracer)
+  startResourceTracer stdoutTracer rtsFrequency
   absurd <$> ImmDBServer.run immDBDir sockAddr pInfoConfig
 
 type HostAddr = (Word8, Word8, Word8, Word8)
