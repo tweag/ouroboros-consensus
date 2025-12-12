@@ -17,13 +17,13 @@ import Options.Applicative
 import Ouroboros.Consensus.Node.ProtocolInfo (ProtocolInfo (..))
 import Text.Read (readMaybe)
 
-import Cardano.Node.Tracing (
-  getResourceTracer,
-  startResourceTracer, 
-  traceResources,
+import Cardano.Node.Tracing
+  ( getResourceTracer
+  , startResourceTracer
+  , traceResources
   )
-import "contra-tracer" Control.Tracer (stdoutTracer, traceWith)
 import Data.List (intercalate)
+import "contra-tracer" Control.Tracer (stdoutTracer, traceWith)
 
 main :: IO ()
 main = withStdTerminalHandles $ do
@@ -106,9 +106,9 @@ optsParser =
           , help "Path to config file, in the same format as for the node or db-analyser"
           , metavar "PATH"
           ]
-    rtsFrequency <- 
+    rtsFrequency <-
       option auto $
-        mconcat 
+        mconcat
           [ long "rts-frequency"
           , help "Frequency (in milliseconds) to poll GHC RTS statistics"
           , value 1000
