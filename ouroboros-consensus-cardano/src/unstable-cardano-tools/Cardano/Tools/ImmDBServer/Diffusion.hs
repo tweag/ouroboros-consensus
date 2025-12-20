@@ -52,7 +52,8 @@ serve ::
     (OuroborosApplicationWithMinimalCtx 'Mux.ResponderMode SockAddr BL.ByteString IO Void ()) ->
   IO Void
 serve sockAddr application = withIOManager \iocp ->
-  Server.with
+  Server.withTracedClosure
+    (\sock -> traceWith stdoutTracer ("Closed connection: " ++ show sock))
     (Snocket.socketSnocket iocp)
     Snocket.makeSocketBearer
     (\sock addr -> configureSocket sock (Just addr))
