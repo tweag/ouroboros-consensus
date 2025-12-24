@@ -8,18 +8,18 @@ import Cardano.Crypto.Init (cryptoInit)
 import qualified Cardano.Tools.DBAnalyser.Block.Cardano as Cardano
 import Cardano.Tools.DBAnalyser.HasAnalysis (mkProtocolInfo)
 import qualified Cardano.Tools.ImmDBServer.Diffusion as ImmDBServer
-import Data.Bifunctor (first)
 import Data.Void
-import Data.Word (Word8)
 import Main.Utf8 (withStdTerminalHandles)
 import qualified Network.Socket as Socket
 import Options.Applicative
 import Ouroboros.Consensus.Node.ProtocolInfo (ProtocolInfo (..))
-import Text.Read (readMaybe)
 
 import Cardano.Node.Tracing (startResourceTracer)
 import Data.List (intercalate)
 import "contra-tracer" Control.Tracer (stdoutTracer, traceWith)
+
+import DBServer.Parsers (parseAddr)
+import DBServer.Types (HostAddr)
 
 main :: IO ()
 main = withStdTerminalHandles $ do
@@ -35,7 +35,6 @@ main = withStdTerminalHandles $ do
   startResourceTracer stdoutTracer rtsFrequency
   absurd <$> ImmDBServer.run immDBDir sockAddr pInfoConfig
 
-type HostAddr = (Word8, Word8, Word8, Word8)
 type RTSFrequency = Int
 
 data Opts = Opts
@@ -50,18 +49,6 @@ printHost :: (HostAddr, Socket.PortNumber) -> String
 printHost ((a, b, c, d), port) = intercalate "." subs ++ ":" ++ show port
  where
   subs = map show [a, b, c, d]
-
-parseAddr :: String -> Either String HostAddr
-parseAddr s = first contextualize $ traverse tryParse chunks >>= extractResult
- where
-  contextualize msg = "Cannot parse address (" ++ s ++ "): " ++ msg
-  chunks = reverse $ map reverse $ go s [] []
-  go [] curr acc = curr : acc
-  go ('.' : t) curr acc = go t [] (curr : acc)
-  go (h : t) curr acc = go t (h : curr) acc
-  tryParse sub = maybe (Left ("cannot parse component '" ++ sub ++ "'")) Right (readMaybe sub)
-  extractResult [sub1, sub2, sub3, sub4] = Right (sub1, sub2, sub3, sub4)
-  extractResult subs = Left (show (length subs) ++ " (not 4) components")
 
 optsParser :: ParserInfo Opts
 optsParser =
