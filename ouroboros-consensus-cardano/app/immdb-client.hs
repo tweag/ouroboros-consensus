@@ -40,9 +40,9 @@ import Ouroboros.Network.Mux
 import Ouroboros.Network.NodeToNode
 import Ouroboros.Network.Snocket
 import Ouroboros.Network.Socket
-
 import Ouroboros.Network.Protocol.Handshake
 import Ouroboros.Network.Protocol.Handshake.Unversioned
+import Ouroboros.Network.Protocol.Handshake.Codec (cborTermVersionDataCodec, nodeToNodeHandshakeCodec)
 
 import qualified Ouroboros.Network.Protocol.ChainSync.Client as ChainSync
 import qualified Ouroboros.Network.Protocol.ChainSync.Codec as ChainSync
@@ -135,9 +135,9 @@ clientChainSync sockAddr maxSlotNo = withIOManager $ \iocp ->
         (socketSnocket iocp)
         makeSocketBearer
         ConnectToArgs {
-          ctaHandshakeCodec      = unversionedHandshakeCodec,
+          ctaHandshakeCodec      = nodeToNodeHandshakeCodec,
           ctaHandshakeTimeLimits = noTimeLimitsHandshake,
-          ctaVersionDataCodec    = unversionedProtocolDataCodec,
+          ctaVersionDataCodec    = cborTermVersionDataCodec nodeToNodeCodecCBORTerm,
           ctaConnectTracers      = nullNetworkConnectTracers,
           ctaHandshakeCallbacks  = HandshakeCallbacks acceptableVersion queryVersion
         }
