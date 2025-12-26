@@ -15,6 +15,7 @@ module Main (main) where
 
 import qualified Data.ByteString.Lazy as LBS
 import Data.Functor (void)
+import qualified Data.Map.Strict as Map
 import Data.Proxy (Proxy (..))
 import Data.Void (Void)
 
@@ -31,29 +32,48 @@ import Network.TypedProtocol.Codec
 
 import qualified Network.Mux as Mx
 
+import Cardano.Crypto.Init (cryptoInit)
+import qualified Cardano.Tools.DBAnalyser.Block.Cardano as Cardano
+import Cardano.Tools.DBAnalyser.HasAnalysis (mkProtocolInfo)
+import Ouroboros.Consensus.Block.Abstract (CodecConfig)
+import qualified Ouroboros.Consensus.Network.NodeToNode as Consensus.N2N
 import qualified Ouroboros.Network.AnchoredFragment as AF
 import Ouroboros.Network.Block
 import Ouroboros.Network.ControlMessage (continueForever)
 import Ouroboros.Network.IOManager
+import Ouroboros.Network.Magic (NetworkMagic)
 import Ouroboros.Network.Mock.ConcreteBlock
 import Ouroboros.Network.Mux
+import Ouroboros.Network.Mux
+  ( MiniProtocolCb (..)
+  , OuroborosApplicationWithMinimalCtx
+  )
 import Ouroboros.Network.NodeToNode
 import Ouroboros.Network.Snocket
 import Ouroboros.Network.Socket
+import Ouroboros.Network.PeerSelection.PeerSharing (PeerSharing (..))
 import Ouroboros.Network.Protocol.Handshake
 import Ouroboros.Network.Protocol.Handshake.Unversioned
 import Ouroboros.Network.Protocol.Handshake.Codec (cborTermVersionDataCodec, nodeToNodeHandshakeCodec)
-
 import qualified Ouroboros.Network.Protocol.ChainSync.Client as ChainSync
 import qualified Ouroboros.Network.Protocol.ChainSync.Codec as ChainSync
 import qualified Ouroboros.Network.Protocol.ChainSync.Type as ChainSync
+import Ouroboros.Network.Util.ShowProxy (ShowProxy)
 
 import DBServer.Parsers (parseAddr)
 import DBServer.Types (HostAddr)
+import Ouroboros.Network.PeerSelection.PeerSharing.Codec (decodeRemoteAddress, encodeRemoteAddress)
+import Ouroboros.Consensus.Node (stdVersionDataNTN)
+import Ouroboros.Consensus.Node.NetworkProtocolVersion (BlockNodeToNodeVersion, SupportedNetworkProtocolVersion(supportedNodeToNodeVersions))
+import Ouroboros.Consensus.Node.ProtocolInfo (ProtocolInfo (..))
+import Ouroboros.Consensus.Node.Run (SerialiseNodeToNodeConstraints)
+import Ouroboros.Consensus.Config.SupportsNode (ConfigSupportsNode(getNetworkMagic))
+import Ouroboros.Consensus.Config (configBlock, configCodec)
 
 data Options = Options
   { addr :: HostAddr
   , port :: Socket.PortNumber
+  , configFile :: FilePath
   , maxSlotNo :: Maybe SlotNo
   }
   deriving Show
@@ -81,6 +101,13 @@ optionsParser =
           , value 3001
           , showDefault
           ]
+    configFile <-
+      strOption $
+        mconcat
+          [ long "config"
+          , help "Path to config file, in the same format as for the node or db-analyser"
+          , metavar "PATH"
+          ]
     maxSlotNo <-
       option (Just . fromIntegral @Int <$> auto) $
         mconcat
@@ -89,23 +116,19 @@ optionsParser =
           , value Nothing
           , metavar "SLOTNO"
           ]
-    pure Options{addr, port, maxSlotNo}
+    pure Options{addr, port, configFile, maxSlotNo}
 
 main :: IO ()
 main = do
-    opts@Options{addr, port} <- execParser optionsParser
+    cryptoInit
+    opts@Options{addr, port, configFile, maxSlotNo} <- execParser optionsParser
     print opts
     let sockAddr = Socket.SockAddrInet port (Socket.tupleToHostAddress addr)
-    clientChainSync sockAddr (maxSlotNo opts)
-
-
--- TODO: provide sensible limits
--- https://github.com/intersectmbo/ouroboros-network/issues/575
-maximumMiniProtocolLimits :: MiniProtocolLimits
-maximumMiniProtocolLimits =
-    MiniProtocolLimits {
-      maximumIngressQueue = maxBound
-    }
+        args = Cardano.CardanoBlockArgs configFile Nothing
+    ProtocolInfo{pInfoConfig} <- mkProtocolInfo args
+    let cfgCodec = configCodec pInfoConfig
+        networkMagic = getNetworkMagic . configBlock $ pInfoConfig
+    clientChainSync sockAddr cfgCodec networkMagic maxSlotNo
 
 
 --
@@ -120,16 +143,26 @@ demoProtocol2 chainSync =
       MiniProtocol {
         miniProtocolNum    = MiniProtocolNum 2,
         miniProtocolStart  = StartOnDemand,
-        miniProtocolLimits = maximumMiniProtocolLimits,
+        miniProtocolLimits = limits,
         miniProtocolRun    = chainSync
       }
     ]
+  where limits = chainSyncProtocolLimits defaultMiniProtocolParameters
 
 
-clientChainSync :: Socket.SockAddr
-                -> Maybe SlotNo
-                -> IO ()
-clientChainSync sockAddr maxSlotNo = withIOManager $ \iocp ->
+clientChainSync :: 
+  forall blk.
+  ( HasHeader blk
+  , ShowProxy blk
+  , SerialiseNodeToNodeConstraints blk
+  , SupportedNetworkProtocolVersion blk
+  ) => 
+  Socket.SockAddr
+  -> CodecConfig blk
+  -> NetworkMagic
+  -> Maybe SlotNo
+  -> IO ()
+clientChainSync sockAddr codecCfg networkMagic maxSlotNo = withIOManager $ \iocp ->
     do
       void $ connectToNode
         (socketSnocket iocp)
@@ -142,16 +175,38 @@ clientChainSync sockAddr maxSlotNo = withIOManager $ \iocp ->
           ctaHandshakeCallbacks  = HandshakeCallbacks acceptableVersion queryVersion
         }
         mempty
-        (simpleSingletonVersions
-           UnversionedProtocol
-           UnversionedProtocolData
-           (\_ -> app))
+        versions
         Nothing
         sockAddr
 
   where
-    app :: OuroborosApplicationWithMinimalCtx Mx.InitiatorMode addr LBS.ByteString IO () Void
-    app = demoProtocol2 $
+    versions = Versions $ Map.mapWithKey mkVersion $ supportedNodeToNodeVersions (Proxy @blk)
+     where
+      mkVersion version blockVersion =
+        Version
+          { versionApplication = const $ mkApp version blockVersion
+          , versionData =
+              stdVersionDataNTN
+                networkMagic
+                InitiatorOnlyDiffusionMode
+                PeerSharingDisabled
+          }
+    -- versions = (simpleSingletonVersions
+    --        UnversionedProtocol
+    --        UnversionedProtocolData
+    --        (\_ -> app))
+    getCodec codecCfg blockVersion version = Consensus.N2N.cChainSyncCodecSerialised $
+      Consensus.N2N.defaultCodecs
+        codecCfg 
+        blockVersion
+        encodeRemoteAddress 
+        decodeRemoteAddress 
+        version
+    mkApp :: 
+      NodeToNodeVersion ->
+      BlockNodeToNodeVersion blk ->
+      OuroborosApplicationWithMinimalCtx Mx.InitiatorMode addr LBS.ByteString IO () Void
+    mkApp version blockVersion = demoProtocol2 $
           InitiatorProtocolOnly $
           mkMiniProtocolCbFromPeer $ \_ctx ->
             ( contramap show stdoutTracer
