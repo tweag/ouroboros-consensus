@@ -37,6 +37,7 @@ import qualified Cardano.Tools.DBAnalyser.Block.Cardano as Cardano
 import Cardano.Tools.DBAnalyser.HasAnalysis (mkProtocolInfo)
 import Ouroboros.Consensus.Block.Abstract (CodecConfig)
 import qualified Ouroboros.Consensus.Network.NodeToNode as Consensus.N2N
+import Ouroboros.Consensus.Storage.Serialisation (SerialisedHeader)
 import qualified Ouroboros.Network.AnchoredFragment as AF
 import Ouroboros.Network.Block
 import Ouroboros.Network.ControlMessage (continueForever)
@@ -130,7 +131,6 @@ main = do
         networkMagic = getNetworkMagic . configBlock $ pInfoConfig
     clientChainSync sockAddr cfgCodec networkMagic maxSlotNo
 
-
 --
 -- Chain sync demo
 --
@@ -195,7 +195,8 @@ clientChainSync sockAddr codecCfg networkMagic maxSlotNo = withIOManager $ \iocp
     --        UnversionedProtocol
     --        UnversionedProtocolData
     --        (\_ -> app))
-    getCodec codecCfg blockVersion version = Consensus.N2N.cChainSyncCodecSerialised $
+    -- getCodec :: NodeToNodeVersion -> BlockNodeToNodeVersion blk -> Codec (ChainSync.ChainSync () (Point blk) (Tip blk)) CBOR.DeserialiseFailure IO LBS.ByteString
+    getCodec version blockVersion = Consensus.N2N.cChainSyncCodecSerialised $
       Consensus.N2N.defaultCodecs
         codecCfg 
         blockVersion
@@ -210,7 +211,8 @@ clientChainSync sockAddr codecCfg networkMagic maxSlotNo = withIOManager $ \iocp
           InitiatorProtocolOnly $
           mkMiniProtocolCbFromPeer $ \_ctx ->
             ( contramap show stdoutTracer
-            , codecChainSync
+            , getCodec version blockVersion
+            -- , codecChainSync
             , ChainSync.chainSyncClientPeer (chainSyncClient (continueForever Proxy) maxSlotNo)
             )
 
@@ -229,49 +231,54 @@ codecChainSync =
       CBOR.encode CBOR.decode
 
 
+
+
 --
--- Chain sync and block fetch protocol handlers
+-- Chain sync protocol handlers
 --
 
-chainSyncClient :: ControlMessageSTM IO
-                -> Maybe SlotNo
-                -> ChainSync.ChainSyncClient
-                     BlockHeader (Point BlockHeader) (Point BlockHeader) IO ()
+chainSyncClient :: 
+  forall blk. 
+  ( HasHeader blk 
+  , ShowProxy blk
+  ) => 
+  ControlMessageSTM IO
+  -> Maybe SlotNo
+  -> ChainSync.ChainSyncClient (SerialisedHeader blk) (Point blk) (Tip blk) IO ()
 chainSyncClient controlMessageSTM maxSlotNo =
     ChainSync.ChainSyncClient $ do
       curvar   <- newTVarIO genesisAnchoredFragment
       chainvar <- newTVarIO genesisAnchoredFragment
-      case chainSyncClient' controlMessageSTM maxSlotNo  nullTracer curvar chainvar of
+      case chainSyncClient' controlMessageSTM maxSlotNo nullTracer curvar chainvar of
         ChainSync.ChainSyncClient k -> k
 
-chainSyncClient' :: ControlMessageSTM IO
+chainSyncClient' :: forall blk a. ControlMessageSTM IO
                  -> Maybe SlotNo
-                 -> Tracer IO (Point BlockHeader, Point BlockHeader)
-                 -> StrictTVar IO (AF.AnchoredFragment BlockHeader)
-                 -> StrictTVar IO (AF.AnchoredFragment BlockHeader)
-                 -> ChainSync.ChainSyncClient
-                      BlockHeader (Point BlockHeader) (Point BlockHeader) IO ()
+                 -> Tracer IO (Point (SerialisedHeader blk), Point (SerialisedHeader blk))
+                 -> StrictTVar IO (AF.AnchoredFragment (SerialisedHeader blk))
+                 -> StrictTVar IO (AF.AnchoredFragment (SerialisedHeader blk))
+                 -> ChainSync.ChainSyncClient (SerialisedHeader blk) (Point blk) (Tip blk) IO ()
 chainSyncClient' controlMessageSTM _maxSlotNo syncTracer _currentChainVar candidateChainVar =
     ChainSync.ChainSyncClient (return requestNext)
   where
     requestNext :: ChainSync.ClientStIdle
-                     BlockHeader (Point BlockHeader) (Point BlockHeader) IO ()
+                     (SerialisedHeader blk) (Point blk) (Tip blk) IO ()
     requestNext =
       ChainSync.SendMsgRequestNext
         (pure ())   -- on MsgAwaitReply; could trace
         handleNext
 
     terminate :: ChainSync.ClientStIdle
-                     BlockHeader (Point BlockHeader) (Point BlockHeader) IO ()
+                    (SerialisedHeader blk) (Point blk) (Tip blk) IO ()
     terminate = ChainSync.SendMsgDone ()
 
     handleNext :: ChainSync.ClientStNext
-                    BlockHeader (Point BlockHeader) (Point BlockHeader) IO ()
+                    (SerialisedHeader blk) (Point blk) (Tip blk) IO ()
     handleNext =
       ChainSync.ClientStNext {
-        ChainSync.recvMsgRollForward  = \blockHeader _pHead ->
+        ChainSync.recvMsgRollForward  = \header _pHead ->
           ChainSync.ChainSyncClient $ do
-            addBlock blockHeader
+            addBlock header
             cm <- atomically controlMessageSTM
             return $ case cm of
               Terminate -> terminate
@@ -286,20 +293,20 @@ chainSyncClient' controlMessageSTM _maxSlotNo syncTracer _currentChainVar candid
               _         -> requestNext
       }
 
-    addBlock :: BlockHeader -> IO ()
-    addBlock b = do
+    addBlock :: SerialisedHeader blk -> IO ()
+    addBlock header = do
         chain <- atomically $ do
           chain <- readTVar candidateChainVar
-          let !chain' = shiftAnchoredFragment 50 b chain
+          let !chain' = shiftAnchoredFragment 50 header chain
           writeTVar candidateChainVar chain'
           return chain'
         traceWith syncTracer (AF.lastPoint chain, AF.headPoint chain)
-
-    rollback :: Point BlockHeader -> IO ()
+  
+    rollback :: Point blk -> IO ()
     rollback p = atomically $ do
         chain <- readTVar candidateChainVar
         -- we do not handle rollback failure in this demo
-        let (Just !chain') = AF.rollback p chain
+        let (Just !chain') = AF.rollback (castPoint p) chain
         writeTVar candidateChainVar chain'
     {-
     notTooFarAhead = atomically $ do
@@ -315,13 +322,13 @@ chainSyncClient' controlMessageSTM _maxSlotNo syncTracer _currentChainVar candid
 -- Utils
 --
 
-genesisAnchoredFragment :: AF.AnchoredFragment BlockHeader
+genesisAnchoredFragment :: forall blk. (HasHeader blk) => AF.AnchoredFragment blk
 genesisAnchoredFragment = AF.Empty AF.AnchorGenesis
 
-shiftAnchoredFragment :: HasHeader block
+shiftAnchoredFragment :: forall blk. (HasHeader blk)
                       => Int
-                      -> block
-                      -> AF.AnchoredFragment block
-                      -> AF.AnchoredFragment block
+                      -> blk
+                      -> AF.AnchoredFragment blk
+                      -> AF.AnchoredFragment blk
 shiftAnchoredFragment n b af =
   AF.anchorNewest (fromIntegral (AF.length af - n)) af AF.:> b
