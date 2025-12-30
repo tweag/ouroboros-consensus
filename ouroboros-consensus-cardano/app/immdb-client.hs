@@ -3,6 +3,7 @@
 {-# LANGUAGE CPP                 #-}
 {-# LANGUAGE DataKinds           #-}
 {-# LANGUAGE FlexibleContexts    #-}
+{-# LANGUAGE FlexibleInstances   #-}
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE NamedFieldPuns      #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -43,12 +44,12 @@ import Ouroboros.Network.Block
 import Ouroboros.Network.ControlMessage (continueForever)
 import Ouroboros.Network.IOManager
 import Ouroboros.Network.Magic (NetworkMagic)
-import Ouroboros.Network.Mock.ConcreteBlock
 import Ouroboros.Network.Mux
 import Ouroboros.Network.Mux
   ( MiniProtocolCb (..)
   , OuroborosApplicationWithMinimalCtx
   )
+import Ouroboros.Network.Protocol.ChainSync.Type (ChainSync)
 import Ouroboros.Network.NodeToNode
 import Ouroboros.Network.Snocket
 import Ouroboros.Network.Socket
@@ -70,6 +71,7 @@ import Ouroboros.Consensus.Node.ProtocolInfo (ProtocolInfo (..))
 import Ouroboros.Consensus.Node.Run (SerialiseNodeToNodeConstraints)
 import Ouroboros.Consensus.Config.SupportsNode (ConfigSupportsNode(getNetworkMagic))
 import Ouroboros.Consensus.Config (configBlock, configCodec)
+import Ouroboros.Consensus.Block (HasHeader)
 
 data Options = Options
   { addr :: HostAddr
@@ -217,6 +219,10 @@ clientChainSync sockAddr codecCfg networkMagic maxSlotNo = withIOManager $ \iocp
             )
 
 
+instance {-# OVERLAPPING #-} Show (TraceSendRecv (ChainSync (SerialisedHeader blk) (Point blk) (Tip blk))) where
+  show (TraceSendMsg _) = "send"
+  show (TraceRecvMsg _) = "recv"
+
 codecChainSync :: ( CBOR.Serialise block
                   , CBOR.Serialise point
                   , CBOR.Serialise tip
@@ -231,7 +237,7 @@ codecChainSync =
       CBOR.encode CBOR.decode
 
 
-
+type H blk = SerialisedHeader blk
 
 --
 -- Chain sync protocol handlers
@@ -244,7 +250,7 @@ chainSyncClient ::
   ) => 
   ControlMessageSTM IO
   -> Maybe SlotNo
-  -> ChainSync.ChainSyncClient (SerialisedHeader blk) (Point blk) (Tip blk) IO ()
+  -> ChainSync.ChainSyncClient (H blk) (Point blk) (Tip blk) IO ()
 chainSyncClient controlMessageSTM maxSlotNo =
     ChainSync.ChainSyncClient $ do
       curvar   <- newTVarIO genesisAnchoredFragment
@@ -252,28 +258,28 @@ chainSyncClient controlMessageSTM maxSlotNo =
       case chainSyncClient' controlMessageSTM maxSlotNo nullTracer curvar chainvar of
         ChainSync.ChainSyncClient k -> k
 
-chainSyncClient' :: forall blk. ControlMessageSTM IO
+chainSyncClient' :: forall blk h. (HasHeader blk) => ControlMessageSTM IO
                  -> Maybe SlotNo
                  -> Tracer IO (Point blk, Point blk)
                  -> StrictTVar IO (AF.AnchoredFragment blk)
                  -> StrictTVar IO (AF.AnchoredFragment blk)
-                 -> ChainSync.ChainSyncClient (SerialisedHeader blk) (Point blk) (Tip blk) IO ()
+                 -> ChainSync.ChainSyncClient (H blk) (Point blk) (Tip blk) IO ()
 chainSyncClient' controlMessageSTM _maxSlotNo syncTracer _currentChainVar candidateChainVar =
     ChainSync.ChainSyncClient (return requestNext)
   where
     requestNext :: ChainSync.ClientStIdle
-                     (SerialisedHeader blk) (Point blk) (Tip blk) IO ()
+                     (H blk) (Point blk) (Tip blk) IO ()
     requestNext =
       ChainSync.SendMsgRequestNext
         (pure ())   -- on MsgAwaitReply; could trace
         handleNext
 
     terminate :: ChainSync.ClientStIdle
-                    (SerialisedHeader blk) (Point blk) (Tip blk) IO ()
+                    (H blk) (Point blk) (Tip blk) IO ()
     terminate = ChainSync.SendMsgDone ()
 
     handleNext :: ChainSync.ClientStNext
-                    (SerialisedHeader blk) (Point blk) (Tip blk) IO ()
+                    (H blk) (Point blk) (Tip blk) IO ()
     handleNext =
       ChainSync.ClientStNext {
         ChainSync.recvMsgRollForward  = \header _pHead ->
@@ -293,20 +299,22 @@ chainSyncClient' controlMessageSTM _maxSlotNo syncTracer _currentChainVar candid
               _         -> requestNext
       }
 
-    addBlock :: SerialisedHeader blk -> IO ()
-    addBlock header = do
-        chain <- atomically $ do
-          chain <- readTVar candidateChainVar
-          let !chain' = shiftAnchoredFragment 50 header chain
-          writeTVar candidateChainVar chain'
-          return chain'
-        traceWith syncTracer (AF.lastPoint chain, AF.headPoint chain)
+    addBlock :: H blk -> IO ()
+    addBlock _ = pure ()
+    -- addBlock :: H blk -> IO ()
+    -- addBlock header = do
+    --     chain <- atomically $ do
+    --       chain <- readTVar candidateChainVar
+    --       let !chain' = shiftAnchoredFragment 50 header chain
+    --       writeTVar candidateChainVar chain'
+    --       return chain'
+    --     traceWith syncTracer (AF.lastPoint chain, AF.headPoint chain)
   
     rollback :: Point blk -> IO ()
     rollback p = atomically $ do
         chain <- readTVar candidateChainVar
         -- we do not handle rollback failure in this demo
-        let (Just !chain') = AF.rollback (castPoint p) chain
+        let (Just !chain') = AF.rollback p chain
         writeTVar candidateChainVar chain'
     {-
     notTooFarAhead = atomically $ do

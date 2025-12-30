@@ -708,7 +708,6 @@ executable immdb-client
     ouroboros-network,
     ouroboros-network-api,
     ouroboros-network-framework,
-    ouroboros-network-mock,
     ouroboros-network-protocols,
     serialise,
     typed-protocols,
