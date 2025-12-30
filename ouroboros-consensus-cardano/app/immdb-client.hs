@@ -252,11 +252,11 @@ chainSyncClient controlMessageSTM maxSlotNo =
       case chainSyncClient' controlMessageSTM maxSlotNo nullTracer curvar chainvar of
         ChainSync.ChainSyncClient k -> k
 
-chainSyncClient' :: forall blk a. ControlMessageSTM IO
+chainSyncClient' :: forall blk. ControlMessageSTM IO
                  -> Maybe SlotNo
-                 -> Tracer IO (Point (SerialisedHeader blk), Point (SerialisedHeader blk))
-                 -> StrictTVar IO (AF.AnchoredFragment (SerialisedHeader blk))
-                 -> StrictTVar IO (AF.AnchoredFragment (SerialisedHeader blk))
+                 -> Tracer IO (Point blk, Point blk)
+                 -> StrictTVar IO (AF.AnchoredFragment blk)
+                 -> StrictTVar IO (AF.AnchoredFragment blk)
                  -> ChainSync.ChainSyncClient (SerialisedHeader blk) (Point blk) (Tip blk) IO ()
 chainSyncClient' controlMessageSTM _maxSlotNo syncTracer _currentChainVar candidateChainVar =
     ChainSync.ChainSyncClient (return requestNext)
