@@ -27,10 +27,6 @@ import qualified Network.Socket as Socket
 
 import Options.Applicative
 
-import qualified Codec.Serialise as CBOR
-
-import Network.TypedProtocol.Codec
-
 import qualified Network.Mux as Mx
 
 import Cardano.Crypto.Init (cryptoInit)
@@ -45,21 +41,13 @@ import Ouroboros.Network.ControlMessage (continueForever)
 import Ouroboros.Network.IOManager
 import Ouroboros.Network.Magic (NetworkMagic)
 import Ouroboros.Network.Mux
-import Ouroboros.Network.Mux
-  ( MiniProtocolCb (..)
-  , OuroborosApplicationWithMinimalCtx
-  )
 import Ouroboros.Network.Protocol.ChainSync.Type (ChainSync)
 import Ouroboros.Network.NodeToNode
 import Ouroboros.Network.Snocket
 import Ouroboros.Network.Socket
 import Ouroboros.Network.PeerSelection.PeerSharing (PeerSharing (..))
 import Ouroboros.Network.Protocol.Handshake
-import Ouroboros.Network.Protocol.Handshake.Unversioned
-import Ouroboros.Network.Protocol.Handshake.Codec (cborTermVersionDataCodec, nodeToNodeHandshakeCodec)
 import qualified Ouroboros.Network.Protocol.ChainSync.Client as ChainSync
-import qualified Ouroboros.Network.Protocol.ChainSync.Codec as ChainSync
-import qualified Ouroboros.Network.Protocol.ChainSync.Type as ChainSync
 import Ouroboros.Network.Util.ShowProxy (ShowProxy)
 
 import DBServer.Parsers (parseAddr)
@@ -71,7 +59,6 @@ import Ouroboros.Consensus.Node.ProtocolInfo (ProtocolInfo (..))
 import Ouroboros.Consensus.Node.Run (SerialiseNodeToNodeConstraints)
 import Ouroboros.Consensus.Config.SupportsNode (ConfigSupportsNode(getNetworkMagic))
 import Ouroboros.Consensus.Config (configBlock, configCodec)
-import Ouroboros.Consensus.Block (HasHeader)
 
 data Options = Options
   { addr :: HostAddr
@@ -193,10 +180,6 @@ clientChainSync sockAddr codecCfg networkMagic maxSlotNo = withIOManager $ \iocp
                 InitiatorOnlyDiffusionMode
                 PeerSharingDisabled
           }
-    -- versions = (simpleSingletonVersions
-    --        UnversionedProtocol
-    --        UnversionedProtocolData
-    --        (\_ -> app))
     -- getCodec :: NodeToNodeVersion -> BlockNodeToNodeVersion blk -> Codec (ChainSync.ChainSync () (Point blk) (Tip blk)) CBOR.DeserialiseFailure IO LBS.ByteString
     getCodec version blockVersion = Consensus.N2N.cChainSyncCodecSerialised $
       Consensus.N2N.defaultCodecs
@@ -214,7 +197,6 @@ clientChainSync sockAddr codecCfg networkMagic maxSlotNo = withIOManager $ \iocp
           mkMiniProtocolCbFromPeer $ \_ctx ->
             ( contramap show stdoutTracer
             , getCodec version blockVersion
-            -- , codecChainSync
             , ChainSync.chainSyncClientPeer (chainSyncClient (continueForever Proxy) maxSlotNo)
             )
 
@@ -222,19 +204,6 @@ clientChainSync sockAddr codecCfg networkMagic maxSlotNo = withIOManager $ \iocp
 instance {-# OVERLAPPING #-} Show (TraceSendRecv (ChainSync (SerialisedHeader blk) (Point blk) (Tip blk))) where
   show (TraceSendMsg _) = "send"
   show (TraceRecvMsg _) = "recv"
-
-codecChainSync :: ( CBOR.Serialise block
-                  , CBOR.Serialise point
-                  , CBOR.Serialise tip
-                  )
-               => Codec (ChainSync.ChainSync block point tip)
-                        CBOR.DeserialiseFailure
-                        IO LBS.ByteString
-codecChainSync =
-    ChainSync.codecChainSync
-      CBOR.encode CBOR.decode
-      CBOR.encode CBOR.decode
-      CBOR.encode CBOR.decode
 
 
 type H blk = SerialisedHeader blk
@@ -245,8 +214,7 @@ type H blk = SerialisedHeader blk
 
 chainSyncClient :: 
   forall blk. 
-  ( HasHeader blk 
-  , ShowProxy blk
+  ( HasHeader blk
   ) => 
   ControlMessageSTM IO
   -> Maybe SlotNo
@@ -258,13 +226,13 @@ chainSyncClient controlMessageSTM maxSlotNo =
       case chainSyncClient' controlMessageSTM maxSlotNo nullTracer curvar chainvar of
         ChainSync.ChainSyncClient k -> k
 
-chainSyncClient' :: forall blk h. (HasHeader blk) => ControlMessageSTM IO
+chainSyncClient' :: forall blk. (HasHeader blk) => ControlMessageSTM IO
                  -> Maybe SlotNo
                  -> Tracer IO (Point blk, Point blk)
                  -> StrictTVar IO (AF.AnchoredFragment blk)
                  -> StrictTVar IO (AF.AnchoredFragment blk)
                  -> ChainSync.ChainSyncClient (H blk) (Point blk) (Tip blk) IO ()
-chainSyncClient' controlMessageSTM _maxSlotNo syncTracer _currentChainVar candidateChainVar =
+chainSyncClient' controlMessageSTM _maxSlotNo _ _currentChainVar candidateChainVar =
     ChainSync.ChainSyncClient (return requestNext)
   where
     requestNext :: ChainSync.ClientStIdle
@@ -282,9 +250,9 @@ chainSyncClient' controlMessageSTM _maxSlotNo syncTracer _currentChainVar candid
                     (H blk) (Point blk) (Tip blk) IO ()
     handleNext =
       ChainSync.ClientStNext {
-        ChainSync.recvMsgRollForward  = \header _pHead ->
+        ChainSync.recvMsgRollForward  = \h _pHead ->
           ChainSync.ChainSyncClient $ do
-            addBlock header
+            addBlock h
             cm <- atomically controlMessageSTM
             return $ case cm of
               Terminate -> terminate
@@ -301,42 +269,13 @@ chainSyncClient' controlMessageSTM _maxSlotNo syncTracer _currentChainVar candid
 
     addBlock :: H blk -> IO ()
     addBlock _ = pure ()
-    -- addBlock :: H blk -> IO ()
-    -- addBlock header = do
-    --     chain <- atomically $ do
-    --       chain <- readTVar candidateChainVar
-    --       let !chain' = shiftAnchoredFragment 50 header chain
-    --       writeTVar candidateChainVar chain'
-    --       return chain'
-    --     traceWith syncTracer (AF.lastPoint chain, AF.headPoint chain)
-  
+
     rollback :: Point blk -> IO ()
     rollback p = atomically $ do
         chain <- readTVar candidateChainVar
         -- we do not handle rollback failure in this demo
         let (Just !chain') = AF.rollback p chain
         writeTVar candidateChainVar chain'
-    {-
-    notTooFarAhead = atomically $ do
-        currentChain   <- readTVar currentChainVar
-        candidateChain <- readTVar candidateChainVar
-        check $ case (AF.headBlockNo currentChain,
-                      AF.headBlockNo candidateChain) of
-                  (Just bn, Just bn') -> bn' < bn + 5
-                  _                   -> True
-    -}
-
---
--- Utils
---
 
 genesisAnchoredFragment :: forall blk. (HasHeader blk) => AF.AnchoredFragment blk
 genesisAnchoredFragment = AF.Empty AF.AnchorGenesis
-
-shiftAnchoredFragment :: forall blk. (HasHeader blk)
-                      => Int
-                      -> blk
-                      -> AF.AnchoredFragment blk
-                      -> AF.AnchoredFragment blk
-shiftAnchoredFragment n b af =
-  AF.anchorNewest (fromIntegral (AF.length af - n)) af AF.:> b

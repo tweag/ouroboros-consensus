@@ -709,8 +709,6 @@ executable immdb-client
     ouroboros-network-api,
     ouroboros-network-framework,
     ouroboros-network-protocols,
-    serialise,
-    typed-protocols,
   other-modules:
     DBServer.Parsers
     DBServer.Types
