@@ -41,7 +41,6 @@ import Ouroboros.Network.ControlMessage (continueForever)
 import Ouroboros.Network.IOManager
 import Ouroboros.Network.Magic (NetworkMagic)
 import Ouroboros.Network.Mux
-import Ouroboros.Network.Protocol.ChainSync.Type (ChainSync)
 import Ouroboros.Network.NodeToNode
 import Ouroboros.Network.Snocket
 import Ouroboros.Network.Socket
@@ -51,6 +50,7 @@ import qualified Ouroboros.Network.Protocol.ChainSync.Client as ChainSync
 import Ouroboros.Network.Util.ShowProxy (ShowProxy)
 
 import DBServer.Parsers (parseAddr)
+import DBServer.Tracing (getTrivialSendRecvTracer)
 import DBServer.Types (HostAddr)
 import Ouroboros.Network.PeerSelection.PeerSharing.Codec (decodeRemoteAddress, encodeRemoteAddress)
 import Ouroboros.Consensus.Node (stdVersionDataNTN)
@@ -195,15 +195,10 @@ clientChainSync sockAddr codecCfg networkMagic maxSlotNo = withIOManager $ \iocp
     mkApp version blockVersion = demoProtocol2 $
           InitiatorProtocolOnly $
           mkMiniProtocolCbFromPeer $ \_ctx ->
-            ( contramap show stdoutTracer
+            ( getTrivialSendRecvTracer stdoutTracer
             , getCodec version blockVersion
             , ChainSync.chainSyncClientPeer (chainSyncClient (continueForever Proxy) maxSlotNo)
             )
-
-
-instance {-# OVERLAPPING #-} Show (TraceSendRecv (ChainSync (SerialisedHeader blk) (Point blk) (Tip blk))) where
-  show (TraceSendMsg _) = "send"
-  show (TraceRecvMsg _) = "recv"
 
 
 type H blk = SerialisedHeader blk

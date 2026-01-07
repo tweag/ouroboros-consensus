@@ -16,9 +16,10 @@ import Ouroboros.Consensus.Node.ProtocolInfo (ProtocolInfo (..))
 
 import Cardano.Node.Tracing (startResourceTracer)
 import Data.List (intercalate)
-import "contra-tracer" Control.Tracer (stdoutTracer, traceWith)
+import "contra-tracer" Control.Tracer (showTracing, stdoutTracer, traceWith)
 
 import DBServer.Parsers (parseAddr)
+import DBServer.Tracing (getTrivialSendRecvTracer)
 import DBServer.Types (HostAddr)
 
 main :: IO ()
@@ -30,10 +31,12 @@ main = withStdTerminalHandles $ do
         -- could also be passed in
         hostAddr = Socket.tupleToHostAddress addr
       args = Cardano.CardanoBlockArgs configFile Nothing
+      eventTracer = showTracing stdoutTracer
+      msgTracer = getTrivialSendRecvTracer stdoutTracer
   ProtocolInfo{pInfoConfig} <- mkProtocolInfo args
   traceWith stdoutTracer $ "Running ImmDB server at " ++ printHost (addr, port)
   startResourceTracer stdoutTracer rtsFrequency
-  absurd <$> ImmDBServer.run immDBDir sockAddr pInfoConfig
+  absurd <$> ImmDBServer.run msgTracer eventTracer immDBDir sockAddr pInfoConfig
 
 type RTSFrequency = Int
 

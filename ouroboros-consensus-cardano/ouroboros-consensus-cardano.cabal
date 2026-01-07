@@ -711,6 +711,7 @@ executable immdb-client
     ouroboros-network-protocols,
   other-modules:
     DBServer.Parsers
+    DBServer.Tracing
     DBServer.Types
 
 executable immdb-server
@@ -725,6 +726,7 @@ executable immdb-server
     optparse-applicative,
     ouroboros-consensus,
     ouroboros-consensus-cardano:unstable-cardano-tools,
+    ouroboros-network-framework,
     with-utf8,
   other-modules:
     DBServer.Parsers

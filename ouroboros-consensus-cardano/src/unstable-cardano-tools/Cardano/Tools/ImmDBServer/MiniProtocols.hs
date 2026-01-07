@@ -13,7 +13,7 @@
 {-# LANGUAGE TypeApplications #-}
 
 -- | Implement ChainSync and BlockFetch servers on top of just the immutable DB.
-module Cardano.Tools.ImmDBServer.MiniProtocols (immDBServer) where
+module Cardano.Tools.ImmDBServer.MiniProtocols (ChainSyncMessageTracer, ChainSyncEventTracer, immDBServer) where
 
 import qualified Codec.CBOR.Decoding as CBOR
 import qualified Codec.CBOR.Encoding as CBOR
@@ -28,13 +28,15 @@ import Data.Typeable (Typeable)
 import Data.Void (Void)
 import GHC.Generics (Generic)
 import qualified Network.Mux as Mux
+import Ouroboros.Network.Driver.Simple (TraceSendRecv)
 import Ouroboros.Consensus.Block
 import Ouroboros.Consensus.MiniProtocol.BlockFetch.Server
   ( blockFetchServer'
   )
 import Ouroboros.Consensus.MiniProtocol.ChainSync.Server
-  ( chainSyncServerForFollower
+  ( chainSyncServerForFollower, TraceChainSyncServerEvent
   )
+import Ouroboros.Consensus.Storage.Serialisation (SerialisedHeader)
 import Ouroboros.Consensus.Network.NodeToNode (Codecs (..))
 import qualified Ouroboros.Consensus.Network.NodeToNode as Consensus.N2N
 import Ouroboros.Consensus.Node (stdVersionDataNTN)
@@ -66,10 +68,17 @@ import qualified Ouroboros.Network.NodeToNode as N2N
 import Ouroboros.Network.PeerSelection.PeerSharing (PeerSharing (..))
 import Ouroboros.Network.Protocol.BlockFetch.Server
 import Ouroboros.Network.Protocol.ChainSync.Server
+import Ouroboros.Network.Protocol.ChainSync.Type (ChainSync)
 import Ouroboros.Network.Protocol.Handshake.Version (Version (..))
 import Ouroboros.Network.Protocol.KeepAlive.Server
   ( keepAliveServerPeer
   )
+
+type ChainSyncMessageTracer m blk =
+  Tracer m (TraceSendRecv (ChainSync (SerialisedHeader blk) (Point blk) (Tip blk)))
+
+type ChainSyncEventTracer m blk =
+  Tracer m (TraceChainSyncServerEvent blk)
 
 immDBServer ::
   forall m blk addr.
@@ -79,6 +88,8 @@ immDBServer ::
   , SerialiseNodeToNodeConstraints blk
   , SupportedNetworkProtocolVersion blk
   ) =>
+  ChainSyncMessageTracer m blk ->
+  ChainSyncEventTracer m blk ->
   CodecConfig blk ->
   (NodeToNodeVersion -> addr -> CBOR.Encoding) ->
   (NodeToNodeVersion -> forall s. CBOR.Decoder s addr) ->
@@ -88,7 +99,7 @@ immDBServer ::
     NodeToNodeVersion
     NodeToNodeVersionData
     (OuroborosApplicationWithMinimalCtx 'Mux.ResponderMode addr BL.ByteString m Void ())
-immDBServer codecCfg encAddr decAddr immDB networkMagic = do
+immDBServer chainSyncMessageTracer chainSyncEventTracer codecCfg encAddr decAddr immDB networkMagic = do
   forAllVersions application
  where
   forAllVersions ::
@@ -153,9 +164,9 @@ immDBServer codecCfg encAddr decAddr immDB networkMagic = do
       chainSyncProt =
         MiniProtocolCb $ \_ctx channel ->
           withRegistry $
-            runPeer nullTracer cChainSyncCodecSerialised channel
+            runPeer chainSyncMessageTracer cChainSyncCodecSerialised channel
               . chainSyncServerPeer
-              . chainSyncServer immDB ChainDB.getSerialisedHeaderWithPoint
+              . chainSyncServer chainSyncEventTracer immDB ChainDB.getSerialisedHeaderWithPoint
       blockFetchProt =
         MiniProtocolCb $ \_ctx channel ->
           withRegistry $
@@ -186,14 +197,15 @@ data ChainSyncIntersection blk
 chainSyncServer ::
   forall m blk a.
   (IOLike m, HasHeader blk) =>
+  Tracer m (TraceChainSyncServerEvent blk) ->
   ImmutableDB m blk ->
   BlockComponent blk (ChainDB.WithPoint blk a) ->
   ResourceRegistry m ->
   ChainSyncServer a (Point blk) (Tip blk) m ()
-chainSyncServer immDB blockComponent registry = ChainSyncServer $ do
+chainSyncServer tr immDB blockComponent registry = ChainSyncServer $ do
   follower <- newImmutableDBFollower
   runChainSyncServer $
-    chainSyncServerForFollower nullTracer getImmutableTip follower
+    chainSyncServerForFollower tr getImmutableTip follower
  where
   newImmutableDBFollower :: m (Follower m blk (ChainDB.WithPoint blk a))
   newImmutableDBFollower = do
