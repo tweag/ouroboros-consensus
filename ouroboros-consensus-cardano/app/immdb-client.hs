@@ -21,7 +21,7 @@ import Data.Proxy (Proxy (..))
 import Data.Void (Void)
 
 import Control.Concurrent.Class.MonadSTM.Strict
-import Control.Tracer
+import Control.Tracer (Tracer, nullTracer, showTracing, stdoutTracer)
 
 import qualified Network.Socket as Socket
 
@@ -32,7 +32,8 @@ import qualified Network.Mux as Mx
 import Cardano.Crypto.Init (cryptoInit)
 import qualified Cardano.Tools.DBAnalyser.Block.Cardano as Cardano
 import Cardano.Tools.DBAnalyser.HasAnalysis (mkProtocolInfo)
-import Ouroboros.Consensus.Block.Abstract (CodecConfig)
+import Ouroboros.Consensus.Block.Abstract (CodecConfig, Header)
+import Ouroboros.Consensus.Block.NestedContent (HasNestedContent)
 import qualified Ouroboros.Consensus.Network.NodeToNode as Consensus.N2N
 import Ouroboros.Consensus.Storage.Serialisation (SerialisedHeader)
 import qualified Ouroboros.Network.AnchoredFragment as AF
@@ -50,7 +51,6 @@ import qualified Ouroboros.Network.Protocol.ChainSync.Client as ChainSync
 import Ouroboros.Network.Util.ShowProxy (ShowProxy)
 
 import DBServer.Parsers (parseAddr)
-import DBServer.Tracing (getTrivialSendRecvTracer)
 import DBServer.Types (HostAddr)
 import Ouroboros.Network.PeerSelection.PeerSharing.Codec (decodeRemoteAddress, encodeRemoteAddress)
 import Ouroboros.Consensus.Node (stdVersionDataNTN)
@@ -142,6 +142,7 @@ demoProtocol2 chainSync =
 clientChainSync :: 
   forall blk.
   ( HasHeader blk
+  , HasNestedContent Header blk
   , ShowProxy blk
   , SerialiseNodeToNodeConstraints blk
   , SupportedNetworkProtocolVersion blk
@@ -195,7 +196,7 @@ clientChainSync sockAddr codecCfg networkMagic maxSlotNo = withIOManager $ \iocp
     mkApp version blockVersion = demoProtocol2 $
           InitiatorProtocolOnly $
           mkMiniProtocolCbFromPeer $ \_ctx ->
-            ( getTrivialSendRecvTracer stdoutTracer
+            ( showTracing stdoutTracer
             , getCodec version blockVersion
             , ChainSync.chainSyncClientPeer (chainSyncClient (continueForever Proxy) maxSlotNo)
             )
