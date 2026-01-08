@@ -32,7 +32,8 @@ main = withStdTerminalHandles $ do
         hostAddr = Socket.tupleToHostAddress addr
       args = Cardano.CardanoBlockArgs configFile Nothing
       eventTracer = showTracing stdoutTracer
-      msgTracer = getTrivialSendRecvTracer stdoutTracer
+      --msgTracer = getTrivialSendRecvTracer stdoutTracer
+      msgTracer = showTracing stdoutTracer
   ProtocolInfo{pInfoConfig} <- mkProtocolInfo args
   traceWith stdoutTracer $ "Running ImmDB server at " ++ printHost (addr, port)
   startResourceTracer stdoutTracer rtsFrequency
