@@ -30,11 +30,12 @@ import           Ouroboros.Consensus.Block.Abstract (Header, getHeader)
 import           Ouroboros.Consensus.Config.SecurityParam
                      (SecurityParam (SecurityParam), maxRollbacks)
 import           Ouroboros.Consensus.Genesis.Governor (DensityBounds,
-                     densityDisconnect, sharedCandidatePrefix)
+                     densityDisconnect)
 import           Ouroboros.Consensus.HeaderValidation (HeaderWithTime)
 import           Ouroboros.Consensus.MiniProtocol.ChainSync.Client
                      (ChainSyncClientException (..), ChainSyncState (..))
 import           Ouroboros.Consensus.Util.Condense (condense)
+import           Ouroboros.Consensus.Util.AnchoredFragment (sharedCandidatePrefix)
 import           Ouroboros.Network.AnchoredFragment (AnchoredFragment)
 import qualified Ouroboros.Network.AnchoredFragment as AF
 import           Ouroboros.Network.Block (HasHeader, Tip (TipGenesis),

@@ -93,6 +93,7 @@ data LiveResources blk m = LiveResources {
 
     -- | The LoE fragment must be reset for each live interval.
   , lrLoEVar   :: LoE (StrictTVar m (AnchoredFragment (HeaderWithTime blk)))
+  , lrLeashingStateVar :: StrictTVar m (LeashingState blk)
   }
 
 data LiveInterval blk m = LiveInterval {

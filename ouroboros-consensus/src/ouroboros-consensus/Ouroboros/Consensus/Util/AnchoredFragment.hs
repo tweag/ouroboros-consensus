@@ -13,17 +13,22 @@ module Ouroboros.Consensus.Util.AnchoredFragment (
   , forksAtMostKBlocks
   , preferAnchoredCandidate
   , stripCommonPrefix
+  , sharedCandidatePrefix
   ) where
 
+import           Data.Typeable (Typeable)
+import           Data.Bifunctor (second)
 import           Control.Monad.Except (throwError)
 import           Data.Foldable (toList)
 import qualified Data.Foldable1 as F1
 import           Data.Function (on)
+import           Data.Functor.Compose (Compose (..))
 import qualified Data.List.NonEmpty as NE
 import           Data.Maybe (isJust)
 import           Data.Word (Word64)
 import           GHC.Stack
 import           Ouroboros.Consensus.Block
+import           Ouroboros.Consensus.HeaderValidation (HeaderWithTime (..))
 import           Ouroboros.Consensus.Protocol.Abstract
 import           Ouroboros.Consensus.Util.Assert
 import           Ouroboros.Network.AnchoredFragment (AnchoredFragment,
@@ -226,3 +231,35 @@ stripCommonPrefix sharedAnchor frags
       case AF.splitAfterPoint frag (AF.headPoint commonPrefix) of
         Just (_, afterCommonPrefix) -> afterCommonPrefix
         Nothing                     -> error "unreachable"
+
+
+-- | Compute the fragment @loeFrag@ between the immutable tip and the
+-- earliest intersection between @curChain@ and any of the @candidates@.
+--
+-- The immutable tip is the anchor of @curChain@.
+--
+-- The function also yields the suffixes of the intersection of @loeFrag@ with
+-- every candidate fragment.
+sharedCandidatePrefix ::
+  (GetHeader blk, Typeable blk) =>
+  AnchoredFragment (HeaderWithTime blk) ->
+  [(peer, AnchoredFragment (HeaderWithTime blk))] ->
+  (AnchoredFragment (HeaderWithTime blk), [(peer, AnchoredFragment (HeaderWithTime blk))])
+sharedCandidatePrefix curChain candidates =
+  second getCompose $
+  stripCommonPrefix (AF.castAnchor $ AF.anchor curChain) $
+  Compose immutableTipSuffixes
+  where
+    immutableTip = AF.anchorPoint curChain
+
+    splitAfterImmutableTip (peer, frag) =
+      case AF.splitAfterPoint frag immutableTip of
+        -- When there is no intersection, we assume the candidate fragment is
+        -- empty and anchored at the immutable tip.
+        -- See Note [CSJ truncates the candidate fragments].
+        Nothing          -> (peer, AF.takeOldest 0 curChain)
+        Just (_, suffix) -> (peer, suffix)
+
+    immutableTipSuffixes =
+      map splitAfterImmutableTip candidates
+

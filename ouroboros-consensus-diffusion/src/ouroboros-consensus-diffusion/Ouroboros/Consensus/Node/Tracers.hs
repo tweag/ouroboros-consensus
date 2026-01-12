@@ -38,6 +38,7 @@ import           Ouroboros.Consensus.MiniProtocol.ChainSync.Server
 import           Ouroboros.Consensus.MiniProtocol.LocalTxSubmission.Server
                      (TraceLocalTxSubmissionServerEvent (..))
 import           Ouroboros.Consensus.Node.GSM (TraceGsmEvent)
+import           Ouroboros.Consensus.Node.Leashing (TraceLeashingEvent)
 import           Ouroboros.Network.Block (Tip)
 import           Ouroboros.Network.BlockFetch (TraceFetchClientState,
                      TraceLabelPeer)
@@ -72,6 +73,7 @@ data Tracers' remotePeer localPeer blk f = Tracers
   , consensusErrorTracer          :: f SomeException
   , gsmTracer                     :: f (TraceGsmEvent (Tip blk))
   , gddTracer                     :: f (TraceGDDEvent remotePeer blk)
+  , leashingTracer                :: f (TraceLeashingEvent blk)
   , csjTracer                     :: f (TraceLabelPeer remotePeer (CSJumping.TraceEventCsj remotePeer blk))
   , dbfTracer                     :: f (CSJumping.TraceEventDbf remotePeer)
   }
@@ -97,6 +99,7 @@ instance (forall a. Semigroup (f a))
       , consensusErrorTracer          = f consensusErrorTracer
       , gsmTracer                     = f gsmTracer
       , gddTracer                     = f gddTracer
+      , leashingTracer                = f leashingTracer
       , csjTracer                     = f csjTracer
       , dbfTracer                     = f dbfTracer
       }
@@ -130,6 +133,7 @@ nullTracers = Tracers
     , consensusErrorTracer          = nullTracer
     , gsmTracer                     = nullTracer
     , gddTracer                     = nullTracer
+    , leashingTracer                = nullTracer
     , csjTracer                     = nullTracer
     , dbfTracer                     = nullTracer
     }
@@ -166,6 +170,7 @@ showTracers tr = Tracers
     , consensusErrorTracer          = showTracing tr
     , gsmTracer                     = showTracing tr
     , gddTracer                     = showTracing tr
+    , leashingTracer                = showTracing tr
     , csjTracer                     = showTracing tr
     , dbfTracer                     = showTracing tr
     }

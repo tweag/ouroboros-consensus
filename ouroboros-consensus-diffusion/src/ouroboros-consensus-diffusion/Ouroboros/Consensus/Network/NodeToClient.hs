@@ -123,7 +123,7 @@ mkHandlers ::
   => NodeKernelArgs m addrNTN addrNTC blk
   -> NodeKernel     m addrNTN addrNTC blk
   -> Handlers       m         addrNTC blk
-mkHandlers NodeKernelArgs {cfg, tracers} NodeKernel {getChainDB, getMempool} =
+mkHandlers NodeKernelArgs {cfg, tracers} NodeKernel {getLeashingStateVar, getChainDB, getMempool} =
     Handlers {
         hChainSyncServer =
           chainSyncBlocksServer
@@ -133,9 +133,12 @@ mkHandlers NodeKernelArgs {cfg, tracers} NodeKernel {getChainDB, getMempool} =
           localTxSubmissionServer
             (Node.localTxSubmissionServerTracer tracers)
             getMempool
-      , hStateQueryServer =
-              localStateQueryServer (ExtLedgerCfg cfg)
-            . ChainDB.getReadOnlyForkerAtPoint getChainDB
+      , hStateQueryServer = \rr ->
+          localStateQueryServer
+            (ExtLedgerCfg cfg)
+            getLeashingStateVar
+            (ChainDB.getCurrentChainWithTime getChainDB)
+            (ChainDB.getReadOnlyForkerAtPoint getChainDB $ rr) 
       , hTxMonitorServer =
           localTxMonitorServer
             getMempool

@@ -985,6 +985,7 @@ runThreadNetwork systemTime ThreadNetworkArgs
                     Seed s -> mkStdGen s
           (kaRng, psRng) = split rng
       publicPeerSelectionStateVar <- makePublicPeerSelectionStateVar
+      varGetLoEFragment <- uncheckedNewTVarM $ pure ChainDB.LoEDisabled 
       let nodeKernelArgs = NodeKernelArgs
             { tracers
             , registry
@@ -1030,9 +1031,10 @@ runThreadNetwork systemTime ThreadNetworkArgs
             , getUseBootstrapPeers = pure DontUseBootstrapPeers
             , publicPeerSelectionStateVar
             , genesisArgs          = GenesisNodeKernelArgs {
-                  gnkaLoEAndGDDArgs = LoEAndGDDDisabled
+                  gnkaGDDArgs = GDDDisabled
                 }
             , getDiffusionPipeliningSupport = DiffusionPipeliningOn
+            , varGetLoEFragment 
             }
 
       nodeKernel <- initNodeKernel nodeKernelArgs

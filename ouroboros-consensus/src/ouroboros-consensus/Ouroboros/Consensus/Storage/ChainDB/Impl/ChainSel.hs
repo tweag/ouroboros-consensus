@@ -361,7 +361,7 @@ chainSelSync cdb@CDB {..} (ChainSelAddBlock BlockToAdd { blockToAdd = b, .. }) =
     (isMember, invalid, curChain) <- lift $ atomically $ (,,)
       <$> VolatileDB.getIsMember          cdbVolatileDB
       <*> (forgetFingerprint <$> readTVar cdbInvalid)
-      <*> Query.getCurrentChain           cdb
+      <*> Query.getCurrentChain cdb
 
     let immBlockNo = AF.anchorBlockNo curChain
 
@@ -509,6 +509,7 @@ chainSelectionForBlock cdb@CDB{..} blockCache hdr punish = electric $ withRegist
           <*> VolatileDB.getBlockInfo         cdbVolatileDB
           <*> Query.getCurrentChain           cdb
           <*> Query.getTipPoint               cdb
+
     -- This is safe: the LedgerDB tip doesn't change in between the previous
     -- atomically block and this call to 'withTipForker'.
     LedgerDB.withTipForker cdbLedgerDB rr $ \curForker -> do
@@ -571,7 +572,7 @@ chainSelectionForBlock cdb@CDB{..} blockCache hdr punish = electric $ withRegist
         | pointHash tipPoint == headerPrevHash hdr -> do
           -- ### Add to current chain
           traceWith addBlockTracer (TryAddToCurrentChain p)
-          addToCurrentChain rr succsOf' curChainAndLedger loeFrag
+          addToCurrentChain rr succsOf' curChainAndLedger loeFrag 
 
         -- The block is reachable from the current selection
         -- and it doesn't fit after the current selection
@@ -671,7 +672,7 @@ chainSelectionForBlock cdb@CDB{..} blockCache hdr punish = electric $ withRegist
         -- extension of the current chain.
         case chainDiffs of
           Nothing          -> return ()
-          Just chainDiffs' ->
+          Just chainDiffs' -> 
             chainSelection chainSelEnv rr chainDiffs' >>= \case
               Nothing ->
                 return ()
@@ -760,6 +761,7 @@ chainSelectionForBlock cdb@CDB{..} blockCache hdr punish = electric $ withRegist
                   . Diff.getSuffix
                   )
               )
+
             -- 4. Trim fragments so that they follow the LoE, that is, they
             -- extend the LoE or are extended by the LoE. Filter them out
             -- otherwise.
@@ -783,7 +785,7 @@ chainSelectionForBlock cdb@CDB{..} blockCache hdr punish = electric $ withRegist
             chainSelection chainSelEnv rr chainDiffs' >>= \case
               Nothing                 ->
                 return ()
-              Just validatedChainDiff ->
+              Just validatedChainDiff -> 
                 switchTo
                   validatedChainDiff
                   (varTentativeHeader chainSelEnv)

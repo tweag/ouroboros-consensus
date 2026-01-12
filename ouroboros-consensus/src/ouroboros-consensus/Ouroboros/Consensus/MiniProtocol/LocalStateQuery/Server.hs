@@ -3,8 +3,12 @@
 
 module Ouroboros.Consensus.MiniProtocol.LocalStateQuery.Server (localStateQueryServer) where
 
-
-import           Data.Functor ((<&>))
+import Debug.Trace (traceM)
+import qualified Data.Map.Strict as Map
+import           Ouroboros.Consensus.HeaderValidation (HeaderWithTime (..))
+import           Ouroboros.Network.AnchoredFragment (AnchoredFragment)
+import qualified Ouroboros.Network.AnchoredFragment as AF
+import           Ouroboros.Consensus.Storage.ChainDB.API (LeashingState)
 import           Ouroboros.Consensus.Block
 import           Ouroboros.Consensus.Ledger.Extended
 import           Ouroboros.Consensus.Ledger.Query (BlockSupportsLedgerQuery,
@@ -26,44 +30,77 @@ localStateQueryServer ::
      , LedgerSupportsProtocol blk
      )
   => ExtLedgerCfg blk
+  -> ( StrictTVar m (LeashingState blk))
+  -> ( STM m (AnchoredFragment (HeaderWithTime blk)) )
   -> (   Target (Point blk)
       -> m (Either GetForkerError (ReadOnlyForker' m blk))
      )
   -> LocalStateQueryServer blk (Point blk) (Query blk) m ()
-localStateQueryServer cfg getView =
+localStateQueryServer cfg leashingStateVar getCurrentChain getView =
     LocalStateQueryServer $ return idle
   where
     idle :: ServerStIdle blk (Point blk) (Query blk) m ()
     idle = ServerStIdle {
-          recvMsgAcquire = handleAcquire
-        , recvMsgDone    = return ()
+          recvMsgAcquire = \tgt leashed -> do
+            traceM $ "idle: handle acquire" 
+            handleAcquire tgt leashed
+        , recvMsgDone = return ()
         }
 
     handleAcquire :: Target (Point blk)
+                  -> Bool
                   -> m (ServerStAcquiring blk (Point blk) (Query blk) m ())
-    handleAcquire mpt = do
-        getView mpt <&> \case
-          Right forker -> SendMsgAcquired $ acquired forker
-          Left e -> case e of
-            PointTooOld{} ->
-              SendMsgFailure AcquireFailurePointTooOld idle
-            PointNotOnChain ->
-              SendMsgFailure AcquireFailurePointNotOnChain idle
+    handleAcquire mpt leashed = do
+      traceM $ "handleAcquire: start " <> show leashed 
+      getView mpt >>= \case 
+        -- case if we want to leash and there is a leashing state var
+        Right forker
+          | leashed -> do
+            clientId :: String <- show <$> myThreadId
+            traceM $ "My client id " <> show clientId 
+            atomically $ do
+              leashingState <- readTVar leashingStateVar
+              case Map.lookup (1 :: Int) leashingState of
+                Nothing -> do
+                  currentChain <- getCurrentChain 
+                  let
+                    leashingFragment = case mpt of
+                        ImmutableTip -> AF.Empty $ AF.anchor currentChain
+                        SpecificPoint p -> AF.takeWhileOldest (\(HeaderWithTime h _) -> headerPoint h <= p) currentChain
+                        VolatileTip -> currentChain
+                  let newState = Map.insert (1 :: Int) leashingFragment leashingState 
+                  writeTVar leashingStateVar newState
+                  pure $ SendMsgAcquired $ acquired True forker
+                Just _ -> pure $ SendMsgFailure AcquireFailurePointStateIsBusy idle
+        Right forker -> pure $ SendMsgAcquired $ acquired False forker
+        Left PointTooOld{} -> pure $ SendMsgFailure AcquireFailurePointTooOld idle
+        Left PointNotOnChain -> pure $ SendMsgFailure AcquireFailurePointNotOnChain idle
 
-    acquired :: ReadOnlyForker' m blk
+    acquired :: Bool
+             -> ReadOnlyForker' m blk
              -> ServerStAcquired blk (Point blk) (Query blk) m ()
-    acquired forker = ServerStAcquired {
-          recvMsgQuery     = handleQuery forker
-        , recvMsgReAcquire = \mp -> do close; handleAcquire mp
-        , recvMsgRelease   =        do close; return idle
+    acquired leashed forker = ServerStAcquired {
+          recvMsgQuery     = handleQuery leashed forker
+        , recvMsgReAcquire = \mp -> do
+          traceM $ "acquired: re acquire, leash " <> show leashed 
+          close
+          handleAcquire mp leashed
+        , recvMsgRelease   = do
+          traceM $ "acquired: release, leash " <> show leashed 
+          close
+          atomically $ writeTVar leashingStateVar Map.empty 
+          return idle
         }
       where
         close = roforkerClose forker
 
     handleQuery ::
-         ReadOnlyForker' m blk
+         Bool
+      -> ReadOnlyForker' m blk
       -> Query blk result
       -> m (ServerStQuerying blk (Point blk) (Query blk) m () result)
-    handleQuery forker query = do
+    handleQuery leashed forker query = do
       result <- Query.answerQuery cfg forker query
-      return $ SendMsgResult result (acquired forker)
+      return $ SendMsgResult result (acquired leashed forker)
+
+

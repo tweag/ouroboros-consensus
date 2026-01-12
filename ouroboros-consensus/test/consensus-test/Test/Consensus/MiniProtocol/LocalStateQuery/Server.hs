@@ -47,7 +47,7 @@ import           Ouroboros.Consensus.Storage.LedgerDB
 import qualified Ouroboros.Consensus.Storage.LedgerDB as LedgerDB
 import           Ouroboros.Consensus.Storage.LedgerDB.Snapshots
 import           Ouroboros.Consensus.Storage.LedgerDB.V1.Args
-import           Ouroboros.Consensus.Util.IOLike hiding (newTVarIO)
+import           Ouroboros.Consensus.Util.IOLike 
 import           Ouroboros.Network.Mock.Chain (Chain (..))
 import qualified Ouroboros.Network.Mock.Chain as Chain
 import           Ouroboros.Network.Protocol.LocalStateQuery.Client
@@ -64,6 +64,7 @@ import           Test.QuickCheck hiding (Result)
 import           Test.Tasty
 import           Test.Tasty.QuickCheck
 import           Test.Util.Orphans.IOLike ()
+import           Test.Util.Header (attachSlotTimeToFragment)
 import           Test.Util.TestBlock
 
 {-------------------------------------------------------------------------------
@@ -103,7 +104,7 @@ prop_localStateQueryServer k bt p (Positive (Small n)) = checkOutcome k chain ac
       ++ (SpecificPoint . blockPoint <$> treeToBlocks bt)
 
 
-    actualOutcome :: [(Target (Point TestBlock), Either AcquireFailure (Point TestBlock))]
+    actualOutcome :: [(Target (Point TestBlock), Bool, Either AcquireFailure (Point TestBlock))]
     actualOutcome = runSimOrThrow $ withRegistry $ \rr ->do
       let client = mkClient points
       server <- mkServer rr k chain
@@ -130,9 +131,9 @@ prop_localStateQueryServer k bt p (Positive (Small n)) = checkOutcome k chain ac
 checkOutcome ::
      SecurityParam
   -> Chain TestBlock
-  -> [(Target (Point TestBlock), Either AcquireFailure (Point TestBlock))]
+  -> [(Target (Point TestBlock), Bool, Either AcquireFailure (Point TestBlock))]
   -> Property
-checkOutcome k chain = conjoin . map (uncurry checkResult)
+checkOutcome k chain = conjoin . map (\(tgt, _leashed, er) -> (uncurry checkResult) (tgt, er))
   where
     immutableSlot :: WithOrigin SlotNo
     immutableSlot = Chain.headSlot $
@@ -161,6 +162,9 @@ checkOutcome k chain = conjoin . map (uncurry checkResult)
            (property False)
         | otherwise
         -> tabulate "Acquired" ["AcquireFailurePointTooOld"] $ property True
+      Left AcquireFailurePointStateIsBusy
+        -- NOTE: implement
+        -> tabulate "Acquired" ["AcquireFailurePointStateIsBusy"] $ property True
     checkResult VolatileTip = \case
       Right _result -> tabulate "Acquired" ["Success"] True
       Left  failure -> counterexample ("acquire tip point resulted in " ++ show failure) False
@@ -176,8 +180,8 @@ mkClient ::
        (Point TestBlock)
        (Query TestBlock)
        m
-       [(Target (Point TestBlock), Either AcquireFailure (Point TestBlock))]
-mkClient points = localStateQueryClient [(pt, BlockQuery QueryLedgerTip) | pt <- points]
+       [(Target (Point TestBlock), Bool, Either AcquireFailure (Point TestBlock))]
+mkClient points = localStateQueryClient [(pt, leash, BlockQuery QueryLedgerTip) | leash <- [False, True], pt <- points]
 
 mkServer ::
      IOLike m
@@ -187,9 +191,10 @@ mkServer ::
   -> m (LocalStateQueryServer TestBlock (Point TestBlock) (Query TestBlock) m ())
 mkServer rr k chain = do
     lgrDB <- initLedgerDB k chain
+    leashingStateVar <- newTVarIO Map.empty 
     return $
       localStateQueryServer
-        cfg
+        cfg leashingStateVar (pure $ attachSlotTimeToFragment (testCfg k) $ Chain.toAnchoredFragment $ getHeader <$> chain)
         (LedgerDB.getReadOnlyForker lgrDB rr)
   where
     cfg = ExtLedgerCfg $ testCfg k
