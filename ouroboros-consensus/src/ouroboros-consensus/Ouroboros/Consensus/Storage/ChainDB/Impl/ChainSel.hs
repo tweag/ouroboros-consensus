@@ -9,6 +9,8 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
 
+{-# OPTIONS_GHC -Wno-unused-matches -Wno-unused-local-binds #-}
+
 -- | Operations involving chain selection: the initial chain selection and
 -- adding a block.
 module Ouroboros.Consensus.Storage.ChainDB.Impl.ChainSel (
@@ -21,6 +23,7 @@ module Ouroboros.Consensus.Storage.ChainDB.Impl.ChainSel (
   , olderThanK
   ) where
 
+import Debug.Trace (traceM)
 import           Cardano.Ledger.BaseTypes (unNonZero)
 import           Control.Exception (assert)
 import           Control.Monad (forM, forM_, when)
@@ -337,6 +340,7 @@ chainSelSync cdb@CDB{..} (ChainSelReprocessLoEBlocks varProcessed) = do
     lift cdbLoE >>= \case
       LoEDisabled  -> pure ()
       LoEEnabled _ -> do
+        traceM $ "chainSelSync: LOE ENABLED"
         (succsOf, chain) <- lift $ atomically $ do
           invalid <- forgetFingerprint <$> readTVar cdbInvalid
           (,)
@@ -365,6 +369,7 @@ chainSelSync cdb@CDB {..} (ChainSelAddBlock BlockToAdd { blockToAdd = b, .. }) =
 
     let immBlockNo = AF.anchorBlockNo curChain
 
+--    traceM $ "chainSelSync: BlockToAdd: "<> show immBlockNo
     -- We follow the steps from section "## Adding a block" in ChainDB.md
 
     if
@@ -502,19 +507,21 @@ chainSelectionForBlock ::
   -> InvalidBlockPunishment m
   -> Electric m ()
 chainSelectionForBlock cdb@CDB{..} blockCache hdr punish = electric $ withRegistry $ \rr -> do
-    (invalid, succsOf, lookupBlockInfo, curChain, tipPoint)
-      <- atomically $ (,,,,)
+    (invalid, succsOf, lookupBlockInfo, curChain, tipPoint, leashingPoint)
+      <- atomically $ (,,,,,)
           <$> (forgetFingerprint <$> readTVar cdbInvalid)
           <*> VolatileDB.filterByPredecessor  cdbVolatileDB
           <*> VolatileDB.getBlockInfo         cdbVolatileDB
           <*> Query.getCurrentChain           cdb
           <*> Query.getTipPoint               cdb
+          <*> (readTVar cdbLeashingPoint)
+
     -- This is safe: the LedgerDB tip doesn't change in between the previous
     -- atomically block and this call to 'withTipForker'.
     LedgerDB.withTipForker cdbLedgerDB rr $ \curForker -> do
       curChainAndLedger :: ChainAndLedger m blk <-
             -- The current chain we're working with here is not longer than @k@
-            -- blocks (see 'getCurrentChain' and 'cdbChain'), which is easier to
+            -- blocks (ee 'getCurrentChain' and 'cdbChain'), which is easier to
             -- reason about when doing chain selection, etc.
             assert (fromIntegral (AF.length curChain) <= unNonZero k) $
             VF.newM curChain curForker
@@ -567,18 +574,24 @@ chainSelectionForBlock cdb@CDB{..} blockCache hdr punish = electric $ withRegist
             punish
             InvalidBlockPunishment.BlockItself
 
+-- does not extend the chain but also stops fetching blocks
+--        | Just _ <- leashingPoint -> do
+--          traceM "leashed, doin' nothin'"
+
         -- The block fits onto the end of our current chain
         | pointHash tipPoint == headerPrevHash hdr -> do
           -- ### Add to current chain
           traceWith addBlockTracer (TryAddToCurrentChain p)
-          addToCurrentChain rr succsOf' curChainAndLedger loeFrag
+          traceM "addToCurrentChain"
+          addToCurrentChain rr succsOf' curChainAndLedger loeFrag leashingPoint
 
         -- The block is reachable from the current selection
         -- and it doesn't fit after the current selection
         | Just diff <- Paths.isReachable lookupBlockInfo' curChain p -> do
           -- ### Switch to a fork
           traceWith addBlockTracer (TrySwitchToAFork p diff)
-          switchToAFork rr succsOf' lookupBlockInfo' curChainAndLedger loeFrag diff
+          traceM "switchToAFork"
+          switchToAFork rr succsOf' lookupBlockInfo' curChainAndLedger loeFrag diff leashingPoint
 
         -- We cannot reach the block from the current selection
         | otherwise -> do
@@ -630,8 +643,9 @@ chainSelectionForBlock cdb@CDB{..} blockCache hdr punish = electric $ withRegist
          -- ^ The current chain and ledger
       -> LoE (AnchoredFragment (HeaderWithTime blk))
          -- ^ LoE fragment
+      -> Maybe (Point blk)
       -> m ()
-    addToCurrentChain rr succsOf curChainAndLedger loeFrag = do
+    addToCurrentChain rr succsOf curChainAndLedger loeFrag leashingPoint = do
         -- Extensions of @B@ that do not exceed the LoE
         let suffixesAfterB = Paths.maximalCandidates succsOf Nothing (realPointToPoint p)
 
@@ -653,6 +667,7 @@ chainSelectionForBlock cdb@CDB{..} blockCache hdr punish = electric $ withRegist
 
         let chainDiffs = NE.nonEmpty
               $ filter (preferAnchoredCandidate (bcfg chainSelEnv) curChain . Diff.getSuffix)
+              $ fmap (trimLeashing leashingPoint curChainAndLedger)
               $ fmap (trimToLoE loeFrag curChainAndLedger)
               $ fmap Diff.extend
               $ NE.toList candidates
@@ -671,7 +686,7 @@ chainSelectionForBlock cdb@CDB{..} blockCache hdr punish = electric $ withRegist
         -- extension of the current chain.
         case chainDiffs of
           Nothing          -> return ()
-          Just chainDiffs' ->
+          Just chainDiffs' -> 
             chainSelection chainSelEnv rr chainDiffs' >>= \case
               Nothing ->
                 return ()
@@ -726,6 +741,33 @@ chainSelectionForBlock cdb@CDB{..} blockCache hdr punish = electric $ withRegist
                       else candPrefix
               in Diff.diff (VF.validatedFragment curChain) trimmedCand
 
+    trimLeashing :: 
+      Maybe (Point blk) ->
+      ChainAndLedger m blk ->
+      ChainDiff (Header blk) ->
+      ChainDiff (Header blk)
+    trimLeashing Nothing _ diff = diff
+    -- ^ leashing is not enabled
+    trimLeashing (Just lp) curChain diff =
+      case Diff.apply (VF.validatedFragment curChain) diff of
+        Nothing -> error "trimLeashing: precondition violated: the given 'ChainDiff' must apply on top of the given 'ChainAndLedger'"
+        Just cand -> -- suffix of the candidate
+          case compare lp (AF.castPoint $ AF.anchorPoint cand) of
+            --  since we use the LocalStateQuery server, it should fail to acquire the state in such scenario
+            LT -> error "trimLeashing: the leashingPoint point is less than anchor of the current chaint"
+
+            -- if the leashingPoint = anchor, we want no candidates to be selected, so we return the empty diff
+            EQ -> Diff.extend $ AF.fromOldestFirst (AF.headAnchor cand) []
+
+            -- if the leashingPoint > anchor
+            --
+            -- a. volatile tip < leashingPoint 
+            -- b. anchor < leashingPoint < volatile tip
+            --
+            -- we want the diff = anchor :| [ b_x | x < leashingPoint]
+            --
+            -- we return the candidates available up to the leashing point
+            GT -> Diff.diff (VF.validatedFragment curChain) $ AF.takeWhileOldest (\h -> headerPoint h < lp) cand
     -- | We have found a 'ChainDiff' through the VolatileDB connecting the new
     -- block to the current chain. We'll call the intersection/anchor @x@.
     --
@@ -743,8 +785,9 @@ chainSelectionForBlock cdb@CDB{..} blockCache hdr punish = electric $ withRegist
          -- ^ LoE fragment
       -> ChainDiff (HeaderFields blk)
          -- ^ Header fields for @(x,b]@
+      -> Maybe (Point blk)
       -> m ()
-    switchToAFork rr succsOf lookupBlockInfo curChainAndLedger loeFrag diff = do
+    switchToAFork rr succsOf lookupBlockInfo curChainAndLedger loeFrag diff leashingPoint = do
         -- We use a cache to avoid reading the headers from disk multiple
         -- times in case they're part of multiple forks that go through @b@.
         let initCache = Map.singleton (headerHash hdr) hdr
@@ -760,6 +803,8 @@ chainSelectionForBlock cdb@CDB{..} blockCache hdr punish = electric $ withRegist
                   . Diff.getSuffix
                   )
               )
+
+          . fmap (fmap (trimLeashing leashingPoint curChainAndLedger))
             -- 4. Trim fragments so that they follow the LoE, that is, they
             -- extend the LoE or are extended by the LoE. Filter them out
             -- otherwise.
@@ -783,11 +828,11 @@ chainSelectionForBlock cdb@CDB{..} blockCache hdr punish = electric $ withRegist
             chainSelection chainSelEnv rr chainDiffs' >>= \case
               Nothing                 ->
                 return ()
-              Just validatedChainDiff ->
-                switchTo
-                  validatedChainDiff
-                  (varTentativeHeader chainSelEnv)
-                  SwitchingToAFork
+              Just validatedChainDiff -> 
+                  switchTo
+                    validatedChainDiff
+                    (varTentativeHeader chainSelEnv)
+                    SwitchingToAFork
       where
         chainSelEnv = mkChainSelEnv curChainAndLedger
         curChain    = VF.validatedFragment curChainAndLedger

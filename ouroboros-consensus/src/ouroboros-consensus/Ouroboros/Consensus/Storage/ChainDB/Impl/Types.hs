@@ -310,6 +310,7 @@ data ChainDbEnv m blk = CDB
   , cdbChainSelStarvation :: !(StrictTVar m ChainSelStarvation)
     -- ^ Information on the last starvation of ChainSel, whether ongoing or
     -- ended recently.
+  , cdbLeashingPoint :: !(StrictTVar m (Maybe (Point blk)))
   } deriving (Generic)
 
 -- | We include @blk@ in 'showTypeOf' because it helps resolving type families

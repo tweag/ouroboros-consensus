@@ -78,6 +78,7 @@ import           Ouroboros.Network.NodeToClient hiding
                      (NodeToClientVersion (..))
 import qualified Ouroboros.Network.NodeToClient as N (NodeToClientVersion (..),
                      NodeToClientVersionData)
+import qualified Ouroboros.Network.AnchoredFragment as AF
 import           Ouroboros.Network.Protocol.ChainSync.Codec
 import           Ouroboros.Network.Protocol.ChainSync.Server
 import           Ouroboros.Network.Protocol.ChainSync.Type
@@ -133,13 +134,20 @@ mkHandlers NodeKernelArgs {cfg, tracers} NodeKernel {getChainDB, getMempool} =
           localTxSubmissionServer
             (Node.localTxSubmissionServerTracer tracers)
             getMempool
-      , hStateQueryServer =
-              localStateQueryServer (ExtLedgerCfg cfg)
-            . ChainDB.getReadOnlyForkerAtPoint getChainDB
+      , hStateQueryServer = \rr ->
+          localStateQueryServer
+            (ExtLedgerCfg cfg)
+            (ChainDB.getLeashingPointVar getChainDB)
+            (getCurrentChainAnchor getChainDB)
+            (ChainDB.getReadOnlyForkerAtPoint getChainDB $ rr) 
       , hTxMonitorServer =
           localTxMonitorServer
             getMempool
       }
+  where
+    getCurrentChainAnchor chainDB = do
+      curChain <- ChainDB.getCurrentChainWithTime chainDB
+      pure $ AF.castPoint $ AF.anchorPoint curChain
 
 {-------------------------------------------------------------------------------
   Codecs

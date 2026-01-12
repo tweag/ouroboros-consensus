@@ -61,7 +61,6 @@ module Ouroboros.Consensus.Storage.ChainDB.API (
   , GetLoEFragment
   , LoE (..)
   ) where
-
 import           Control.Monad (void)
 import           Control.ResourceRegistry
 import           Data.Typeable (Typeable)
@@ -393,6 +392,8 @@ data ChainDB m blk = ChainDB {
       -- | Get statistics from the LedgerDB, in particular the number of entries
       -- in the tables.
     , getStatistics      :: m (Maybe Statistics)
+
+    , getLeashingPointVar   :: !(StrictTVar m (Maybe (Point blk)))
 
        -- | Close the ChainDB
       --
@@ -921,3 +922,4 @@ data LoE a =
 -- details. This fragment must be anchored in a (recent) point on the immutable
 -- chain, just like candidate fragments.
 type GetLoEFragment m blk = m (LoE (AnchoredFragment (HeaderWithTime blk)))
+

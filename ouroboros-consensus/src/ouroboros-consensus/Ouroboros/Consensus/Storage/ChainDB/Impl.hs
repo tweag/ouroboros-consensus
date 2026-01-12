@@ -204,6 +204,7 @@ openDBInternal args launchBgTasks = runWithTempRegistry $ do
       chainSelFuse       <- newFuse "chain selection"
       chainSelQueue      <- newChainSelQueue (Args.cdbsBlocksToAddSize cdbSpecificArgs)
       varChainSelStarvation <- newTVarIO ChainSelStarvationOngoing
+      varLeashingPoint <- newTVarIO Nothing 
 
       let env = CDB { cdbImmutableDB     = immutableDB
                     , cdbVolatileDB      = volatileDB
@@ -227,6 +228,7 @@ openDBInternal args launchBgTasks = runWithTempRegistry $ do
                     , cdbChainSelQueue   = chainSelQueue
                     , cdbLoE             = Args.cdbsLoE cdbSpecificArgs
                     , cdbChainSelStarvation = varChainSelStarvation
+                    , cdbLeashingPoint   = varLeashingPoint
                     }
       h <- fmap CDBHandle $ newTVarIO $ ChainDbOpen env
       let chainDB = API.ChainDB
@@ -254,6 +256,7 @@ openDBInternal args launchBgTasks = runWithTempRegistry $ do
             , getReadOnlyForkerAtPoint = getEnv2    h Query.getReadOnlyForkerAtPoint
             , getLedgerTablesAtFor     = getEnv2    h Query.getLedgerTablesAtFor
             , getStatistics            = getEnv     h Query.getStatistics
+            , getLeashingPointVar      = varLeashingPoint
             }
       addBlockTestFuse <- newFuse "test chain selection"
       copyTestFuse <- newFuse "test copy to immutable db"
