@@ -9,17 +9,18 @@
 {-# LANGUAGE PackageImports #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE RecordWildCards#-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
 
 -- | Implement ChainSync and BlockFetch servers on top of just the immutable DB.
-module Cardano.Tools.ImmDBServer.MiniProtocols (ChainSyncMessageTracer, ChainSyncEventTracer, immDBServer) where
+module Cardano.Tools.ImmDBServer.MiniProtocols (Tracers(..), immDBServer) where
 
 import qualified Codec.CBOR.Decoding as CBOR
 import qualified Codec.CBOR.Encoding as CBOR
 import Control.Monad (forever)
 import Control.ResourceRegistry
-import "contra-tracer" Control.Tracer
+import "contra-tracer" Control.Tracer (Tracer)
 import Data.Bifunctor (bimap)
 import qualified Data.ByteString.Lazy as BL
 import Data.Functor ((<&>))
@@ -31,7 +32,7 @@ import qualified Network.Mux as Mux
 import Ouroboros.Network.Driver.Simple (TraceSendRecv)
 import Ouroboros.Consensus.Block
 import Ouroboros.Consensus.MiniProtocol.BlockFetch.Server
-  ( blockFetchServer'
+  ( blockFetchServer', TraceBlockFetchServerEvent
   )
 import Ouroboros.Consensus.MiniProtocol.ChainSync.Server
   ( chainSyncServerForFollower, TraceChainSyncServerEvent
@@ -49,7 +50,7 @@ import Ouroboros.Consensus.Storage.ImmutableDB.API (ImmutableDB)
 import qualified Ouroboros.Consensus.Storage.ImmutableDB.API as ImmutableDB
 import Ouroboros.Consensus.Util
 import Ouroboros.Consensus.Util.IOLike
-import Ouroboros.Network.Block (ChainUpdate (..), Tip (..))
+import Ouroboros.Network.Block (ChainUpdate (..), Serialised, Tip (..))
 import Ouroboros.Network.Driver (runPeer)
 import Ouroboros.Network.KeepAlive (keepAliveServer)
 import Ouroboros.Network.Magic (NetworkMagic)
@@ -73,12 +74,31 @@ import Ouroboros.Network.Protocol.Handshake.Version (Version (..))
 import Ouroboros.Network.Protocol.KeepAlive.Server
   ( keepAliveServerPeer
   )
+import Ouroboros.Network.Protocol.KeepAlive.Type (KeepAlive)
+import Ouroboros.Network.Protocol.BlockFetch.Type (BlockFetch)
+
+type KeepAliveMessageTracer m =
+  Tracer m (TraceSendRecv KeepAlive)
 
 type ChainSyncMessageTracer m blk =
   Tracer m (TraceSendRecv (ChainSync (SerialisedHeader blk) (Point blk) (Tip blk)))
 
 type ChainSyncEventTracer m blk =
   Tracer m (TraceChainSyncServerEvent blk)
+
+type BlockFetchMessageTracer m blk =
+  Tracer m (TraceSendRecv (BlockFetch (Serialised blk) (Point blk)))
+
+type BlockFetchEventTracer m blk =
+  Tracer m (TraceBlockFetchServerEvent blk)
+
+data Tracers m blk = Tracers {
+  keepAliveMessageTracer :: KeepAliveMessageTracer m,
+  chainSyncMessageTracer :: ChainSyncMessageTracer m blk, 
+  chainSyncEventTracer :: ChainSyncEventTracer m blk,
+  blockFetchMessageTracer :: BlockFetchMessageTracer m blk,
+  blockFetchEventTracer :: BlockFetchEventTracer m blk
+}
 
 immDBServer ::
   forall m blk addr.
@@ -88,8 +108,7 @@ immDBServer ::
   , SerialiseNodeToNodeConstraints blk
   , SupportedNetworkProtocolVersion blk
   ) =>
-  ChainSyncMessageTracer m blk ->
-  ChainSyncEventTracer m blk ->
+  Tracers m blk ->
   CodecConfig blk ->
   (NodeToNodeVersion -> addr -> CBOR.Encoding) ->
   (NodeToNodeVersion -> forall s. CBOR.Decoder s addr) ->
@@ -99,7 +118,7 @@ immDBServer ::
     NodeToNodeVersion
     NodeToNodeVersionData
     (OuroborosApplicationWithMinimalCtx 'Mux.ResponderMode addr BL.ByteString m Void ())
-immDBServer chainSyncMessageTracer chainSyncEventTracer codecCfg encAddr decAddr immDB networkMagic = do
+immDBServer Tracers{..} codecCfg encAddr decAddr immDB networkMagic = do
   forAllVersions application
  where
   forAllVersions ::
@@ -159,7 +178,7 @@ immDBServer chainSyncMessageTracer chainSyncEventTracer codecCfg encAddr decAddr
 
       keepAliveProt =
         MiniProtocolCb $ \_ctx channel ->
-          runPeer nullTracer cKeepAliveCodec channel $
+          runPeer keepAliveMessageTracer cKeepAliveCodec channel $
             keepAliveServerPeer keepAliveServer
       chainSyncProt =
         MiniProtocolCb $ \_ctx channel ->
@@ -170,9 +189,9 @@ immDBServer chainSyncMessageTracer chainSyncEventTracer codecCfg encAddr decAddr
       blockFetchProt =
         MiniProtocolCb $ \_ctx channel ->
           withRegistry $
-            runPeer nullTracer cBlockFetchCodecSerialised channel
+            runPeer blockFetchMessageTracer cBlockFetchCodecSerialised channel
               . blockFetchServerPeer
-              . blockFetchServer immDB ChainDB.getSerialisedBlockWithPoint
+              . blockFetchServer blockFetchEventTracer immDB ChainDB.getSerialisedBlockWithPoint
       txSubmissionProt =
         -- never reply, there is no timeout
         MiniProtocolCb $ \_ctx _channel -> forever $ threadDelay 10
@@ -262,12 +281,13 @@ chainSyncServer tr immDB blockComponent registry = ChainSyncServer $ do
 blockFetchServer ::
   forall m blk a.
   (IOLike m, StandardHash blk, Typeable blk) =>
+  Tracer m (TraceBlockFetchServerEvent blk) ->
   ImmutableDB m blk ->
   BlockComponent blk (ChainDB.WithPoint blk a) ->
   ResourceRegistry m ->
   BlockFetchServer a (Point blk) m ()
-blockFetchServer immDB blockComponent registry =
-  blockFetchServer' nullTracer stream
+blockFetchServer tr immDB blockComponent registry =
+  blockFetchServer' tr stream
  where
   stream from to =
     bimap convertError convertIterator

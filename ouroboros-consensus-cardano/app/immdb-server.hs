@@ -7,6 +7,7 @@ module Main (main) where
 import Cardano.Crypto.Init (cryptoInit)
 import qualified Cardano.Tools.DBAnalyser.Block.Cardano as Cardano
 import Cardano.Tools.DBAnalyser.HasAnalysis (mkProtocolInfo)
+import Cardano.Tools.ImmDBServer.MiniProtocols (Tracers (..))
 import qualified Cardano.Tools.ImmDBServer.Diffusion as ImmDBServer
 import Data.Void
 import Main.Utf8 (withStdTerminalHandles)
@@ -19,7 +20,6 @@ import Data.List (intercalate)
 import "contra-tracer" Control.Tracer (showTracing, stdoutTracer, traceWith)
 
 import DBServer.Parsers (parseAddr)
-import DBServer.Tracing (getTrivialSendRecvTracer)
 import DBServer.Types (HostAddr)
 
 main :: IO ()
@@ -31,13 +31,17 @@ main = withStdTerminalHandles $ do
         -- could also be passed in
         hostAddr = Socket.tupleToHostAddress addr
       args = Cardano.CardanoBlockArgs configFile Nothing
-      eventTracer = showTracing stdoutTracer
-      --msgTracer = getTrivialSendRecvTracer stdoutTracer
-      msgTracer = showTracing stdoutTracer
+      tracers = Tracers
+        { keepAliveMessageTracer = showTracing stdoutTracer
+        , chainSyncMessageTracer = showTracing stdoutTracer
+        , chainSyncEventTracer = showTracing stdoutTracer
+        , blockFetchMessageTracer = showTracing stdoutTracer
+        , blockFetchEventTracer = showTracing stdoutTracer
+        }
   ProtocolInfo{pInfoConfig} <- mkProtocolInfo args
   traceWith stdoutTracer $ "Running ImmDB server at " ++ printHost (addr, port)
   startResourceTracer stdoutTracer rtsFrequency
-  absurd <$> ImmDBServer.run msgTracer eventTracer immDBDir sockAddr pInfoConfig
+  absurd <$> ImmDBServer.run tracers immDBDir sockAddr pInfoConfig
 
 type RTSFrequency = Int
 

@@ -726,7 +726,6 @@ executable immdb-server
     optparse-applicative,
     ouroboros-consensus,
     ouroboros-consensus-cardano:unstable-cardano-tools,
-    ouroboros-network-framework,
     with-utf8,
   other-modules:
     DBServer.Parsers

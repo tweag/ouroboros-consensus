@@ -21,7 +21,7 @@ import Data.Proxy (Proxy (..))
 import Data.Void (Void)
 
 import Control.Concurrent.Class.MonadSTM.Strict
-import Control.Tracer (Tracer, nullTracer, showTracing, stdoutTracer)
+import Control.Tracer (showTracing, stdoutTracer)
 
 import qualified Network.Socket as Socket
 
@@ -219,16 +219,15 @@ chainSyncClient controlMessageSTM maxSlotNo =
     ChainSync.ChainSyncClient $ do
       curvar   <- newTVarIO genesisAnchoredFragment
       chainvar <- newTVarIO genesisAnchoredFragment
-      case chainSyncClient' controlMessageSTM maxSlotNo nullTracer curvar chainvar of
+      case chainSyncClient' controlMessageSTM maxSlotNo curvar chainvar of
         ChainSync.ChainSyncClient k -> k
 
 chainSyncClient' :: forall blk. (HasHeader blk) => ControlMessageSTM IO
                  -> Maybe SlotNo
-                 -> Tracer IO (Point blk, Point blk)
                  -> StrictTVar IO (AF.AnchoredFragment blk)
                  -> StrictTVar IO (AF.AnchoredFragment blk)
                  -> ChainSync.ChainSyncClient (H blk) (Point blk) (Tip blk) IO ()
-chainSyncClient' controlMessageSTM _maxSlotNo _ _currentChainVar candidateChainVar =
+chainSyncClient' controlMessageSTM _maxSlotNo _currentChainVar candidateChainVar =
     ChainSync.ChainSyncClient (return requestNext)
   where
     requestNext :: ChainSync.ClientStIdle
@@ -249,19 +248,22 @@ chainSyncClient' controlMessageSTM _maxSlotNo _ _currentChainVar candidateChainV
         ChainSync.recvMsgRollForward  = \h _pHead ->
           ChainSync.ChainSyncClient $ do
             addBlock h
-            cm <- atomically controlMessageSTM
-            return $ case cm of
-              Terminate -> terminate
-              _         -> requestNext
+            proceedByControlMessage
 
       , ChainSync.recvMsgRollBackward = \pIntersect _pHead ->
           ChainSync.ChainSyncClient $ do
             rollback pIntersect
-            cm <- atomically controlMessageSTM
-            return $ case cm of
-              Terminate -> terminate
-              _         -> requestNext
+            proceedByControlMessage
       }
+
+    proceedByControlMessage :: IO (ChainSync.ClientStIdle
+                                    (H blk) (Point blk) (Tip blk) IO ())
+    proceedByControlMessage = do
+      cm <- atomically controlMessageSTM
+      return $ case cm of
+        Continue -> requestNext
+        Quiesce -> error "Quiesce not implemented in this demo"
+        Terminate -> terminate
 
     addBlock :: H blk -> IO ()
     addBlock _ = pure ()

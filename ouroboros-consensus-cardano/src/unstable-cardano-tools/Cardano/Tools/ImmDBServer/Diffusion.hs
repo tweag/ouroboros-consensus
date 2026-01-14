@@ -6,7 +6,7 @@
 
 module Cardano.Tools.ImmDBServer.Diffusion (run) where
 
-import Cardano.Tools.ImmDBServer.MiniProtocols (ChainSyncEventTracer, ChainSyncMessageTracer, immDBServer)
+import Cardano.Tools.ImmDBServer.MiniProtocols (Tracers(..), immDBServer)
 import Control.ResourceRegistry
 import "contra-tracer" Control.Tracer
 import qualified Data.ByteString.Lazy as BL
@@ -79,20 +79,18 @@ run ::
   , NodeInitStorage blk
   , ConfigSupportsNode blk
   ) =>
-  ChainSyncMessageTracer IO blk ->
-  ChainSyncEventTracer IO blk ->
+  Tracers IO blk -> 
   FilePath ->
   SockAddr ->
   TopLevelConfig blk ->
   IO Void
-run chainSyncMessageTracer chainSyncEventTracer immDBDir sockAddr cfg = withRegistry \registry ->
+run tracers immDBDir sockAddr cfg = withRegistry \registry ->
   ImmutableDB.withDB
     (ImmutableDB.openDB (immDBArgs registry) runWithTempRegistry)
     \immDB ->
       serve sockAddr $
-        immDBServer
-          chainSyncMessageTracer
-          chainSyncEventTracer
+        immDBServer 
+          tracers
           codecCfg
           encodeRemoteAddress
           decodeRemoteAddress
