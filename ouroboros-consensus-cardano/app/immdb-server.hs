@@ -5,23 +5,21 @@
 module Main (main) where
 
 import Cardano.Crypto.Init (cryptoInit)
+import Cardano.Node.Tracing (startResourceTracer)
 import qualified Cardano.Tools.DBAnalyser.Block.Cardano as Cardano
 import Cardano.Tools.DBAnalyser.HasAnalysis (mkProtocolInfo)
 import qualified Cardano.Tools.ImmDBServer.Diffusion as ImmDBServer
+import qualified Cardano.Tools.ImmDBServer.RemoteStorage as RemoteStorage
+import DBServer.Parsers (parseAddr)
+import DBServer.Tracing (getTrivialSendRecvTracer)
+import DBServer.Types (HostAddr)
+import Data.List (intercalate)
 import Data.Void
 import Main.Utf8 (withStdTerminalHandles)
 import qualified Network.Socket as Socket
 import Options.Applicative
 import Ouroboros.Consensus.Node.ProtocolInfo (ProtocolInfo (..))
-
-import Cardano.Node.Tracing (startResourceTracer)
-import Data.List (intercalate)
 import "contra-tracer" Control.Tracer (showTracing, stdoutTracer, traceWith)
-
-import DBServer.Parsers (parseAddr)
-import DBServer.Tracing (getTrivialSendRecvTracer)
-import DBServer.Types (HostAddr)
-import qualified Cardano.Tools.ImmDBServer.RemoteStorage as RemoteStorage
 
 main :: IO ()
 main = withStdTerminalHandles $ do
@@ -33,7 +31,7 @@ main = withStdTerminalHandles $ do
         hostAddr = Socket.tupleToHostAddress addr
       args = Cardano.CardanoBlockArgs configFile Nothing
       eventTracer = showTracing stdoutTracer
-      --msgTracer = getTrivialSendRecvTracer stdoutTracer
+      -- msgTracer = getTrivialSendRecvTracer stdoutTracer
       msgTracer = showTracing stdoutTracer
   ProtocolInfo{pInfoConfig} <- mkProtocolInfo args
   traceWith stdoutTracer $ "Running ImmDB server at " ++ printHost (addr, port)

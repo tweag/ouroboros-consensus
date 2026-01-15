@@ -1,8 +1,8 @@
 module DBServer.Parsers (parseAddr) where
 
+import DBServer.Types (HostAddr)
 import Data.Bifunctor (first)
 import Text.Read (readMaybe)
-import DBServer.Types (HostAddr)
 
 parseAddr :: String -> Either String HostAddr
 parseAddr s = first contextualize $ traverse tryParse chunks >>= extractResult

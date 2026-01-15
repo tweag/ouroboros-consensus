@@ -4,12 +4,11 @@ module Cardano.Node.Tracing (startResourceTracer) where
 
 import Cardano.Logging.Resources (ResourceStats, readResourceStats)
 import Cardano.Logging.Types (LogFormatting (..))
-import Data.Text (unpack)
-
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async (async)
 import Control.Monad (forever)
 import Control.Monad.Class.MonadAsync (link)
+import Data.Text (unpack)
 import GHC.Conc (labelThread, myThreadId)
 import "contra-tracer" Control.Tracer (Tracer, contramap, traceWith)
 

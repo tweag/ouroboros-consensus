@@ -19,7 +19,6 @@ import qualified Codec.CBOR.Decoding as CBOR
 import qualified Codec.CBOR.Encoding as CBOR
 import Control.Monad (forever)
 import Control.ResourceRegistry
-import "contra-tracer" Control.Tracer
 import Data.Bifunctor (bimap)
 import qualified Data.ByteString.Lazy as BL
 import Data.Functor ((<&>))
@@ -28,15 +27,14 @@ import Data.Typeable (Typeable)
 import Data.Void (Void)
 import GHC.Generics (Generic)
 import qualified Network.Mux as Mux
-import Ouroboros.Network.Driver.Simple (TraceSendRecv)
 import Ouroboros.Consensus.Block
 import Ouroboros.Consensus.MiniProtocol.BlockFetch.Server
   ( blockFetchServer'
   )
 import Ouroboros.Consensus.MiniProtocol.ChainSync.Server
-  ( chainSyncServerForFollower, TraceChainSyncServerEvent
+  ( TraceChainSyncServerEvent
+  , chainSyncServerForFollower
   )
-import Ouroboros.Consensus.Storage.Serialisation (SerialisedHeader)
 import Ouroboros.Consensus.Network.NodeToNode (Codecs (..))
 import qualified Ouroboros.Consensus.Network.NodeToNode as Consensus.N2N
 import Ouroboros.Consensus.Node (stdVersionDataNTN)
@@ -47,10 +45,12 @@ import qualified Ouroboros.Consensus.Storage.ChainDB.API as ChainDB
 import Ouroboros.Consensus.Storage.Common
 import Ouroboros.Consensus.Storage.ImmutableDB.API (ImmutableDB)
 import qualified Ouroboros.Consensus.Storage.ImmutableDB.API as ImmutableDB
+import Ouroboros.Consensus.Storage.Serialisation (SerialisedHeader)
 import Ouroboros.Consensus.Util
 import Ouroboros.Consensus.Util.IOLike
 import Ouroboros.Network.Block (ChainUpdate (..), Tip (..))
 import Ouroboros.Network.Driver (runPeer)
+import Ouroboros.Network.Driver.Simple (TraceSendRecv)
 import Ouroboros.Network.KeepAlive (keepAliveServer)
 import Ouroboros.Network.Magic (NetworkMagic)
 import Ouroboros.Network.Mux
@@ -73,6 +73,7 @@ import Ouroboros.Network.Protocol.Handshake.Version (Version (..))
 import Ouroboros.Network.Protocol.KeepAlive.Server
   ( keepAliveServerPeer
   )
+import "contra-tracer" Control.Tracer
 
 type ChainSyncMessageTracer m blk =
   Tracer m (TraceSendRecv (ChainSync (SerialisedHeader blk) (Point blk) (Tip blk)))

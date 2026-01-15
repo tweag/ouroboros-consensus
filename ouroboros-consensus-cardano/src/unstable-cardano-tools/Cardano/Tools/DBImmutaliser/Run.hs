@@ -25,7 +25,6 @@ import qualified Cardano.Tools.DBAnalyser.Block.Cardano as Cardano
 import Cardano.Tools.DBAnalyser.HasAnalysis (mkProtocolInfo)
 import Control.Monad (unless)
 import Control.ResourceRegistry
-import "contra-tracer" Control.Tracer (Tracer (..), stdoutTracer, traceWith)
 import Data.Foldable (for_)
 import Data.Functor.Contravariant ((>$<))
 import Data.List (intercalate, sortOn)
@@ -66,6 +65,7 @@ import Ouroboros.Network.Block (MaxSlotNo)
 import System.FS.API (SomeHasFS (..))
 import System.FS.API.Types (MountPoint (..))
 import System.FS.IO (ioHasFS)
+import "contra-tracer" Control.Tracer (Tracer (..), stdoutTracer, traceWith)
 
 data Opts = Opts
   { dbDirs :: DBDirs FilePath

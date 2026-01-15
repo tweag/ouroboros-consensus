@@ -15,7 +15,6 @@ import Cardano.Tools.DBAnalyser.Analysis
 import Cardano.Tools.DBAnalyser.HasAnalysis
 import Cardano.Tools.DBAnalyser.Types
 import Control.ResourceRegistry
-import "contra-tracer" Control.Tracer (Tracer (..), nullTracer)
 import qualified Data.SOP.Dict as Dict
 import Data.Singletons (Sing, SingI (..))
 import Data.Void
@@ -50,6 +49,7 @@ import Ouroboros.Consensus.Util.Orphans ()
 import Ouroboros.Network.Block (genesisPoint)
 import System.IO
 import Text.Printf (printf)
+import "contra-tracer" Control.Tracer (Tracer (..), nullTracer)
 
 {-------------------------------------------------------------------------------
   Analyse

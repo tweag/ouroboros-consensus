@@ -15,7 +15,6 @@ import Control.Monad
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.Trans.Maybe (MaybeT (..))
 import Control.ResourceRegistry (runWithTempRegistry, withRegistry)
-import "contra-tracer" Control.Tracer
 import Data.Foldable (asum)
 import Data.Functor ((<&>))
 import Data.Functor.Identity
@@ -35,6 +34,7 @@ import Ouroboros.Consensus.Storage.ImmutableDB.Impl
 import Ouroboros.Consensus.Util.Args
 import Ouroboros.Consensus.Util.IOLike
 import System.IO
+import "contra-tracer" Control.Tracer
 import Prelude hiding (truncate)
 
 truncate ::

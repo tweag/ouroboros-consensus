@@ -22,7 +22,6 @@ import Control.Monad.Trans.Except.Extra
   , runExceptT
   )
 import Control.ResourceRegistry
-import "contra-tracer" Control.Tracer
 import Data.Aeson as Aeson
   ( FromJSON
   , Result (..)
@@ -59,6 +58,7 @@ import Ouroboros.Network.Block
 import Ouroboros.Network.Point (WithOrigin (..))
 import System.Directory
 import System.FilePath (takeDirectory, (</>))
+import "contra-tracer" Control.Tracer
 
 initialize ::
   NodeFilePaths ->

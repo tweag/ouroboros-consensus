@@ -40,7 +40,6 @@ import Cardano.Tools.DBAnalyser.Types
 import Control.Monad (unless, void, when)
 import Control.Monad.Except (runExcept)
 import Control.ResourceRegistry
-import "contra-tracer" Control.Tracer (Tracer (..), nullTracer, traceWith)
 import Data.Int (Int64)
 import Data.List (intercalate)
 import qualified Data.Map.Strict as Map
@@ -88,6 +87,7 @@ import qualified Ouroboros.Consensus.Util.IOLike as IOLike
 import Ouroboros.Network.Protocol.LocalStateQuery.Type
 import Ouroboros.Network.SizeInBytes
 import qualified System.IO as IO
+import "contra-tracer" Control.Tracer (Tracer (..), nullTracer, traceWith)
 
 {-------------------------------------------------------------------------------
   Run the requested analysis

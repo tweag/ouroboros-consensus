@@ -1,7 +1,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE NamedFieldPuns #-}
-{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE PackageImports #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
 
@@ -19,7 +19,6 @@ import Control.Monad.Except (runExcept)
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Trans.Except (ExceptT, runExceptT, throwE)
 import Control.ResourceRegistry
-import "contra-tracer" Control.Tracer as Trace (nullTracer)
 import Data.Either (isRight)
 import Data.Maybe (isJust)
 import Data.Proxy
@@ -71,6 +70,7 @@ import Ouroboros.Network.AnchoredFragment as AF
   , headPoint
   )
 import Ouroboros.Network.Protocol.LocalStateQuery.Type
+import "contra-tracer" Control.Tracer as Trace (nullTracer)
 
 data ForgeState
   = ForgeState

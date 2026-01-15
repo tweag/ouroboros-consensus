@@ -6,9 +6,15 @@
 
 module Cardano.Tools.ImmDBServer.Diffusion (run) where
 
-import Cardano.Tools.ImmDBServer.MiniProtocols (ChainSyncEventTracer, ChainSyncMessageTracer, immDBServer)
+import Cardano.Prelude (Typeable)
+import Cardano.Tools.ImmDBServer.MiniProtocols
+  ( ChainSyncEventTracer
+  , ChainSyncMessageTracer
+  , immDBServer
+  )
+import qualified Cardano.Tools.ImmDBServer.OnDemand as OnDemand
+import qualified Cardano.Tools.ImmDBServer.RemoteStorage as RemoteStorage
 import Control.ResourceRegistry
-import "contra-tracer" Control.Tracer
 import qualified Data.ByteString.Lazy as BL
 import Data.Functor.Contravariant ((>$<))
 import Data.Void (Void)
@@ -24,27 +30,24 @@ import Ouroboros.Consensus.Node.NetworkProtocolVersion
 import Ouroboros.Consensus.Node.Run (SerialiseNodeToNodeConstraints)
 import Ouroboros.Consensus.Storage.ImmutableDB (ImmutableDbArgs (..))
 import qualified Ouroboros.Consensus.Storage.ImmutableDB as ImmutableDB
-import           Ouroboros.Consensus.Util.IOLike
-import           Ouroboros.Network.IOManager (withIOManager)
-import           Ouroboros.Network.Mux
+import Ouroboros.Consensus.Util (ShowProxy)
+import Ouroboros.Consensus.Util.IOLike
+import Ouroboros.Network.IOManager (withIOManager)
+import Ouroboros.Network.Mux
 import qualified Ouroboros.Network.NodeToNode as N2N
-import           Ouroboros.Network.PeerSelection.PeerSharing.Codec
+import Ouroboros.Network.PeerSelection.PeerSharing.Codec
   ( decodeRemoteAddress
   , encodeRemoteAddress
   )
-import           Ouroboros.Network.Protocol.Handshake (HandshakeArguments (..))
+import Ouroboros.Network.Protocol.Handshake (HandshakeArguments (..))
 import qualified Ouroboros.Network.Protocol.Handshake as Handshake
 import qualified Ouroboros.Network.Server.Simple as Server
 import qualified Ouroboros.Network.Snocket as Snocket
-import           Ouroboros.Network.Socket (SomeResponderApplication (..), configureSocket)
-import           System.FS.API (SomeHasFS (..))
-import           System.FS.API.Types (MountPoint (MountPoint))
-import           System.FS.IO (ioHasFS)
-
-import qualified Cardano.Tools.ImmDBServer.OnDemand as OnDemand
-import qualified Cardano.Tools.ImmDBServer.RemoteStorage as RemoteStorage
-import Ouroboros.Consensus.Util (ShowProxy)
-import Cardano.Prelude (Typeable)
+import Ouroboros.Network.Socket (SomeResponderApplication (..), configureSocket)
+import System.FS.API (SomeHasFS (..))
+import System.FS.API.Types (MountPoint (MountPoint))
+import System.FS.IO (ioHasFS)
+import "contra-tracer" Control.Tracer
 
 -- | Glue code for using just the bits from the Diffusion Layer that we need in
 -- this context.
@@ -98,17 +101,17 @@ run mbRemoteConfig chainSyncMessageTracer chainSyncEventTracer immDBDir sockAddr
     (ImmutableDB.openDB (immDBArgs registry) runWithTempRegistry)
     \immDB -> do
       immDB' <- case mbRemoteConfig of
-            Nothing -> return immDB
-            Just remoteCfg ->
-                OnDemand.decorateImmutableDB
-                    OnDemand.OnDemandConfig
-                        { OnDemand.odcRemote = remoteCfg
-                        , OnDemand.odcChunkInfo = nodeImmutableDbChunkInfo storageCfg
-                        , OnDemand.odcHasFS = hasFS
-                        , OnDemand.odcCodecConfig = codecCfg
-                        , OnDemand.odcCheckIntegrity = nodeCheckIntegrity storageCfg
-                        }
-                    immDB
+        Nothing -> return immDB
+        Just remoteCfg ->
+          OnDemand.decorateImmutableDB
+            OnDemand.OnDemandConfig
+              { OnDemand.odcRemote = remoteCfg
+              , OnDemand.odcChunkInfo = nodeImmutableDbChunkInfo storageCfg
+              , OnDemand.odcHasFS = hasFS
+              , OnDemand.odcCodecConfig = codecCfg
+              , OnDemand.odcCheckIntegrity = nodeCheckIntegrity storageCfg
+              }
+            immDB
       serve sockAddr $
         immDBServer
           chainSyncMessageTracer
