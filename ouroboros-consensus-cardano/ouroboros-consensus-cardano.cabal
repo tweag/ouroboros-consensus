@@ -539,7 +539,10 @@ library unstable-cardano-tools
     Cardano.Tools.GitRev
     Cardano.Tools.Headers
     Cardano.Tools.ImmDBServer.Diffusion
+    Cardano.Tools.ImmDBServer.LightweightIterator
     Cardano.Tools.ImmDBServer.MiniProtocols
+    Cardano.Tools.ImmDBServer.OnDemand
+    Cardano.Tools.ImmDBServer.RemoteStorage
 
   other-modules:
     Cardano.Api.Key
@@ -589,6 +592,9 @@ library unstable-cardano-tools
     filepath,
     fs-api ^>=0.4,
     githash,
+    http-client,
+    http-client-tls,
+    http-types,
     io-classes,
     microlens,
     mtl,
@@ -731,6 +737,7 @@ executable immdb-server
   other-modules:
     DBServer.Parsers
     DBServer.Types
+    DBServer.Tracing
 
 executable snapshot-converter
   import: common-exe

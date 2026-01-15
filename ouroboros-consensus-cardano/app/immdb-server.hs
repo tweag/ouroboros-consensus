@@ -21,11 +21,12 @@ import "contra-tracer" Control.Tracer (showTracing, stdoutTracer, traceWith)
 import DBServer.Parsers (parseAddr)
 import DBServer.Tracing (getTrivialSendRecvTracer)
 import DBServer.Types (HostAddr)
+import qualified Cardano.Tools.ImmDBServer.RemoteStorage as RemoteStorage
 
 main :: IO ()
 main = withStdTerminalHandles $ do
   cryptoInit
-  Opts{immDBDir, addr, port, configFile, rtsFrequency} <- execParser optsParser
+  Opts{immDBDir, addr, port, configFile, rtsFrequency, cdnUrl} <- execParser optsParser
   let sockAddr = Socket.SockAddrInet port hostAddr
        where
         -- could also be passed in
@@ -37,7 +38,8 @@ main = withStdTerminalHandles $ do
   ProtocolInfo{pInfoConfig} <- mkProtocolInfo args
   traceWith stdoutTracer $ "Running ImmDB server at " ++ printHost (addr, port)
   startResourceTracer stdoutTracer rtsFrequency
-  absurd <$> ImmDBServer.run msgTracer eventTracer immDBDir sockAddr pInfoConfig
+  let remoteConfig = fmap (\url -> RemoteStorage.RemoteStorageConfig url immDBDir) cdnUrl
+  absurd <$> ImmDBServer.run remoteConfig msgTracer eventTracer immDBDir sockAddr pInfoConfig
 
 type RTSFrequency = Int
 
@@ -47,6 +49,7 @@ data Opts = Opts
   , port :: Socket.PortNumber
   , configFile :: FilePath
   , rtsFrequency :: RTSFrequency
+  , cdnUrl :: Maybe String
   }
 
 printHost :: (HostAddr, Socket.PortNumber) -> String
@@ -99,4 +102,12 @@ optsParser =
           , value 1000
           , showDefault
           ]
-    pure Opts{immDBDir, addr, port, configFile, rtsFrequency}
+    cdnUrl <-
+      optional $
+        strOption $
+          mconcat
+            [ long "cdn-url"
+            , help "URL to a CDN serving ImmutableDB chunks (e.g. https://example.com/chain)"
+            , metavar "URL"
+            ]
+    pure Opts{immDBDir, addr, port, configFile, rtsFrequency, cdnUrl}

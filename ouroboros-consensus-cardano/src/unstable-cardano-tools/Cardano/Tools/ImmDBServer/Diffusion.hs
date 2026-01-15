@@ -24,23 +24,27 @@ import Ouroboros.Consensus.Node.NetworkProtocolVersion
 import Ouroboros.Consensus.Node.Run (SerialiseNodeToNodeConstraints)
 import Ouroboros.Consensus.Storage.ImmutableDB (ImmutableDbArgs (..))
 import qualified Ouroboros.Consensus.Storage.ImmutableDB as ImmutableDB
-import Ouroboros.Consensus.Util
-import Ouroboros.Consensus.Util.IOLike
-import Ouroboros.Network.IOManager (withIOManager)
-import Ouroboros.Network.Mux
+import           Ouroboros.Consensus.Util.IOLike
+import           Ouroboros.Network.IOManager (withIOManager)
+import           Ouroboros.Network.Mux
 import qualified Ouroboros.Network.NodeToNode as N2N
-import Ouroboros.Network.PeerSelection.PeerSharing.Codec
+import           Ouroboros.Network.PeerSelection.PeerSharing.Codec
   ( decodeRemoteAddress
   , encodeRemoteAddress
   )
-import Ouroboros.Network.Protocol.Handshake (HandshakeArguments (..))
+import           Ouroboros.Network.Protocol.Handshake (HandshakeArguments (..))
 import qualified Ouroboros.Network.Protocol.Handshake as Handshake
 import qualified Ouroboros.Network.Server.Simple as Server
 import qualified Ouroboros.Network.Snocket as Snocket
-import Ouroboros.Network.Socket (SomeResponderApplication (..), configureSocket)
-import System.FS.API (SomeHasFS (..))
-import System.FS.API.Types (MountPoint (MountPoint))
-import System.FS.IO (ioHasFS)
+import           Ouroboros.Network.Socket (SomeResponderApplication (..), configureSocket)
+import           System.FS.API (SomeHasFS (..))
+import           System.FS.API.Types (MountPoint (MountPoint))
+import           System.FS.IO (ioHasFS)
+
+import qualified Cardano.Tools.ImmDBServer.OnDemand as OnDemand
+import qualified Cardano.Tools.ImmDBServer.RemoteStorage as RemoteStorage
+import Ouroboros.Consensus.Util (ShowProxy)
+import Cardano.Prelude (Typeable)
 
 -- | Glue code for using just the bits from the Diffusion Layer that we need in
 -- this context.
@@ -78,17 +82,33 @@ run ::
   , ImmutableDB.ImmutableDbSerialiseConstraints blk
   , NodeInitStorage blk
   , ConfigSupportsNode blk
+  , StandardHash blk
+  , ConvertRawHash blk
+  , Typeable blk
   ) =>
+  Maybe RemoteStorage.RemoteStorageConfig ->
   ChainSyncMessageTracer IO blk ->
   ChainSyncEventTracer IO blk ->
   FilePath ->
   SockAddr ->
   TopLevelConfig blk ->
   IO Void
-run chainSyncMessageTracer chainSyncEventTracer immDBDir sockAddr cfg = withRegistry \registry ->
+run mbRemoteConfig chainSyncMessageTracer chainSyncEventTracer immDBDir sockAddr cfg = withRegistry \registry ->
   ImmutableDB.withDB
     (ImmutableDB.openDB (immDBArgs registry) runWithTempRegistry)
-    \immDB ->
+    \immDB -> do
+      immDB' <- case mbRemoteConfig of
+            Nothing -> return immDB
+            Just remoteCfg ->
+                OnDemand.decorateImmutableDB
+                    OnDemand.OnDemandConfig
+                        { OnDemand.odcRemote = remoteCfg
+                        , OnDemand.odcChunkInfo = nodeImmutableDbChunkInfo storageCfg
+                        , OnDemand.odcHasFS = hasFS
+                        , OnDemand.odcCodecConfig = codecCfg
+                        , OnDemand.odcCheckIntegrity = nodeCheckIntegrity storageCfg
+                        }
+                    immDB
       serve sockAddr $
         immDBServer
           chainSyncMessageTracer
@@ -96,16 +116,17 @@ run chainSyncMessageTracer chainSyncEventTracer immDBDir sockAddr cfg = withRegi
           codecCfg
           encodeRemoteAddress
           decodeRemoteAddress
-          immDB
+          immDB'
           networkMagic
  where
+  hasFS = ioHasFS $ MountPoint immDBDir
   immDBArgs registry =
     ImmutableDB.defaultArgs
       { immCheckIntegrity = nodeCheckIntegrity storageCfg
       , immChunkInfo = nodeImmutableDbChunkInfo storageCfg
       , immCodecConfig = codecCfg
       , immRegistry = registry
-      , immHasFS = SomeHasFS $ ioHasFS $ MountPoint immDBDir
+      , immHasFS = SomeHasFS hasFS
       }
 
   codecCfg = configCodec cfg
