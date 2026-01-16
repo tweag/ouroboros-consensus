@@ -90,15 +90,17 @@ run ::
   , NodeInitStorage blk
   , ConfigSupportsNode blk
   ) =>
+  -- | Optional configuration for the Genesis Sync Accelerator (CDN fetching).
   Maybe RemoteStorage.RemoteStorageConfig ->
-  -- ^ Optional configuration for the Genesis Sync Accelerator (CDN fetching).
+  -- | Maximum number of chunks to keep in cache.
+  Int ->
   ChainSyncMessageTracer IO blk ->
   ChainSyncEventTracer IO blk ->
   FilePath ->
   SockAddr ->
   TopLevelConfig blk ->
   IO Void
-run mbRemoteConfig chainSyncMessageTracer chainSyncEventTracer immDBDir sockAddr cfg = withRegistry \registry ->
+run mbRemoteConfig maxCachedChunks chainSyncMessageTracer chainSyncEventTracer immDBDir sockAddr cfg = withRegistry \registry ->
   ImmutableDB.withDB
     (ImmutableDB.openDB (immDBArgs registry) runWithTempRegistry)
     \immDB -> do
@@ -112,6 +114,7 @@ run mbRemoteConfig chainSyncMessageTracer chainSyncEventTracer immDBDir sockAddr
               , OnDemand.odcHasFS = hasFS
               , OnDemand.odcCodecConfig = codecCfg
               , OnDemand.odcCheckIntegrity = nodeCheckIntegrity storageCfg
+              , OnDemand.odcMaxCachedChunks = maxCachedChunks
               }
             immDB
       serve sockAddr $

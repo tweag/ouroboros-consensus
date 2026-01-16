@@ -23,7 +23,8 @@ import "contra-tracer" Control.Tracer (showTracing, stdoutTracer, traceWith)
 main :: IO ()
 main = withStdTerminalHandles $ do
   cryptoInit
-  Opts{immDBDir, addr, port, configFile, rtsFrequency, cdnUrl} <- execParser optsParser
+  Opts{immDBDir, addr, port, configFile, rtsFrequency, cdnUrl, maxCachedChunks} <-
+    execParser optsParser
   let sockAddr = Socket.SockAddrInet port hostAddr
        where
         -- could also be passed in
@@ -36,7 +37,8 @@ main = withStdTerminalHandles $ do
   traceWith stdoutTracer $ "Running ImmDB server at " ++ printHost (addr, port)
   startResourceTracer stdoutTracer rtsFrequency
   let remoteConfig = fmap (\url -> RemoteStorage.RemoteStorageConfig url immDBDir) cdnUrl
-  absurd <$> ImmDBServer.run remoteConfig msgTracer eventTracer immDBDir sockAddr pInfoConfig
+  absurd
+    <$> ImmDBServer.run remoteConfig maxCachedChunks msgTracer eventTracer immDBDir sockAddr pInfoConfig
 
 type RTSFrequency = Int
 
@@ -54,6 +56,8 @@ data Opts = Opts
   -- ^ Frequency for tracing RTS statistics.
   , cdnUrl :: Maybe String
   -- ^ Optional CDN URL for the Genesis Sync Accelerator.
+  , maxCachedChunks :: Int
+  -- ^ Maximum number of chunks to keep in cache.
   }
 
 printHost :: (HostAddr, Socket.PortNumber) -> String
@@ -114,4 +118,12 @@ optsParser =
             , help "URL to a CDN serving ImmutableDB chunks (e.g. https://example.com/chain)"
             , metavar "URL"
             ]
-    pure Opts{immDBDir, addr, port, configFile, rtsFrequency, cdnUrl}
+    maxCachedChunks <-
+      option auto $
+        mconcat
+          [ long "max-cached-chunks"
+          , help "Maximum number of chunks to keep in cache"
+          , value 10
+          , showDefault
+          ]
+    pure Opts{immDBDir, addr, port, configFile, rtsFrequency, cdnUrl, maxCachedChunks}

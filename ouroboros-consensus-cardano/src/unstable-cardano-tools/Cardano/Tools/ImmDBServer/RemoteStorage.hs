@@ -53,11 +53,11 @@ downloadFile manager cfg chunk ext = do
   unless exists $ do
     -- Construct request
     request <- parseRequest (rscBaseUrl cfg ++ "/" ++ filename)
-    
+
     -- Perform the download
     -- TODO: Add retries and progress logging.
     response <- httpLbs request manager
-    
+
     let status = statusCode (responseStatus response)
     if status == 200
       then LBS.writeFile localPath (responseBody response)
