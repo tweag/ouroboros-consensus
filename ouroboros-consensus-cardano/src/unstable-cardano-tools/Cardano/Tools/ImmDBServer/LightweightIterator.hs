@@ -5,7 +5,6 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
-{-# LANGUAGE TypeApplications #-}
 
 module Cardano.Tools.ImmDBServer.LightweightIterator
   ( mkLightweightIterator
@@ -13,9 +12,7 @@ module Cardano.Tools.ImmDBServer.LightweightIterator
 
 import Control.Monad (forM)
 import qualified Data.ByteString.Lazy as LBS
-import Data.Proxy (Proxy (..))
-import Data.Typeable (Typeable)
-import Ouroboros.Consensus.Block
+import Ouroboros.Consensus.Block hiding (headerHash)
 import Ouroboros.Consensus.Storage.Common
 import Ouroboros.Consensus.Storage.ImmutableDB.API as API hiding (tipToRealPoint)
 import Ouroboros.Consensus.Storage.ImmutableDB.Chunks
@@ -28,7 +25,6 @@ import Ouroboros.Consensus.Storage.ImmutableDB.Impl.Util (fsPathChunkFile)
 import Ouroboros.Consensus.Storage.Serialisation
 import Ouroboros.Consensus.Util.IOLike
 import System.FS.API
-import Text.Printf (printf)
 
 -- | A simple iterator that reads blocks directly from a list of chunk files.
 -- This bypasses the main ImmutableDB's in-memory index.
@@ -40,8 +36,6 @@ mkLightweightIterator ::
   , DecodeDiskDep (NestedCtxt Header) blk
   , ReconstructNestedCtxt Header blk
   , ConvertRawHash blk
-  , StandardHash blk
-  , Typeable blk
   ) =>
   HasFS m h ->
   ChunkInfo ->
@@ -92,5 +86,5 @@ mkLightweightIterator hasFS chunkInfo codecConfig checkIntegrity component chunk
 
 -- Helper to convert Entry to RealPoint
 tipToRealPoint :: ChunkInfo -> Entry blk -> RealPoint blk
-tipToRealPoint ci Secondary.Entry{blockOrEBB, Secondary.headerHash} =
+tipToRealPoint ci Secondary.Entry{blockOrEBB, headerHash} =
   RealPoint (ChunkLayout.slotNoOfBlockOrEBB ci blockOrEBB) headerHash

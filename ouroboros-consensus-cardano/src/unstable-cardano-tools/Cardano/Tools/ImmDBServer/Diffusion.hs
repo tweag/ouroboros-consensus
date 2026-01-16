@@ -6,7 +6,6 @@
 
 module Cardano.Tools.ImmDBServer.Diffusion (run) where
 
-import Cardano.Prelude (Typeable)
 import Cardano.Tools.ImmDBServer.MiniProtocols
   ( ChainSyncEventTracer
   , ChainSyncMessageTracer
@@ -85,9 +84,6 @@ run ::
   , ImmutableDB.ImmutableDbSerialiseConstraints blk
   , NodeInitStorage blk
   , ConfigSupportsNode blk
-  , StandardHash blk
-  , ConvertRawHash blk
-  , Typeable blk
   ) =>
   Maybe RemoteStorage.RemoteStorageConfig ->
   ChainSyncMessageTracer IO blk ->

@@ -2,6 +2,7 @@
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE MonoLocalBinds #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -18,7 +19,6 @@ import Control.Monad.IO.Class (MonadIO, liftIO)
 import Data.ByteString.Lazy (ByteString)
 import Data.Set (Set)
 import qualified Data.Set as Set
-import Data.Typeable (Typeable)
 import GHC.Generics (Generic)
 import Ouroboros.Consensus.Block
   ( CodecConfig
@@ -26,14 +26,12 @@ import Ouroboros.Consensus.Block
   , HasHeader
   , Header
   , NestedCtxt
-  , SlotNo
-  , StandardHash
   , WithOrigin (..)
   , pointSlot
   , realPointSlot
   )
 import Ouroboros.Consensus.Block.RealPoint (realPointToPoint)
-import Ouroboros.Consensus.Storage.Common (BlockComponent, StreamFrom (..), StreamTo (..))
+import Ouroboros.Consensus.Storage.Common (StreamFrom (..), StreamTo (..))
 import Ouroboros.Consensus.Storage.ImmutableDB.API (ImmutableDB (..), getTipPoint)
 import Ouroboros.Consensus.Storage.ImmutableDB.Chunks.Internal (ChunkInfo, ChunkNo (..))
 import qualified Ouroboros.Consensus.Storage.ImmutableDB.Chunks.Internal as ChunkInfo
@@ -46,9 +44,7 @@ import Ouroboros.Consensus.Util.IOLike
   , atomically
   , modifyTVar
   , newTVarIO
-  , readTVar
   , readTVarIO
-  , writeTVar
   )
 import System.FS.API (HasFS)
 
@@ -75,8 +71,6 @@ decorateImmutableDB ::
   , DecodeDiskDep (NestedCtxt Header) blk
   , ReconstructNestedCtxt Header blk
   , ConvertRawHash blk
-  , StandardHash blk
-  , Typeable blk
   , NoThunks OnDemandState
   ) =>
   OnDemandConfig m blk h ->

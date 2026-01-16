@@ -11,7 +11,6 @@ import Cardano.Tools.DBAnalyser.HasAnalysis (mkProtocolInfo)
 import qualified Cardano.Tools.ImmDBServer.Diffusion as ImmDBServer
 import qualified Cardano.Tools.ImmDBServer.RemoteStorage as RemoteStorage
 import DBServer.Parsers (parseAddr)
-import DBServer.Tracing (getTrivialSendRecvTracer)
 import DBServer.Types (HostAddr)
 import Data.List (intercalate)
 import Data.Void
