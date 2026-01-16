@@ -40,13 +40,20 @@ main = withStdTerminalHandles $ do
 
 type RTSFrequency = Int
 
+-- | Command-line options for the immdb-server.
 data Opts = Opts
   { immDBDir :: FilePath
+  -- ^ Local path to the ImmutableDB directory.
   , addr :: HostAddr
+  -- ^ IP address to bind to.
   , port :: Socket.PortNumber
+  -- ^ TCP port to listen on.
   , configFile :: FilePath
+  -- ^ Path to the node configuration file.
   , rtsFrequency :: RTSFrequency
+  -- ^ Frequency for tracing RTS statistics.
   , cdnUrl :: Maybe String
+  -- ^ Optional CDN URL for the Genesis Sync Accelerator.
   }
 
 printHost :: (HostAddr, Socket.PortNumber) -> String

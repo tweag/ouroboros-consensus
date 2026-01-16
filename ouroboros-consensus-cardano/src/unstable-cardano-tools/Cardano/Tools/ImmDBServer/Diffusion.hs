@@ -75,6 +75,11 @@ serve sockAddr application = withIOManager \iocp ->
     (SomeResponderApplication <$> application)
     (\_ serverAsync -> wait serverAsync)
 
+-- | Main entry point for the ImmutableDB server diffusion layer.
+--
+-- This function initializes the database (optionally wrapped with on-demand
+-- fetching logic if 'mbRemoteConfig' is provided) and starts the network
+-- server to handle 'ChainSync' and 'BlockFetch' requests.
 run ::
   forall blk.
   ( GetPrevHash blk
@@ -86,6 +91,7 @@ run ::
   , ConfigSupportsNode blk
   ) =>
   Maybe RemoteStorage.RemoteStorageConfig ->
+  -- ^ Optional configuration for the Genesis Sync Accelerator (CDN fetching).
   ChainSyncMessageTracer IO blk ->
   ChainSyncEventTracer IO blk ->
   FilePath ->

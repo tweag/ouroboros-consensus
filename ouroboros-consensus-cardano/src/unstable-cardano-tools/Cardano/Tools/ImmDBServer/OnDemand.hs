@@ -7,6 +7,11 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
+-- | On-demand fetching wrapper for ImmutableDB.
+--
+-- This module provides a decorator for 'ImmutableDB' that intercepts streaming
+-- requests. If the requested data is beyond the current indexed tip, it downloads
+-- the missing chunks from a CDN and serves them using a 'LightweightIterator'.
 module Cardano.Tools.ImmDBServer.OnDemand
   ( decorateImmutableDB
   , OnDemandConfig (..)
@@ -48,20 +53,32 @@ import Ouroboros.Consensus.Util.IOLike
   )
 import System.FS.API (HasFS)
 
--- | Config for OnDemand fetching
+-- | Configuration for the On-Demand decorator.
 data OnDemandConfig m blk h = OnDemandConfig
   { odcRemote :: Remote.RemoteStorageConfig
+  -- ^ CDN connection details.
   , odcChunkInfo :: ChunkInfo
+  -- ^ Information about chunk sizes used for slot-to-chunk translation.
   , odcHasFS :: HasFS m h
+  -- ^ File system handle for saving downloaded chunks.
   , odcCodecConfig :: CodecConfig blk
+  -- ^ Codec configuration for block extraction.
   , odcCheckIntegrity :: blk -> Bool
+  -- ^ Integrity check for extracted blocks.
   }
 
+-- | Internal state tracking which chunks have been downloaded during the current session.
 data OnDemandState = OnDemandState
   { odsCachedChunks :: Set ChunkNo
+  -- ^ Set of chunk indices already present on disk.
   }
   deriving (Generic, NoThunks)
 
+-- | Wraps an existing 'ImmutableDB' with on-demand fetching logic.
+--
+-- The resulting database will behave exactly like the original, except that
+-- 'stream_' calls reaching beyond the current local tip will trigger HTTP
+-- downloads of the required chunks.
 decorateImmutableDB ::
   forall m blk h.
   ( IOLike m
@@ -71,14 +88,13 @@ decorateImmutableDB ::
   , DecodeDiskDep (NestedCtxt Header) blk
   , ReconstructNestedCtxt Header blk
   , ConvertRawHash blk
-  , NoThunks OnDemandState
   ) =>
   OnDemandConfig m blk h ->
   ImmutableDB m blk ->
   m (ImmutableDB m blk)
 decorateImmutableDB cfg@OnDemandConfig{odcChunkInfo, odcHasFS, odcCodecConfig, odcCheckIntegrity} db = do
   stateVar <- newTVarIO (OnDemandState Set.empty)
-  pure $
+  pure $ 
     db
       { stream_ = \registry component from to -> do
           let requestedChunks = getChunksInRange odcChunkInfo from to
@@ -104,6 +120,7 @@ decorateImmutableDB cfg@OnDemandConfig{odcChunkInfo, odcHasFS, odcCodecConfig, o
                   requestedChunks
       }
 
+-- | Ensures that the requested chunks are present on disk, downloading them if necessary.
 ensureChunks ::
   (IOLike m, MonadIO m) =>
   OnDemandConfig m blk h ->
@@ -119,17 +136,20 @@ ensureChunks OnDemandConfig{odcRemote} stateVar requestedChunks = do
     atomically $ modifyTVar stateVar $ \s ->
       s{odsCachedChunks = Set.union (odsCachedChunks s) (Set.fromList missingChunks)}
 
+-- | Identifies the set of chunks covering a given streaming range.
 getChunksInRange :: ChunkInfo -> StreamFrom blk -> StreamTo blk -> [ChunkNo]
 getChunksInRange chunkInfo from to =
   let startChunk = chunkForFrom chunkInfo from
       endChunk = chunkForTo chunkInfo to
    in ChunkInfo.chunksBetween startChunk endChunk
 
+-- | Translates a 'StreamFrom' bound to its starting 'ChunkNo'.
 chunkForFrom :: ChunkInfo -> StreamFrom blk -> ChunkNo
 chunkForFrom ci (StreamFromInclusive pt) = ChunkLayout.chunkIndexOfSlot ci (realPointSlot pt)
 chunkForFrom ci (StreamFromExclusive pt) = case pointSlot pt of
   Origin -> ChunkNo 0
   NotOrigin slot -> ChunkLayout.chunkIndexOfSlot ci slot
 
+-- | Translates a 'StreamTo' bound to its ending 'ChunkNo'.
 chunkForTo :: ChunkInfo -> StreamTo blk -> ChunkNo
 chunkForTo ci (StreamToInclusive pt) = ChunkLayout.chunkIndexOfSlot ci (realPointSlot pt)
