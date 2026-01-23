@@ -6,6 +6,11 @@
 
 module Cardano.Tools.ImmDBServer.Diffusion (run) where
 
+import Cardano.Slotting.Slot (WithOrigin(Origin))
+import Control.Monad (when)
+import System.Directory (doesDirectoryExist)
+import System.FilePath ((</>))
+
 import Cardano.Tools.ImmDBServer.MiniProtocols (Tracers(..), immDBServer)
 import Control.ResourceRegistry
 import "contra-tracer" Control.Tracer
@@ -14,7 +19,7 @@ import Data.Functor.Contravariant ((>$<))
 import Data.Void (Void)
 import qualified Network.Mux as Mux
 import Network.Socket (SockAddr (..))
-import Ouroboros.Consensus.Block
+import Ouroboros.Consensus.Block.Abstract ( GetPrevHash, WithOrigin(NotOrigin) )
 import Ouroboros.Consensus.Config
 import Ouroboros.Consensus.Config.SupportsNode
 import Ouroboros.Consensus.Node.InitStorage
@@ -23,6 +28,7 @@ import Ouroboros.Consensus.Node.InitStorage
 import Ouroboros.Consensus.Node.NetworkProtocolVersion
 import Ouroboros.Consensus.Node.Run (SerialiseNodeToNodeConstraints)
 import Ouroboros.Consensus.Storage.ImmutableDB (ImmutableDbArgs (..))
+import Ouroboros.Consensus.Storage.ImmutableDB.API (getTip)
 import qualified Ouroboros.Consensus.Storage.ImmutableDB as ImmutableDB
 import Ouroboros.Consensus.Util
 import Ouroboros.Consensus.Util.IOLike
@@ -85,27 +91,40 @@ run ::
   TopLevelConfig blk ->
   IO Void
 run tracers immDBDir sockAddr cfg = withRegistry \registry ->
-  ImmutableDB.withDB
-    (ImmutableDB.openDB (immDBArgs registry) runWithTempRegistry)
-    \immDB ->
-      serve sockAddr $
-        immDBServer 
-          tracers
-          codecCfg
-          encodeRemoteAddress
-          decodeRemoteAddress
-          immDB
-          networkMagic
- where
-  immDBArgs registry =
-    ImmutableDB.defaultArgs
-      { immCheckIntegrity = nodeCheckIntegrity storageCfg
-      , immChunkInfo = nodeImmutableDbChunkInfo storageCfg
-      , immCodecConfig = codecCfg
-      , immRegistry = registry
-      , immHasFS = SomeHasFS $ ioHasFS $ MountPoint immDBDir
-      }
+  do 
+    let immSub = immDBDir </> "immutable"
+    immSubExists <- doesDirectoryExist immSub
+    when immSubExists $
+      traceWith stdoutTracer "WARNING: given immDBDir has immutable subfolder"
+    ImmutableDB.withDB
+      (ImmutableDB.openDB (immDBArgs registry) runWithTempRegistry)
+      \immDB -> do
+        tip <- atomically $ getTip immDB 
+        case tip of
+          Origin -> 
+            if immSubExists 
+            then error $ "ImmutableDB is empty; did you mean to use " ++ immSub ++ " as the database path?"
+            else traceWith stdoutTracer "WARNING: serving an empty ImmutableDB"
+          NotOrigin _ -> 
+            return ()
+        serve sockAddr $
+          immDBServer 
+            tracers
+            codecCfg
+            encodeRemoteAddress
+            decodeRemoteAddress
+            immDB
+            networkMagic
+  where
+    immDBArgs registry =
+      ImmutableDB.defaultArgs
+        { immCheckIntegrity = nodeCheckIntegrity storageCfg
+        , immChunkInfo = nodeImmutableDbChunkInfo storageCfg
+        , immCodecConfig = codecCfg
+        , immRegistry = registry
+        , immHasFS = SomeHasFS $ ioHasFS $ MountPoint immDBDir
+        }
 
-  codecCfg = configCodec cfg
-  storageCfg = configStorage cfg
-  networkMagic = getNetworkMagic . configBlock $ cfg
+    codecCfg = configCodec cfg
+    storageCfg = configStorage cfg
+    networkMagic = getNetworkMagic . configBlock $ cfg
