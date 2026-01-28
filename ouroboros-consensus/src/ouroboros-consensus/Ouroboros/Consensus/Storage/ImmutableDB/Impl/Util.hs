@@ -15,6 +15,7 @@ module Ouroboros.Consensus.Storage.ImmutableDB.Impl.Util
   , fsPathChunkFile
   , fsPathPrimaryIndexFile
   , fsPathSecondaryIndexFile
+  , getFileName
   , parseDBFileName
   , partialParseDBFileName
   , removeFilesStartingFrom
@@ -83,11 +84,12 @@ fsPathPrimaryIndexFile = getFsPath PrimaryIndexFile
 fsPathSecondaryIndexFile :: ChunkNo -> FsPath
 fsPathSecondaryIndexFile = getFsPath SecondaryIndexFile
 
+getFileName :: FileType -> ChunkNo -> Text
+getFileName fileType (ChunkNo chunk) = T.justifyRight 5 '0' (T.pack (show chunk)) <> "." <> toSuffix fileType
+
 -- | Opposite of 'parseDBFileName'.
 getFsPath :: FileType -> ChunkNo -> FsPath
-getFsPath fileType (ChunkNo chunk) = fsPathFromList [name]
- where
-  name = T.justifyRight 5 '0' (T.pack (show chunk)) <> "." <> toSuffix fileType
+getFsPath ft cn = fsPathFromList [getFileName ft cn]
 
 partialParseDBFileName :: String -> Maybe (Text, ChunkNo)
 partialParseDBFileName s = case T.splitOn "." $ T.pack s of

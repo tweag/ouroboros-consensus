@@ -12,13 +12,14 @@ module Cardano.Tools.ImmDBServer.RemoteStorage
 
 import Control.Monad (unless)
 import qualified Data.ByteString.Lazy as LBS
+import qualified Data.Text as Text
 import Network.HTTP.Client
 import Network.HTTP.Client.TLS (tlsManagerSettings)
 import Network.HTTP.Types.Status (statusCode)
 import Ouroboros.Consensus.Storage.ImmutableDB.Chunks.Internal (ChunkNo (..))
+import Ouroboros.Consensus.Storage.ImmutableDB.Impl.Util (FileType (..), getFileName)
 import System.Directory (createDirectoryIfMissing, doesFileExist)
 import System.FilePath ((</>))
-import Text.Printf (printf)
 
 -- | Configuration for the remote storage client.
 data RemoteStorageConfig = RemoteStorageConfig
@@ -35,19 +36,15 @@ data RemoteStorageConfig = RemoteStorageConfig
 downloadChunk :: RemoteStorageConfig -> ChunkNo -> IO ()
 downloadChunk cfg chunk = do
   manager <- newManager tlsManagerSettings
-  let extensions = ["chunk", "primary", "secondary"]
+  let fileTypes = [ChunkFile, PrimaryIndexFile, SecondaryIndexFile]
   createDirectoryIfMissing True (rscTargetDir cfg)
 
-  mapM_ (downloadFile manager cfg chunk) extensions
-
--- | Formats a chunk number and extension into the standard ImmutableDB filename (e.g., "00123.chunk").
-formatChunkFile :: ChunkNo -> String -> String
-formatChunkFile (ChunkNo n) ext = printf "%05d.%s" n ext
+  mapM_ (downloadFile manager cfg chunk) fileTypes
 
 -- | Internal helper to download a single file using the provided HTTP 'Manager'.
-downloadFile :: Manager -> RemoteStorageConfig -> ChunkNo -> String -> IO ()
-downloadFile manager cfg chunk ext = do
-  let filename = formatChunkFile chunk ext
+downloadFile :: Manager -> RemoteStorageConfig -> ChunkNo -> FileType -> IO ()
+downloadFile manager cfg chunk fileType = do
+  let filename = Text.unpack $ getFileName fileType chunk
       localPath = rscTargetDir cfg </> filename
   exists <- doesFileExist localPath
   unless exists $ do
