@@ -15,10 +15,10 @@ module Ouroboros.Consensus.Storage.ImmutableDB.Impl.Util
   , fsPathChunkFile
   , fsPathPrimaryIndexFile
   , fsPathSecondaryIndexFile
-  , parseDBFile
-  , partialParseDBFile
+  , parseDBFileName
+  , partialParseDBFileName
   , removeFilesStartingFrom
-  , renderFile
+  , getFsPath
   , runGet
   , runGetWithUnconsumed
   , toSuffix
@@ -75,34 +75,34 @@ fromSuffix = \case
   _ -> Nothing
 
 fsPathChunkFile :: ChunkNo -> FsPath
-fsPathChunkFile = renderFile ChunkFile
+fsPathChunkFile = getFsPath ChunkFile
 
 fsPathPrimaryIndexFile :: ChunkNo -> FsPath
-fsPathPrimaryIndexFile = renderFile PrimaryIndexFile
+fsPathPrimaryIndexFile = getFsPath PrimaryIndexFile
 
 fsPathSecondaryIndexFile :: ChunkNo -> FsPath
-fsPathSecondaryIndexFile = renderFile SecondaryIndexFile
+fsPathSecondaryIndexFile = getFsPath SecondaryIndexFile
 
--- | Opposite of 'parseDBFile'.
-renderFile :: FileType -> ChunkNo -> FsPath
-renderFile fileType (ChunkNo chunk) = fsPathFromList [name]
+-- | Opposite of 'parseDBFileName'.
+getFsPath :: FileType -> ChunkNo -> FsPath
+getFsPath fileType (ChunkNo chunk) = fsPathFromList [name]
  where
   name = T.justifyRight 5 '0' (T.pack (show chunk)) <> "." <> toSuffix fileType
 
-partialParseDBFile :: String -> Maybe (Text, ChunkNo)
-partialParseDBFile s = case T.splitOn "." $ T.pack s of
+partialParseDBFileName :: String -> Maybe (Text, ChunkNo)
+partialParseDBFileName s = case T.splitOn "." $ T.pack s of
   [n, ext] -> (\cn -> (ext, ChunkNo cn)) <$> readMaybe (T.unpack n)
   _ -> Nothing
 
 -- | Parse the prefix and chunk number from the filename of an index or chunk
 -- file.
 --
--- > parseDBFile "00001.chunk"
+-- > parseDBFileName "00001.chunk"
 -- Just (ChunkFile, 1)
--- > parseDBFile "00012.primary"
+-- > parseDBFileName "00012.primary"
 -- Just (PrimaryIndexFile, 12)
-parseDBFile :: String -> Maybe (FileType, ChunkNo)
-parseDBFile s = partialParseDBFile s >>= (\(ext, cn) -> (\ft -> (ft, cn)) <$> fromSuffix ext)
+parseDBFileName :: String -> Maybe (FileType, ChunkNo)
+parseDBFileName s = partialParseDBFileName s >>= (\(ext, cn) -> (\ft -> (ft, cn)) <$> fromSuffix ext)
 
 -- | Go through all files, making three sets: the set of chunk files, primary
 -- index files, and secondary index files, discarding all others.
@@ -110,7 +110,7 @@ dbFilesOnDisk :: Set String -> (Set ChunkNo, Set ChunkNo, Set ChunkNo)
 dbFilesOnDisk = List.foldl' categorise mempty
  where
   categorise fs@(!chunk, !primary, !secondary) file =
-    case parseDBFile file of
+    case parseDBFileName file of
       Just (ChunkFile, n) -> (Set.insert n chunk, primary, secondary)
       Just (PrimaryIndexFile, n) -> (chunk, Set.insert n primary, secondary)
       Just (SecondaryIndexFile, n) -> (chunk, primary, Set.insert n secondary)

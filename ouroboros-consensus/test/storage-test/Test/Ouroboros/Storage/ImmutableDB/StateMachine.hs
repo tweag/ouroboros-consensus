@@ -319,7 +319,7 @@ unmigrate :: Monad m => HasFS m h -> m ()
 unmigrate HasFS{listDirectory, renameFile} = do
   (chunkFiles, _, _) <- dbFilesOnDisk <$> listDirectory (mkFsPath [])
   forM_ chunkFiles $ \chunk ->
-    renameFile (fsPathChunkFile chunk) (renderFile EpochFile chunk)
+    renameFile (fsPathChunkFile chunk) (getFsPath EpochFile chunk)
 
 {-------------------------------------------------------------------------------
   Instantiating the semantics
