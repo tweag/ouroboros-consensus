@@ -59,7 +59,7 @@ import Ouroboros.Consensus.Storage.ImmutableDB.Chunks
 import Ouroboros.Consensus.Storage.ImmutableDB.Chunks.Internal
   ( ChunkNo (..)
   )
-import Ouroboros.Consensus.Storage.ImmutableDB.Impl.Util (FileType(..), parseDBFile)
+import Ouroboros.Consensus.Storage.ImmutableDB.Impl.Util (FileType (..), parseDBFile)
 import Ouroboros.Consensus.Storage.Serialisation
 import Ouroboros.Consensus.Util (lastMaybe, takeUntil)
 import Ouroboros.Consensus.Util.CallStack
@@ -175,7 +175,8 @@ instance ToExpr (InSlot TestBlock)
 
 throwApiMisuse ::
   (MonadError (ImmutableDBError blk) m, HasCallStack) =>
-  ApiMisuse blk -> m a
+  ApiMisuse blk ->
+  m a
 throwApiMisuse e = throwError $ ApiMisuse e prettyCallStack
 
 computeBlockSize :: EncodeDisk blk blk => CodecConfig blk -> blk -> Word64
@@ -221,7 +222,9 @@ lookupBlock pt@(RealPoint slot hash) dbm@DBModel{dbmSlots} =
 rollBackToTip ::
   forall blk.
   GetHeader blk =>
-  WithOrigin (Tip blk) -> DBModel blk -> DBModel blk
+  WithOrigin (Tip blk) ->
+  DBModel blk ->
+  DBModel blk
 rollBackToTip tip dbm@DBModel{dbmSlots} =
   dbm{dbmSlots = Map.mapMaybe shouldKeep dbmSlots}
  where
@@ -340,7 +343,9 @@ instance StandardHash blk => Ord (RollBackPoint blk) where
 
 rollBack ::
   GetHeader blk =>
-  RollBackPoint blk -> DBModel blk -> DBModel blk
+  RollBackPoint blk ->
+  DBModel blk ->
+  DBModel blk
 rollBack rbp dbm = case rbp of
   DontRollBack -> dbm
   RollBackToTip tip -> rollBackToTip tip dbm
@@ -422,7 +427,9 @@ findRollBackPointForOffsetInChunk validBytes chunk dbm@DBModel{dbmCodecConfig}
 
 rollbackToLastFilledSlotBefore ::
   (HasHeader blk, GetHeader blk) =>
-  ChunkNo -> DBModel blk -> RollBackPoint blk
+  ChunkNo ->
+  DBModel blk ->
+  RollBackPoint blk
 rollbackToLastFilledSlotBefore chunk dbm = case lastMaybe beforeChunk of
   Nothing -> RollBackToTip Origin
   Just lastBlockBefore ->
@@ -436,23 +443,29 @@ rollbackToLastFilledSlotBefore chunk dbm = case lastMaybe beforeChunk of
 
 getTipModel ::
   GetHeader blk =>
-  DBModel blk -> WithOrigin (Tip blk)
+  DBModel blk ->
+  WithOrigin (Tip blk)
 getTipModel = dbmTip
 
 -- | Close all open iterators and return the current tip
 reopenModel ::
   GetHeader blk =>
-  DBModel blk -> (WithOrigin (Tip blk), DBModel blk)
+  DBModel blk ->
+  (WithOrigin (Tip blk), DBModel blk)
 reopenModel dbm = (dbmTip dbm, closeAllIterators dbm)
 
 deleteAfterModel ::
   GetHeader blk =>
-  WithOrigin (Tip blk) -> DBModel blk -> DBModel blk
+  WithOrigin (Tip blk) ->
+  DBModel blk ->
+  DBModel blk
 deleteAfterModel tip = rollBackToTip tip . closeAllIterators
 
 getHashForSlotModel ::
   HasHeader blk =>
-  SlotNo -> DBModel blk -> Maybe (HeaderHash blk)
+  SlotNo ->
+  DBModel blk ->
+  Maybe (HeaderHash blk)
 getHashForSlotModel slotNo dbm = case Map.lookup slotNo (dbmSlots dbm) of
   Just (InSlotBlock blk) -> Just $ blockHash blk
   Just (InSlotEBB blk) -> Just $ blockHash blk

@@ -437,7 +437,9 @@ initModel dbModel = Model{knownIters = RE.empty, dbModel}
 -- | Key property of the model is that we can go from real to mock responses
 toMock ::
   (Functor t, Eq1 r) =>
-  Model m r -> At t m r -> t IteratorId
+  Model m r ->
+  At t m r ->
+  t IteratorId
 toMock Model{..} (At t) = fmap (knownIters RE.!) t
 
 -- | Step the mock semantics
@@ -826,7 +828,10 @@ precondition Model{..} (At (CmdErr{cmd})) =
 
 transition ::
   (Show1 r, Eq1 r) =>
-  Model m r -> At CmdErr m r -> At Resp m r -> Model m r
+  Model m r ->
+  At CmdErr m r ->
+  At Resp m r ->
+  Model m r
 transition model cmdErr = eventAfter . lockstep model cmdErr
 
 postcondition ::
