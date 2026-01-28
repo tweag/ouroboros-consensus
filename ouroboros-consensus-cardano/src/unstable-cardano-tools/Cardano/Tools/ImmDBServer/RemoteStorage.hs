@@ -36,9 +36,8 @@ data RemoteStorageConfig = RemoteStorageConfig
 downloadChunk :: RemoteStorageConfig -> ChunkNo -> IO ()
 downloadChunk cfg chunk = do
   manager <- newManager tlsManagerSettings
-  let fileTypes = [ChunkFile, PrimaryIndexFile, SecondaryIndexFile]
   createDirectoryIfMissing True (rscTargetDir cfg)
-
+  let fileTypes = [ChunkFile, PrimaryIndexFile, SecondaryIndexFile]
   mapM_ (downloadFile manager cfg chunk) fileTypes
 
 -- | Internal helper to download a single file using the provided HTTP 'Manager'.
