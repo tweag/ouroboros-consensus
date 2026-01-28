@@ -657,8 +657,8 @@ migrate ValidateEnv{hasFS, tracer} = do
   HasFS{listDirectory, renameFile} = hasFS
 
   isEpochFile :: String -> Maybe ChunkNo
-  isEpochFile s = case parseDBFile s of
+  isEpochFile s = case partialParseDBFile s of
     Just (prefix, chunk)
-      | prefix == "epoch" ->
+      | prefix == (toSuffix EpochFile) ->
           Just chunk
     _ -> Nothing
