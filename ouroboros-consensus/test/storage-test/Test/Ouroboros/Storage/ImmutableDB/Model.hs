@@ -59,7 +59,7 @@ import Ouroboros.Consensus.Storage.ImmutableDB.Chunks
 import Ouroboros.Consensus.Storage.ImmutableDB.Chunks.Internal
   ( ChunkNo (..)
   )
-import Ouroboros.Consensus.Storage.ImmutableDB.Impl.Util (FileType (..), parseDBFile)
+import Ouroboros.Consensus.Storage.ImmutableDB.Impl.Util (FileType (..), parseDBFileName)
 import Ouroboros.Consensus.Storage.Serialisation
 import Ouroboros.Consensus.Util (lastMaybe, takeUntil)
 import Ouroboros.Consensus.Util.CallStack
@@ -357,7 +357,7 @@ findCorruptionRollBackPoint ::
   DBModel blk ->
   RollBackPoint blk
 findCorruptionRollBackPoint corr file dbm =
-  case (Text.unpack . snd <$> fsPathSplit file) >>= parseDBFile of
+  case (Text.unpack . snd <$> fsPathSplit file) >>= parseDBFileName of
     Just (ChunkFile, chunk) -> findCorruptionRollBackForChunk corr chunk dbm
     -- Index files are always recoverable
     Just (PrimaryIndexFile, _chunk) -> DontRollBack
