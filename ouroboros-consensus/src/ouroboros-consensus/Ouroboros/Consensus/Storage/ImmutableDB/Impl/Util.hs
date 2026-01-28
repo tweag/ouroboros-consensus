@@ -1,24 +1,27 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeApplications #-}
 
 module Ouroboros.Consensus.Storage.ImmutableDB.Impl.Util
   ( -- * Utilities
-    Two (..)
+    FileType (..)
+  , Two (..)
   , checkChecksum
   , dbFilesOnDisk
   , fsPathChunkFile
   , fsPathPrimaryIndexFile
   , fsPathSecondaryIndexFile
   , parseDBFile
+  , partialParseDBFile
   , removeFilesStartingFrom
   , renderFile
   , runGet
   , runGetWithUnconsumed
+  , toSuffix
   , tryImmutableDB
   , wrapFsError
   ) where
@@ -53,32 +56,53 @@ import Text.Read (readMaybe)
 data Two a = Two a a
   deriving (Functor, Foldable, Traversable)
 
+data FileType = ChunkFile | PrimaryIndexFile | SecondaryIndexFile | EpochFile
+  deriving (Eq, Show)
+
+toSuffix :: FileType -> Text
+toSuffix = \case
+  ChunkFile -> "chunk"
+  PrimaryIndexFile -> "primary"
+  SecondaryIndexFile -> "secondary"
+  EpochFile -> "epoch"
+
+fromSuffix :: Text -> Maybe FileType
+fromSuffix = \case
+  "chunk" -> Just ChunkFile
+  "primary" -> Just PrimaryIndexFile
+  "secondary" -> Just SecondaryIndexFile
+  "epoch" -> Just EpochFile
+  _ -> Nothing
+
 fsPathChunkFile :: ChunkNo -> FsPath
-fsPathChunkFile = renderFile "chunk"
+fsPathChunkFile = renderFile ChunkFile
 
 fsPathPrimaryIndexFile :: ChunkNo -> FsPath
-fsPathPrimaryIndexFile = renderFile "primary"
+fsPathPrimaryIndexFile = renderFile PrimaryIndexFile
 
 fsPathSecondaryIndexFile :: ChunkNo -> FsPath
-fsPathSecondaryIndexFile = renderFile "secondary"
+fsPathSecondaryIndexFile = renderFile SecondaryIndexFile
 
 -- | Opposite of 'parseDBFile'.
-renderFile :: Text -> ChunkNo -> FsPath
+renderFile :: FileType -> ChunkNo -> FsPath
 renderFile fileType (ChunkNo chunk) = fsPathFromList [name]
  where
-  name = T.justifyRight 5 '0' (T.pack (show chunk)) <> "." <> fileType
+  name = T.justifyRight 5 '0' (T.pack (show chunk)) <> "." <> toSuffix fileType
+
+partialParseDBFile :: String -> Maybe (Text, ChunkNo)
+partialParseDBFile s = case T.splitOn "." $ T.pack s of
+  [n, ext] -> (\cn -> (ext, ChunkNo cn)) <$> readMaybe (T.unpack n)
+  _ -> Nothing
 
 -- | Parse the prefix and chunk number from the filename of an index or chunk
 -- file.
 --
 -- > parseDBFile "00001.chunk"
--- Just ("chunk", 1)
+-- Just (ChunkFile, 1)
 -- > parseDBFile "00012.primary"
--- Just ("primary", 12)
-parseDBFile :: String -> Maybe (String, ChunkNo)
-parseDBFile s = case T.splitOn "." $ T.pack s of
-  [n, ext] -> (T.unpack ext,) . ChunkNo <$> readMaybe (T.unpack n)
-  _ -> Nothing
+-- Just (PrimaryIndexFile, 12)
+parseDBFile :: String -> Maybe (FileType, ChunkNo)
+parseDBFile s = partialParseDBFile s >>= (\(ext, cn) -> (\ft -> (ft, cn)) <$> fromSuffix ext)
 
 -- | Go through all files, making three sets: the set of chunk files, primary
 -- index files, and secondary index files, discarding all others.
@@ -87,9 +111,10 @@ dbFilesOnDisk = List.foldl' categorise mempty
  where
   categorise fs@(!chunk, !primary, !secondary) file =
     case parseDBFile file of
-      Just ("chunk", n) -> (Set.insert n chunk, primary, secondary)
-      Just ("primary", n) -> (chunk, Set.insert n primary, secondary)
-      Just ("secondary", n) -> (chunk, primary, Set.insert n secondary)
+      Just (ChunkFile, n) -> (Set.insert n chunk, primary, secondary)
+      Just (PrimaryIndexFile, n) -> (chunk, Set.insert n primary, secondary)
+      Just (SecondaryIndexFile, n) -> (chunk, primary, Set.insert n secondary)
+      Just (EpochFile, _) -> fs
       _ -> fs
 
 -- | Remove all chunk and index starting from the given chunk (included).

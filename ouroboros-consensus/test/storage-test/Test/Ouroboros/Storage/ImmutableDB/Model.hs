@@ -59,7 +59,7 @@ import Ouroboros.Consensus.Storage.ImmutableDB.Chunks
 import Ouroboros.Consensus.Storage.ImmutableDB.Chunks.Internal
   ( ChunkNo (..)
   )
-import Ouroboros.Consensus.Storage.ImmutableDB.Impl.Util (parseDBFile)
+import Ouroboros.Consensus.Storage.ImmutableDB.Impl.Util (FileType(..), parseDBFile)
 import Ouroboros.Consensus.Storage.Serialisation
 import Ouroboros.Consensus.Util (lastMaybe, takeUntil)
 import Ouroboros.Consensus.Util.CallStack
@@ -353,10 +353,10 @@ findCorruptionRollBackPoint ::
   RollBackPoint blk
 findCorruptionRollBackPoint corr file dbm =
   case (Text.unpack . snd <$> fsPathSplit file) >>= parseDBFile of
-    Just ("chunk", chunk) -> findCorruptionRollBackForChunk corr chunk dbm
+    Just (ChunkFile, chunk) -> findCorruptionRollBackForChunk corr chunk dbm
     -- Index files are always recoverable
-    Just ("primary", _chunk) -> DontRollBack
-    Just ("secondary", _chunk) -> DontRollBack
+    Just (PrimaryIndexFile, _chunk) -> DontRollBack
+    Just (SecondaryIndexFile, _chunk) -> DontRollBack
     _ -> error "Invalid file to corrupt"
 
 findCorruptionRollBackForChunk ::
