@@ -12,14 +12,15 @@ module Ouroboros.Consensus.Storage.ImmutableDB.Impl.Util
   , Two (..)
   , checkChecksum
   , dbFilesOnDisk
+  , fromSuffix
   , fsPathChunkFile
   , fsPathPrimaryIndexFile
   , fsPathSecondaryIndexFile
   , getFileName
+  , getFsPath
   , parseDBFileName
   , partialParseDBFileName
   , removeFilesStartingFrom
-  , getFsPath
   , runGet
   , runGetWithUnconsumed
   , toSuffix

@@ -17,6 +17,7 @@ module Test.Ouroboros.Storage.ImmutableDB (tests) where
 
 import qualified Test.Ouroboros.Storage.ImmutableDB.Primary as Primary
 import qualified Test.Ouroboros.Storage.ImmutableDB.StateMachine as StateMachine
+import qualified Test.Ouroboros.Storage.ImmutableDB.Util as Util
 import Test.Tasty (TestTree, testGroup)
 
 {------------------------------------------------------------------------------
@@ -29,4 +30,5 @@ tests =
     "ImmutableDB"
     [ Primary.tests
     , StateMachine.tests
+    , Util.tests
     ]

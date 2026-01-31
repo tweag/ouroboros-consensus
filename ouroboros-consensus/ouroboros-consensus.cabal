@@ -710,6 +710,7 @@ test-suite storage-test
     Test.Ouroboros.Storage.ImmutableDB.Model
     Test.Ouroboros.Storage.ImmutableDB.Primary
     Test.Ouroboros.Storage.ImmutableDB.StateMachine
+    Test.Ouroboros.Storage.ImmutableDB.Util
     Test.Ouroboros.Storage.LedgerDB
     Test.Ouroboros.Storage.LedgerDB.Serialisation
     Test.Ouroboros.Storage.LedgerDB.SnapshotPolicy
@@ -759,6 +760,7 @@ test-suite storage-test
     ouroboros-network-protocols,
     pretty-show,
     quickcheck-dynamic,
+    quickcheck-instances,
     quickcheck-lockstep ^>=0.8,
     quickcheck-state-machine:no-vendored-treediff ^>=0.10,
     random,
