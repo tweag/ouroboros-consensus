@@ -23,9 +23,9 @@ import System.FilePath ((</>))
 
 -- | Configuration for the remote storage client.
 data RemoteStorageConfig = RemoteStorageConfig
-  { rscBaseUrl :: String
+  { rscSrcUrl :: String
   -- ^ The root URL of the CDN (e.g., "https://cdn.cardano.org/mainnet/immutable").
-  , rscTargetDir :: FilePath
+  , rscDstDir :: FilePath
   -- ^ Local directory where the downloaded chunks should be stored.
   }
 
@@ -36,7 +36,7 @@ data RemoteStorageConfig = RemoteStorageConfig
 downloadChunk :: RemoteStorageConfig -> ChunkNo -> IO ()
 downloadChunk cfg chunk = do
   manager <- newManager tlsManagerSettings
-  createDirectoryIfMissing True (rscTargetDir cfg)
+  createDirectoryIfMissing True (rscDstDir cfg)
   let fileTypes = [ChunkFile, PrimaryIndexFile, SecondaryIndexFile]
   mapM_ (downloadFile manager cfg chunk) fileTypes
 
@@ -44,11 +44,11 @@ downloadChunk cfg chunk = do
 downloadFile :: Manager -> RemoteStorageConfig -> ChunkNo -> FileType -> IO ()
 downloadFile manager cfg chunk fileType = do
   let filename = Text.unpack $ getFileName fileType chunk
-      localPath = rscTargetDir cfg </> filename
+      localPath = rscDstDir cfg </> filename
   exists <- doesFileExist localPath
   unless exists $ do
     -- Construct request
-    request <- parseRequest (rscBaseUrl cfg ++ "/" ++ filename)
+    request <- parseRequest (rscSrcUrl cfg ++ "/" ++ filename)
 
     -- Perform the download
     -- TODO: Add retries and progress logging.

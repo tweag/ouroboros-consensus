@@ -23,7 +23,7 @@ import "contra-tracer" Control.Tracer (showTracing, stdoutTracer, traceWith)
 main :: IO ()
 main = withStdTerminalHandles $ do
   cryptoInit
-  Opts{immDBDir, addr, port, configFile, rtsFrequency, cdnUrl, maxCachedChunks} <-
+  Opts{immDBDir, addr, port, configFile, rtsFrequency, remoteStorageCacheDir, remoteStorageSrcUrl, maxCachedChunks} <-
     execParser optsParser
   let sockAddr = Socket.SockAddrInet port hostAddr
        where
@@ -36,7 +36,7 @@ main = withStdTerminalHandles $ do
   ProtocolInfo{pInfoConfig} <- mkProtocolInfo args
   traceWith stdoutTracer $ "Running ImmDB server at " ++ printHost (addr, port)
   startResourceTracer stdoutTracer rtsFrequency
-  let remoteConfig = fmap (\url -> RemoteStorage.RemoteStorageConfig url immDBDir) cdnUrl
+  let remoteConfig = fmap (\url -> RemoteStorage.RemoteStorageConfig url remoteStorageCacheDir) remoteStorageSrcUrl
   absurd
     <$> ImmDBServer.run remoteConfig maxCachedChunks msgTracer eventTracer immDBDir sockAddr pInfoConfig
 
@@ -54,7 +54,9 @@ data Opts = Opts
   -- ^ Path to the node configuration file.
   , rtsFrequency :: RTSFrequency
   -- ^ Frequency for tracing RTS statistics.
-  , cdnUrl :: Maybe String
+  , remoteStorageCacheDir :: String
+  -- ^ Location of Sync Accelerator cache.
+  , remoteStorageSrcUrl :: Maybe String
   -- ^ Optional CDN URL for the Genesis Sync Accelerator.
   , maxCachedChunks :: Int
   -- ^ Maximum number of chunks to keep in cache.
@@ -110,12 +112,21 @@ optsParser =
           , value 1000
           , showDefault
           ]
-    cdnUrl <-
+    remoteStorageCacheDir <-
+      strOption $
+        mconcat
+          [ long "rs-cache-url"
+          , help "Path to possible cache dir for the Sync Accelerator"
+          , value "/tmp/sync-accelerator/"
+          , metavar "PATH"
+          , showDefault
+          ]
+    remoteStorageSrcUrl <-
       optional $
         strOption $
           mconcat
-            [ long "cdn-url"
-            , help "URL to a CDN serving ImmutableDB chunks (e.g. https://example.com/chain)"
+            [ long "rs-src-url"
+            , help "URL to a CDN serving ImmutableDB chunks (e.g. https://example.com/chain). If left empty, the sync accelerator is disabled."
             , metavar "URL"
             ]
     maxCachedChunks <-
@@ -126,4 +137,4 @@ optsParser =
           , value 10
           , showDefault
           ]
-    pure Opts{immDBDir, addr, port, configFile, rtsFrequency, cdnUrl, maxCachedChunks}
+    pure Opts{immDBDir, addr, port, configFile, rtsFrequency, remoteStorageCacheDir, remoteStorageSrcUrl, maxCachedChunks}
