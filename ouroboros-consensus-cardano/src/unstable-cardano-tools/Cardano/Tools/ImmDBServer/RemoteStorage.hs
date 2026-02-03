@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PackageImports #-}
 
 -- | HTTP client for downloading ImmutableDB chunks from a CDN.
 --
@@ -8,11 +9,15 @@
 module Cardano.Tools.ImmDBServer.RemoteStorage
   ( downloadChunk
   , RemoteStorageConfig (..)
+  , TraceRemoteStorageEvent (..)
+  , RemoteStorageTracer
   ) where
 
+import Control.Exception (try, SomeException)
 import Control.Monad (unless)
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.Text as Text
+import Data.Word (Word64)
 import Network.HTTP.Client
 import Network.HTTP.Client.TLS (tlsManagerSettings)
 import Network.HTTP.Types.Status (statusCode)
@@ -20,6 +25,7 @@ import Ouroboros.Consensus.Storage.ImmutableDB.Chunks.Internal (ChunkNo (..))
 import Ouroboros.Consensus.Storage.ImmutableDB.Impl.Util (FileType (..), getFileName)
 import System.Directory (createDirectoryIfMissing, doesFileExist)
 import System.FilePath ((</>))
+import "contra-tracer" Control.Tracer
 
 -- | Configuration for the remote storage client.
 data RemoteStorageConfig = RemoteStorageConfig
@@ -29,20 +35,34 @@ data RemoteStorageConfig = RemoteStorageConfig
   -- ^ Local directory where the downloaded chunks should be stored.
   }
 
+-- | Events traced by the Remote Storage client.
+data TraceRemoteStorageEvent
+  = -- | Starting download of a file.
+    TraceRemoteStorageDownloadStart !String
+  | -- | Successfully downloaded a file.
+    TraceRemoteStorageDownloadSuccess !String !Word64
+  | -- | Failed to download a file with an exception.
+    TraceRemoteStorageDownloadException !String !String
+  | -- | Failed to download a file with a non-200 HTTP status.
+    TraceRemoteStorageDownloadError !String !Int
+  deriving (Eq, Show)
+
+type RemoteStorageTracer m = Tracer m TraceRemoteStorageEvent
+
 -- | Downloads all files associated with a specific chunk index.
 --
 -- This function fetches the @.chunk@, @.primary@, and @.secondary@ files.
 -- If a file already exists locally, the download is skipped.
-downloadChunk :: RemoteStorageConfig -> ChunkNo -> IO ()
-downloadChunk cfg chunk = do
+downloadChunk :: RemoteStorageTracer IO -> RemoteStorageConfig -> ChunkNo -> IO ()
+downloadChunk tracer cfg chunk = do
   manager <- newManager tlsManagerSettings
   createDirectoryIfMissing True (rscDstDir cfg)
   let fileTypes = [ChunkFile, PrimaryIndexFile, SecondaryIndexFile]
-  mapM_ (downloadFile manager cfg chunk) fileTypes
+  mapM_ (downloadFile tracer manager cfg chunk) fileTypes
 
 -- | Internal helper to download a single file using the provided HTTP 'Manager'.
-downloadFile :: Manager -> RemoteStorageConfig -> ChunkNo -> FileType -> IO ()
-downloadFile manager cfg chunk fileType = do
+downloadFile :: RemoteStorageTracer IO -> Manager -> RemoteStorageConfig -> ChunkNo -> FileType -> IO ()
+downloadFile tracer manager cfg chunk fileType = do
   let filename = Text.unpack $ getFileName fileType chunk
       localPath = rscDstDir cfg </> filename
   exists <- doesFileExist localPath
@@ -51,10 +71,16 @@ downloadFile manager cfg chunk fileType = do
     request <- parseRequest (rscSrcUrl cfg ++ "/" ++ filename)
 
     -- Perform the download
-    -- TODO: Add retries and progress logging.
-    response <- httpLbs request manager
+    traceWith tracer $ TraceRemoteStorageDownloadStart filename
+    result <- try (httpLbs request manager) :: IO (Either SomeException (Response LBS.ByteString))
 
-    let status = statusCode (responseStatus response)
-    if status == 200
-      then LBS.writeFile localPath (responseBody response)
-      else putStrLn $ "Failed to download " ++ filename ++ ": " ++ show status
+    case result of
+      Left ex -> traceWith tracer $ TraceRemoteStorageDownloadException filename (show ex)
+      Right response -> do
+        let status = statusCode (responseStatus response)
+        if status == 200
+          then do
+            let body = responseBody response
+            LBS.writeFile localPath body
+            traceWith tracer $ TraceRemoteStorageDownloadSuccess filename (fromIntegral (LBS.length body))
+          else traceWith tracer $ TraceRemoteStorageDownloadError filename status

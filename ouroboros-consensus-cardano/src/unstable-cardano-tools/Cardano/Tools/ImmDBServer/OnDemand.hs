@@ -67,6 +67,8 @@ import System.FS.API (HasFS, removeFile)
 data OnDemandConfig m blk h = OnDemandConfig
   { odcRemote :: Remote.RemoteStorageConfig
   -- ^ CDN connection details.
+  , odcTracer :: Remote.RemoteStorageTracer IO
+  -- ^ Tracer for remote storage events.
   , odcChunkInfo :: ChunkInfo
   -- ^ Information about chunk sizes used for slot-to-chunk translation.
   , odcHasFS :: HasFS m h
@@ -143,13 +145,13 @@ ensureChunks ::
   StrictTVar m OnDemandState ->
   [ChunkNo] ->
   m ()
-ensureChunks OnDemandConfig{odcRemote, odcHasFS, odcMaxCachedChunks} stateVar requestedChunks = do
+ensureChunks OnDemandConfig{odcRemote, odcTracer, odcHasFS, odcMaxCachedChunks} stateVar requestedChunks = do
   -- 1. Identify and download missing chunks
   state <- readTVarIO stateVar
   let missingChunks = filter (\c -> not (Set.member c (odsCachedChunks state))) requestedChunks
 
   unless (null missingChunks) $ do
-    liftIO $ mapM_ (Remote.downloadChunk odcRemote) missingChunks
+    liftIO $ mapM_ (Remote.downloadChunk odcTracer odcRemote) missingChunks
 
   -- 2. Update usage order and identify chunks to prune
   toPrune <- atomically $ do

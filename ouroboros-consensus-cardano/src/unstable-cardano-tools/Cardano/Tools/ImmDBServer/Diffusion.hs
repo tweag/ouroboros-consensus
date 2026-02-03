@@ -96,11 +96,12 @@ run ::
   Int ->
   ChainSyncMessageTracer IO blk ->
   ChainSyncEventTracer IO blk ->
+  RemoteStorage.RemoteStorageTracer IO ->
   FilePath ->
   SockAddr ->
   TopLevelConfig blk ->
   IO Void
-run mbRemoteConfig maxCachedChunks chainSyncMessageTracer chainSyncEventTracer immDBDir sockAddr cfg = withRegistry \registry ->
+run mbRemoteConfig maxCachedChunks chainSyncMessageTracer chainSyncEventTracer remoteStorageTracer immDBDir sockAddr cfg = withRegistry \registry ->
   ImmutableDB.withDB
     (ImmutableDB.openDB (immDBArgs registry) runWithTempRegistry)
     \immDB -> do
@@ -110,6 +111,7 @@ run mbRemoteConfig maxCachedChunks chainSyncMessageTracer chainSyncEventTracer i
           OnDemand.decorateImmutableDB
             OnDemand.OnDemandConfig
               { OnDemand.odcRemote = remoteCfg
+              , OnDemand.odcTracer = remoteStorageTracer
               , OnDemand.odcChunkInfo = nodeImmutableDbChunkInfo storageCfg
               , OnDemand.odcHasFS = hasFS
               , OnDemand.odcCodecConfig = codecCfg

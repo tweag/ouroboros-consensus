@@ -33,12 +33,13 @@ main = withStdTerminalHandles $ do
       eventTracer = showTracing stdoutTracer
       -- msgTracer = getTrivialSendRecvTracer stdoutTracer
       msgTracer = showTracing stdoutTracer
+      remoteStorageTracer = showTracing stdoutTracer
   ProtocolInfo{pInfoConfig} <- mkProtocolInfo args
   traceWith stdoutTracer $ "Running ImmDB server at " ++ printHost (addr, port)
   startResourceTracer stdoutTracer rtsFrequency
   let remoteConfig = fmap (\url -> RemoteStorage.RemoteStorageConfig url remoteStorageCacheDir) remoteStorageSrcUrl
   absurd
-    <$> ImmDBServer.run remoteConfig maxCachedChunks msgTracer eventTracer immDBDir sockAddr pInfoConfig
+    <$> ImmDBServer.run remoteConfig maxCachedChunks msgTracer eventTracer remoteStorageTracer immDBDir sockAddr pInfoConfig
 
 type RTSFrequency = Int
 
