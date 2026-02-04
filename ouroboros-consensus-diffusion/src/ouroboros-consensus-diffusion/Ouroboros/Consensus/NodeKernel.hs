@@ -126,7 +126,7 @@ import Ouroboros.Network.BlockFetch.Decision.Trace
   ( TraceDecisionEvent (..)
   )
 import Ouroboros.Network.NodeToNode
-  ( ConnectionId
+  ( ConnectionId (..)
   , MiniProtocolParameters (..)
   )
 import Ouroboros.Network.PeerSelection.Governor.Types
@@ -215,6 +215,7 @@ data NodeKernelArgs m addrNTN addrNTC blk = NodeKernelArgs
       StrictSTM.StrictTVar m (PublicPeerSelectionState addrNTN)
   , genesisArgs :: GenesisNodeKernelArgs m blk
   , getDiffusionPipeliningSupport :: DiffusionPipeliningSupport
+  , genesisSyncAccelerator :: Maybe addrNTN
   }
 
 initNodeKernel ::
@@ -388,7 +389,8 @@ initNodeKernel
 
 castTraceFetchDecision ::
   forall remotePeer blk.
-  TraceDecisionEvent remotePeer (HeaderWithTime blk) -> TraceDecisionEvent remotePeer (Header blk)
+  TraceDecisionEvent remotePeer (HeaderWithTime blk) ->
+  TraceDecisionEvent remotePeer (Header blk)
 castTraceFetchDecision = \case
   PeersFetch xs -> PeersFetch (map (fmap (second (map castPoint))) xs)
   PeerStarvedUs peer -> PeerStarvedUs peer
@@ -396,7 +398,8 @@ castTraceFetchDecision = \case
 castTraceFetchClientState ::
   forall blk.
   HasHeader (Header blk) =>
-  TraceFetchClientState (HeaderWithTime blk) -> TraceFetchClientState (Header blk)
+  TraceFetchClientState (HeaderWithTime blk) ->
+  TraceFetchClientState (Header blk)
 castTraceFetchClientState = mapTraceFetchClientState hwtHeader
 
 {-------------------------------------------------------------------------------
@@ -440,6 +443,7 @@ initInternalState
     , getUseBootstrapPeers
     , getDiffusionPipeliningSupport
     , genesisArgs
+    , genesisSyncAccelerator
     } = do
     varGsmState <- do
       let GsmNodeKernelArgs{..} = gsmArgs
@@ -468,6 +472,8 @@ initInternalState
             (ChainDB.getCurrentChain chainDB)
             getUseBootstrapPeers
             (GSM.gsmStateToLedgerJudgement <$> readTVar varGsmState)
+        usesGenesisSyncAccelerator :: ConnectionId addrNTN -> Bool
+        usesGenesisSyncAccelerator connId = Just (remoteAddress connId) == genesisSyncAccelerator
         blockFetchInterface ::
           BlockFetchConsensusInterface (ConnectionId addrNTN) (HeaderWithTime blk) blk m
         blockFetchInterface =
@@ -479,6 +485,7 @@ initInternalState
             blockFetchSize
             readFetchMode
             getDiffusionPipeliningSupport
+            usesGenesisSyncAccelerator
 
     peerSharingRegistry <- newPeerSharingRegistry
 
@@ -757,7 +764,8 @@ data BlockContext blk = BlockContext
 -- | Create the 'BlockContext' from the header of the previous block
 blockContextFromPrevHeader ::
   HasHeader (Header blk) =>
-  Header blk -> BlockContext blk
+  Header blk ->
+  BlockContext blk
 blockContextFromPrevHeader hdr =
   -- Recall that an EBB has the same block number as its predecessor, so this
   -- @succ@ is even correct when @hdr@ is an EBB.

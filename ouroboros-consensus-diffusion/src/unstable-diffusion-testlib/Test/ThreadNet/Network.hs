@@ -315,7 +315,9 @@ runThreadNetwork ::
   , TracingConstraints blk
   , HasCallStack
   ) =>
-  SystemTime m -> ThreadNetworkArgs m blk -> m (TestOutput blk)
+  SystemTime m ->
+  ThreadNetworkArgs m blk ->
+  m (TestOutput blk)
 runThreadNetwork
   systemTime
   ThreadNetworkArgs
@@ -1093,6 +1095,7 @@ runThreadNetwork
                     { gnkaLoEAndGDDArgs = LoEAndGDDDisabled
                     }
               , getDiffusionPipeliningSupport = DiffusionPipeliningOn
+              , genesisSyncAccelerator = Nothing
               }
 
       nodeKernel <- initNodeKernel nodeKernelArgs

@@ -117,10 +117,10 @@ prop_blockFetch bfcts@BlockFetchClientTestSetup{..} =
         ]
           <> [ Map.keysSet bfcoBlockFetchResults === Map.keysSet peerUpdates
              , counterexample ("Fetched blocks per peer: " <> condense bfcoFetchedBlocks) $
-                 property $ case blockFetchMode of
-                   PraosFetchMode FetchModeDeadline -> all (> 0) bfcoFetchedBlocks
-                   PraosFetchMode FetchModeBulkSync -> all (> 0) bfcoFetchedBlocks
-                   FetchModeGenesis -> any (> 0) bfcoFetchedBlocks
+                property $ case blockFetchMode of
+                  PraosFetchMode FetchModeDeadline -> all (> 0) bfcoFetchedBlocks
+                  PraosFetchMode FetchModeBulkSync -> all (> 0) bfcoFetchedBlocks
+                  FetchModeGenesis -> any (> 0) bfcoFetchedBlocks
              ]
  where
   BlockFetchClientOutcome{..} = runSimOrThrow $ runBlockFetchTest bfcts
@@ -326,6 +326,7 @@ runBlockFetchTest BlockFetchClientTestSetup{..} = withRegistry \registry -> do
         (\_hdr -> 1000) -- header size, only used for peer prioritization
         (pure blockFetchMode)
         blockFetchPipelining
+        (\_ -> False) -- No genesis sync accelerator connections
     )
       { readCandidateChains = getCandidates
       , demoteChainSyncJumpingDynamo = const (pure ())
@@ -434,18 +435,18 @@ instance Arbitrary BlockFetchClientTestSetup where
     -- If we have multiple peers, check if removing the peer still
     -- yields an error
     [ BlockFetchClientTestSetup
-        { peerUpdates = Map.delete peerId peerUpdates
-        , ..
-        }
+      { peerUpdates = Map.delete peerId peerUpdates
+      , ..
+      }
     | length peerIds > 1
     , peerId <- peerIds
     ]
       <>
       -- Shrink the schedules for all peers simultaneously
       [ BlockFetchClientTestSetup
-          { peerUpdates = Map.insert peerId updates peerUpdates
-          , ..
-          }
+        { peerUpdates = Map.insert peerId updates peerUpdates
+        , ..
+        }
       | peerId <- peerIds
       , updates <-
           filter (not . null . joinSchedule) $

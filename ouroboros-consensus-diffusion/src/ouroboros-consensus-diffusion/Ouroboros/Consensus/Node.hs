@@ -232,6 +232,7 @@ data RunNodeArgs m addrNTN addrNTC blk = RunNodeArgs
   -- ^ Network PeerSharing miniprotocol willingness flag
   , rnGetUseBootstrapPeers :: STM m UseBootstrapPeers
   , rnGenesisConfig :: GenesisConfig
+  , rnGenesisSyncAccelerator :: Maybe addrNTN
   }
 
 -- | Arguments that usually only tests /directly/ specify.
@@ -319,6 +320,8 @@ data LowLevelRunNodeArgs m addrNTN addrNTC blk
   , llrnPublicPeerSelectionStateVar :: StrictSTM.StrictTVar m (PublicPeerSelectionState addrNTN)
   , llrnLdbFlavorArgs :: Complete LedgerDbFlavorArgs m
   -- ^ The flavor arguments
+  , llrnGenesisSyncAccelerator :: Maybe addrNTN
+  -- ^ The possibility of using a genesis sync accelerator for getting up-to-date
   }
 
 data NodeDatabasePaths
@@ -582,6 +585,8 @@ runWith RunNodeArgs{..} encAddrNtN decAddrNtN LowLevelRunNodeArgs{..} =
                   llrnPublicPeerSelectionStateVar
                   genesisArgs
                   DiffusionPipeliningOn
+                  -- TODO: enforce agreement between the GSA in RunNodeArgs and LowLeverRunNodeArgs
+                  llrnGenesisSyncAccelerator
             nodeKernel <- initNodeKernel nodeKernelArgs
             rnNodeKernelHook registry nodeKernel
             churnModeVar <- StrictSTM.newTVarIO ChurnModeNormal
@@ -728,35 +733,35 @@ runWith RunNodeArgs{..} encAddrNtN decAddrNtN LowLevelRunNodeArgs{..} =
           { Diffusion.daApplicationInitiatorMode =
               combineVersions
                 [ simpleSingletonVersions
-                    version
-                    llrnVersionDataNTN
-                    ( \versionData ->
-                        NTN.initiator miniProtocolParams version versionData
-                        -- Initiator side won't start responder side of Peer
-                        -- Sharing protocol so we give a dummy implementation
-                        -- here.
-                        $
-                          ntnApps blockVersion
-                    )
+                  version
+                  llrnVersionDataNTN
+                  ( \versionData ->
+                      NTN.initiator miniProtocolParams version versionData
+                      -- Initiator side won't start responder side of Peer
+                      -- Sharing protocol so we give a dummy implementation
+                      -- here.
+                      $
+                        ntnApps blockVersion
+                  )
                 | (version, blockVersion) <- Map.toList llrnNodeToNodeVersions
                 ]
           , Diffusion.daApplicationInitiatorResponderMode =
               combineVersions
                 [ simpleSingletonVersions
-                    version
-                    llrnVersionDataNTN
-                    ( \versionData ->
-                        NTN.initiatorAndResponder miniProtocolParams version versionData $
-                          ntnApps blockVersion
-                    )
+                  version
+                  llrnVersionDataNTN
+                  ( \versionData ->
+                      NTN.initiatorAndResponder miniProtocolParams version versionData $
+                        ntnApps blockVersion
+                  )
                 | (version, blockVersion) <- Map.toList llrnNodeToNodeVersions
                 ]
           , Diffusion.daLocalResponderApplication =
               combineVersions
                 [ simpleSingletonVersions
-                    version
-                    llrnVersionDataNTC
-                    (\versionData -> NTC.responder version versionData $ ntcApps blockVersion version)
+                  version
+                  llrnVersionDataNTC
+                  (\versionData -> NTC.responder version versionData $ ntcApps blockVersion version)
                 | (version, blockVersion) <- Map.toList llrnNodeToClientVersions
                 ]
           , Diffusion.daRethrowPolicy = consensusRethrowPolicy (Proxy @blk)
@@ -857,6 +862,7 @@ mkNodeKernelArgs ::
   StrictSTM.StrictTVar m (PublicPeerSelectionState addrNTN) ->
   GenesisNodeKernelArgs m blk ->
   DiffusionPipeliningSupport ->
+  Maybe addrNTN ->
   m (NodeKernelArgs m addrNTN (ConnectionId addrNTC) blk)
 mkNodeKernelArgs
   registry
@@ -875,7 +881,8 @@ mkNodeKernelArgs
   getUseBootstrapPeers
   publicPeerSelectionStateVar
   genesisArgs
-  getDiffusionPipeliningSupport =
+  getDiffusionPipeliningSupport
+  genesisSyncAccelerator =
     do
       let (kaRng, psRng) = split rng
       return
@@ -905,6 +912,7 @@ mkNodeKernelArgs
           , publicPeerSelectionStateVar
           , genesisArgs
           , getDiffusionPipeliningSupport
+          , genesisSyncAccelerator
           }
 
 -- | We allow the user running the node to customise the 'NodeKernelArgs'
@@ -1001,6 +1009,7 @@ stdLowLevelRunNodeArgsIO
     { rnProtocolInfo
     , rnPeerSharing
     , rnGenesisConfig
+    , rnGenesisSyncAccelerator
     }
   $(SafeWildCards.fields 'StdRunNodeArgs) = do
     llrnBfcSalt <- stdBfcSaltIO
@@ -1051,6 +1060,7 @@ stdLowLevelRunNodeArgsIO
             Diffusion.dcPublicPeerSelectionVar srnDiffusionConfiguration
         , llrnLdbFlavorArgs =
             srnLdbFlavorArgs
+        , llrnGenesisSyncAccelerator = rnGenesisSyncAccelerator
         }
    where
     networkMagic :: NetworkMagic

@@ -120,7 +120,7 @@ startBlockFetchLogic enableChainSelStarvation registry tracer chainDb fetchClien
           -- This is a syncing test, so we use 'FetchModeGenesis'.
           (pure FetchModeGenesis)
           DiffusionPipeliningOn
-
+          (\_ -> False) -- No genesis sync accelerator connections
       bfcGenesisBFConfig =
         if enableChainSelStarvation
           then
@@ -228,7 +228,9 @@ timeLimitsBlockFetch BlockFetchTimeout{busyTimeout, streamingTimeout} =
  where
   stateToLimit ::
     forall (st :: BlockFetch block point).
-    ActiveState st => StateToken st -> Maybe DiffTime
+    ActiveState st =>
+    StateToken st ->
+    Maybe DiffTime
   stateToLimit SingBFIdle = waitForever
   stateToLimit SingBFBusy = busyTimeout
   stateToLimit SingBFStreaming = streamingTimeout

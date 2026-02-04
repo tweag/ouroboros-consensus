@@ -20,6 +20,7 @@ import Cardano.Network.Types (LedgerStateJudgement)
 import Control.Monad
 import Control.Tracer (Tracer)
 import Data.Map.Strict (Map)
+import qualified Data.Map.Strict as Map
 import Data.Time.Clock (UTCTime)
 import GHC.Stack (HasCallStack)
 import Ouroboros.Consensus.Block hiding (blockMatchesHeader)
@@ -140,6 +141,8 @@ mkBlockFetchConsensusInterface ::
   -- | See 'readFetchMode'.
   STM m FetchMode ->
   DiffusionPipeliningSupport ->
+  -- | Whether a connection is to a genesis sync accelerator
+  (peer -> Bool) ->
   BlockFetchConsensusInterface peer (HeaderWithTime blk) blk m
 mkBlockFetchConsensusInterface
   csjTracer
@@ -148,7 +151,8 @@ mkBlockFetchConsensusInterface
   csHandlesCol
   blockFetchSize
   readFetchMode
-  pipelining =
+  pipelining
+  usesGenesisSyncAccelerator =
     BlockFetchConsensusInterface{blockFetchSize = blockFetchSize . hwtHeader, ..}
    where
     getCandidates :: STM m (Map peer (AnchoredFragment (HeaderWithTime blk)))
@@ -158,8 +162,16 @@ mkBlockFetchConsensusInterface
     blockMatchesHeader hwt b = Block.blockMatchesHeader (hwtHeader hwt) b
 
     readCandidateChains :: STM m (Map peer (AnchoredFragment (HeaderWithTime blk)))
-    readCandidateChains = getCandidates
-
+    readCandidateChains = do
+      candidates <- getCandidates
+      fetchMode <- readFetchMode
+      case fetchMode of
+        PraosFetchMode FetchModeBulkSync -> do
+          let acceleratorCandidates = Map.filterWithKey (\connId _ -> usesGenesisSyncAccelerator connId) candidates
+          if Map.null acceleratorCandidates
+            then return candidates
+            else return acceleratorCandidates
+        _ -> return candidates
     readCurrentChain :: STM m (AnchoredFragment (HeaderWithTime blk))
     readCurrentChain = getCurrentChainWithTime chainDB
 
