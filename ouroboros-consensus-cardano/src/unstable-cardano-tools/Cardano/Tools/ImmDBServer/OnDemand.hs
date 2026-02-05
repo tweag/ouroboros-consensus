@@ -134,27 +134,18 @@ decorateImmutableDB cfg@OnDemandConfig{odcChunkInfo} db = do
       { getTip_ =
           -- Return a fake tip far in the future to allow streamAfterPoint to proceed.
           -- ChainSync uses the tip to decide whether to stream blocks.
-          let dummyHash = fromRawHash (Proxy @blk) (LBS.toStrict (LBS.replicate (fromIntegral (hashSize (Proxy @blk))) 0)) in
-          return . NotOrigin $ Tip maxBound IsNotEBB maxBound dummyHash
-      , stream_ = \registry component from to -> do
+          let dummyHash = fromRawHash (Proxy @blk) (LBS.toStrict (LBS.replicate (fromIntegral (hashSize (Proxy @blk))) 0))
+              fakeTip = NotOrigin $ Tip maxBound IsNotEBB maxBound dummyHash
+          trace ("DEBUG: getTip_ (Fake) called, returning: " ++ show fakeTip) (return fakeTip)
+      , stream_ = \_ component from to -> do
+          liftIO $ putStrLn $ "DEBUG: stream_ called with from: " ++ show from ++ ", to: " ++ show to
           let requestedChunks = getChunksInRange odcChunkInfo from to
-
-          -- Check if ImmutableDB already has this range
-          tipPoint <- atomically $ getTipPoint db
-
-          let StreamToInclusive rp = to
-          let toPoint = realPointToPoint rp
-
-          -- Logic: If we are syncing beyond the current local tip, use Lazy On-Demand Iterator
-          if tipPoint >= toPoint
-            then stream_ db registry component from to
-            else
-              Right
-                <$> mkOnDemandIterator
-                  cfg
-                  stateVar
-                  component
-                  requestedChunks
+          Right
+            <$> mkOnDemandIterator
+              cfg
+              stateVar
+              component
+              requestedChunks
       }
 
 -- | Creates an iterator that downloads and serves chunks one by one.
