@@ -7,8 +7,6 @@ module Test.Ouroboros.Storage.ImmutableDB.Util (tests) where
 
 import Data.Maybe (isJust, isNothing)
 import qualified Data.Text as Text
-import System.FS.API.Types (FsPath, fsPathToList)
-
 import Ouroboros.Consensus.Storage.ImmutableDB.Chunks.Internal
   ( ChunkNo (..)
   )
@@ -22,14 +20,12 @@ import Ouroboros.Consensus.Storage.ImmutableDB.Impl.Util
   , parseDBFileName
   , toSuffix
   )
+import System.FS.API.Types (FsPath, fsPathToList)
 import Test.QuickCheck
-
 -- for Arbitrary Text
 import Test.QuickCheck.Instances ()
-
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.QuickCheck (testProperty)
-
 -- for Arbitrary ChunkNo
 import Test.Util.Orphans.Arbitrary ()
 

@@ -17,7 +17,7 @@ import Cardano.Crypto.Init (cryptoInit)
 import qualified Cardano.Tools.DBAnalyser.Block.Cardano as Cardano
 import Cardano.Tools.DBAnalyser.HasAnalysis (mkProtocolInfo)
 import Control.Concurrent.Class.MonadSTM.Strict
-import Control.Tracer (Tracer, nullTracer, showTracing, stdoutTracer)
+import Control.Tracer (Tracer, nullTracer, showTracing, stdoutTracer, traceWith)
 import DBServer.Parsers (parseAddr)
 import DBServer.Types (HostAddr)
 import qualified Data.ByteString.Lazy as LBS
@@ -109,11 +109,14 @@ main = do
   cryptoInit
   opts@Options{addr, port, configFile, maxSlotNo} <- execParser optionsParser
   print opts
+  traceWith stdoutTracer $
+    "Client starting, attempting to connect to " ++ show addr ++ ":" ++ show port
   let sockAddr = Socket.SockAddrInet port (Socket.tupleToHostAddress addr)
       args = Cardano.CardanoBlockArgs configFile Nothing
   ProtocolInfo{pInfoConfig} <- mkProtocolInfo args
   let cfgCodec = configCodec pInfoConfig
       networkMagic = getNetworkMagic . configBlock $ pInfoConfig
+  traceWith stdoutTracer $ "Configuration loaded, starting ChainSync client"
   clientChainSync sockAddr cfgCodec networkMagic maxSlotNo
 
 --
@@ -239,7 +242,7 @@ chainSyncClient' controlMessageSTM _maxSlotNo _ _currentChainVar candidateChainV
       ()
   requestNext =
     ChainSync.SendMsgRequestNext
-      (pure ()) -- on MsgAwaitReply; could trace
+      (traceWith stdoutTracer "ChainSync client: Sending RequestNext" >> pure ()) -- on MsgAwaitReply; could trace
       handleNext
 
   terminate ::
@@ -262,6 +265,7 @@ chainSyncClient' controlMessageSTM _maxSlotNo _ _currentChainVar candidateChainV
     ChainSync.ClientStNext
       { ChainSync.recvMsgRollForward = \h _pHead ->
           ChainSync.ChainSyncClient $ do
+            traceWith stdoutTracer "ChainSync client: Received RollForward"
             addBlock h
             cm <- atomically controlMessageSTM
             return $ case cm of
@@ -269,6 +273,7 @@ chainSyncClient' controlMessageSTM _maxSlotNo _ _currentChainVar candidateChainV
               _ -> requestNext
       , ChainSync.recvMsgRollBackward = \pIntersect _pHead ->
           ChainSync.ChainSyncClient $ do
+            traceWith stdoutTracer $ "ChainSync client: Received RollBackward to " ++ show pIntersect
             rollback pIntersect
             cm <- atomically controlMessageSTM
             return $ case cm of

@@ -2,6 +2,7 @@
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MonoLocalBinds #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE RankNTypes #-}
@@ -23,23 +24,35 @@ import qualified Cardano.Tools.ImmDBServer.RemoteStorage as Remote
 import Control.Monad (unless, void)
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Data.ByteString.Lazy (ByteString)
+import qualified Data.ByteString.Lazy as LBS
 import Data.List (delete)
+import Data.Proxy (Proxy (..))
 import Data.Set (Set)
 import qualified Data.Set as Set
+import Debug.Trace (trace)
 import GHC.Generics (Generic)
 import Ouroboros.Consensus.Block
-  ( CodecConfig
-  , ConvertRawHash
+  ( BlockNo (..)
+  , CodecConfig
+  , ConvertRawHash (..)
   , HasHeader
   , Header
+  , IsEBB (..)
   , NestedCtxt
+  , SlotNo (..)
   , WithOrigin (..)
   , pointSlot
   , realPointSlot
   )
 import Ouroboros.Consensus.Block.RealPoint (realPointToPoint)
-import Ouroboros.Consensus.Storage.Common (StreamFrom (..), StreamTo (..))
-import Ouroboros.Consensus.Storage.ImmutableDB.API (ImmutableDB (..), getTipPoint)
+import Ouroboros.Consensus.Storage.Common (BlockComponent, StreamFrom (..), StreamTo (..))
+import Ouroboros.Consensus.Storage.ImmutableDB.API
+  ( ImmutableDB (..)
+  , Iterator (..)
+  , IteratorResult (..)
+  , Tip (..)
+  , getTipPoint
+  )
 import Ouroboros.Consensus.Storage.ImmutableDB.Chunks.Internal (ChunkInfo, ChunkNo (..))
 import qualified Ouroboros.Consensus.Storage.ImmutableDB.Chunks.Internal as ChunkInfo
 import qualified Ouroboros.Consensus.Storage.ImmutableDB.Chunks.Layout as ChunkLayout
@@ -108,11 +121,18 @@ decorateImmutableDB ::
   OnDemandConfig m blk h ->
   ImmutableDB m blk ->
   m (ImmutableDB m blk)
-decorateImmutableDB cfg@OnDemandConfig{odcChunkInfo, odcHasFS, odcCodecConfig, odcCheckIntegrity} db = do
+decorateImmutableDB cfg@OnDemandConfig{odcChunkInfo} db = do
   stateVar <- newTVarIO (OnDemandState Set.empty [])
   pure $
     db
-      { stream_ = \registry component from to -> do
+      { getTip_ = do
+          -- Return a fake tip far in the future to allow streamAfterPoint to proceed.
+          -- ChainSync uses the tip to decide whether to stream blocks.
+          let dummyHash = fromRawHash (Proxy @blk) (LBS.toStrict (LBS.replicate (fromIntegral (hashSize (Proxy @blk))) 0))
+              fakeTip = NotOrigin $ Tip maxBound IsNotEBB maxBound dummyHash
+          trace ("DEBUG: getTip_ (Fake) called, returning: " ++ show fakeTip) (return fakeTip)
+      , stream_ = \registry component from to -> do
+          liftIO $ putStrLn "DEBUG: stream_ called"
           let requestedChunks = getChunksInRange odcChunkInfo from to
 
           -- Check if ImmutableDB already has this range
@@ -121,20 +141,84 @@ decorateImmutableDB cfg@OnDemandConfig{odcChunkInfo, odcHasFS, odcCodecConfig, o
           let StreamToInclusive rp = to
           let toPoint = realPointToPoint rp
 
-          -- Logic: If we are syncing beyond the current tip, use Lightweight Reader
+          -- Logic: If we are syncing beyond the current local tip, use Lazy On-Demand Iterator
           if tipPoint >= toPoint
-            then stream_ db registry component from to
+            then do
+              liftIO $ putStrLn "DEBUG: Range is local, delegating to original ImmutableDB"
+              stream_ db registry component from to
             else do
-              ensureChunks cfg stateVar requestedChunks
+              liftIO $
+                putStrLn $
+                  "DEBUG: Range is remote, creating Lazy On-Demand Iterator for chunks: " ++ show requestedChunks
               Right
-                <$> Lightweight.mkLightweightIterator
+                <$> mkOnDemandIterator
+                  cfg
+                  stateVar
+                  component
+                  requestedChunks
+      }
+
+-- | Creates an iterator that downloads and serves chunks one by one.
+mkOnDemandIterator ::
+  forall m blk h b.
+  ( IOLike m
+  , MonadIO m
+  , HasHeader blk
+  , DecodeDisk blk (ByteString -> blk)
+  , DecodeDiskDep (NestedCtxt Header) blk
+  , ReconstructNestedCtxt Header blk
+  , ConvertRawHash blk
+  ) =>
+  OnDemandConfig m blk h ->
+  StrictTVar m OnDemandState ->
+  BlockComponent blk b ->
+  [ChunkNo] ->
+  m (Iterator m blk b)
+mkOnDemandIterator cfg@OnDemandConfig{odcHasFS, odcChunkInfo, odcCodecConfig, odcCheckIntegrity} stateVar component chunks = do
+  varChunks <- newTVarIO chunks
+  varCurrentIt <- newTVarIO Nothing
+
+  let
+    next = do
+      current <- readTVarIO varCurrentIt
+      case current of
+        Just it -> do
+          res <- iteratorNext it
+          case res of
+            IteratorResult b -> return (IteratorResult b)
+            IteratorExhausted -> do
+              iteratorClose it
+              atomically $ writeTVar varCurrentIt Nothing
+              next -- Transition to next chunk
+        Nothing -> do
+          cs <- readTVarIO varChunks
+          case cs of
+            [] -> return IteratorExhausted
+            (c : rest) -> do
+              atomically $ writeTVar varChunks rest
+              -- Download only the current chunk before serving it
+              ensureChunks cfg stateVar [c]
+              it <-
+                Lightweight.mkLightweightIterator
                   odcHasFS
                   odcChunkInfo
                   odcCodecConfig
                   odcCheckIntegrity
                   component
-                  requestedChunks
-      }
+                  [c]
+              atomically $ writeTVar varCurrentIt (Just it)
+              next -- Transition to next chunk
+    hasNext =
+      readTVar varCurrentIt >>= \case
+        Just it -> iteratorHasNext it
+        Nothing -> return Nothing
+
+    close =
+      readTVarIO varCurrentIt >>= \case
+        Just it -> iteratorClose it
+        Nothing -> return ()
+
+  return Iterator{iteratorNext = next, iteratorHasNext = hasNext, iteratorClose = close}
 
 -- | Ensures that the requested chunks are present on disk, downloading them if necessary.
 -- Implements an LRU eviction policy to maintain the 'odcMaxCachedChunks' limit.

@@ -13,7 +13,7 @@ module Cardano.Tools.ImmDBServer.RemoteStorage
   , RemoteStorageTracer
   ) where
 
-import Control.Exception (try, SomeException)
+import Control.Exception (SomeException, try)
 import Control.Monad (unless)
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.Text as Text
@@ -61,7 +61,8 @@ downloadChunk tracer cfg chunk = do
   mapM_ (downloadFile tracer manager cfg chunk) fileTypes
 
 -- | Internal helper to download a single file using the provided HTTP 'Manager'.
-downloadFile :: RemoteStorageTracer IO -> Manager -> RemoteStorageConfig -> ChunkNo -> FileType -> IO ()
+downloadFile ::
+  RemoteStorageTracer IO -> Manager -> RemoteStorageConfig -> ChunkNo -> FileType -> IO ()
 downloadFile tracer manager cfg chunk fileType = do
   let filename = Text.unpack $ getFileName fileType chunk
       localPath = rscDstDir cfg </> filename

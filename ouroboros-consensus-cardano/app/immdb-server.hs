@@ -23,7 +23,16 @@ import "contra-tracer" Control.Tracer (showTracing, stdoutTracer, traceWith)
 main :: IO ()
 main = withStdTerminalHandles $ do
   cryptoInit
-  Opts{immDBDir, addr, port, configFile, rtsFrequency, remoteStorageCacheDir, remoteStorageSrcUrl, maxCachedChunks} <-
+  Opts
+    { immDBDir
+    , addr
+    , port
+    , configFile
+    , rtsFrequency
+    , remoteStorageCacheDir
+    , remoteStorageSrcUrl
+    , maxCachedChunks
+    } <-
     execParser optsParser
   let sockAddr = Socket.SockAddrInet port hostAddr
        where
@@ -39,7 +48,15 @@ main = withStdTerminalHandles $ do
   startResourceTracer stdoutTracer rtsFrequency
   let remoteConfig = fmap (\url -> RemoteStorage.RemoteStorageConfig url remoteStorageCacheDir) remoteStorageSrcUrl
   absurd
-    <$> ImmDBServer.run remoteConfig maxCachedChunks msgTracer eventTracer remoteStorageTracer immDBDir sockAddr pInfoConfig
+    <$> ImmDBServer.run
+      remoteConfig
+      maxCachedChunks
+      msgTracer
+      eventTracer
+      remoteStorageTracer
+      immDBDir
+      sockAddr
+      pInfoConfig
 
 type RTSFrequency = Int
 
@@ -127,7 +144,8 @@ optsParser =
         strOption $
           mconcat
             [ long "rs-src-url"
-            , help "URL to a CDN serving ImmutableDB chunks (e.g. https://example.com/chain). If left empty, the sync accelerator is disabled."
+            , help
+                "URL to a CDN serving ImmutableDB chunks (e.g. https://example.com/chain). If left empty, the sync accelerator is disabled."
             , metavar "URL"
             ]
     maxCachedChunks <-
@@ -138,4 +156,14 @@ optsParser =
           , value 10
           , showDefault
           ]
-    pure Opts{immDBDir, addr, port, configFile, rtsFrequency, remoteStorageCacheDir, remoteStorageSrcUrl, maxCachedChunks}
+    pure
+      Opts
+        { immDBDir
+        , addr
+        , port
+        , configFile
+        , rtsFrequency
+        , remoteStorageCacheDir
+        , remoteStorageSrcUrl
+        , maxCachedChunks
+        }
