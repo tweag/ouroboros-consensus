@@ -122,6 +122,7 @@ import qualified Ouroboros.Network.AnchoredFragment as AF
 import           Ouroboros.Network.Block (MaxSlotNo (..))
 import           Ouroboros.Network.BlockFetch.ConsensusInterface
                      (ChainSelStarvation (..))
+import Ouroboros.Network.Protocol.LocalStateQuery.Type (LeashID)
 
 -- | All the serialisation related constraints needed by the ChainDB.
 class ( ImmutableDbSerialiseConstraints blk
@@ -310,7 +311,7 @@ data ChainDbEnv m blk = CDB
   , cdbChainSelStarvation :: !(StrictTVar m ChainSelStarvation)
     -- ^ Information on the last starvation of ChainSel, whether ongoing or
     -- ended recently.
-  , cdbLeashingPoint :: !(StrictTVar m (Maybe (Point blk)))
+  , cdbLeashingPoint :: !(StrictTVar m (Maybe (LeashID, Point blk)))
   } deriving (Generic)
 
 -- | We include @blk@ in 'showTypeOf' because it helps resolving type families

@@ -514,7 +514,7 @@ chainSelectionForBlock cdb@CDB{..} blockCache hdr punish = electric $ withRegist
           <*> VolatileDB.getBlockInfo         cdbVolatileDB
           <*> Query.getCurrentChain           cdb
           <*> Query.getTipPoint               cdb
-          <*> (readTVar cdbLeashingPoint)
+          <*> (fmap snd <$> readTVar cdbLeashingPoint)
 
     -- This is safe: the LedgerDB tip doesn't change in between the previous
     -- atomically block and this call to 'withTipForker'.
@@ -644,6 +644,7 @@ chainSelectionForBlock cdb@CDB{..} blockCache hdr punish = electric $ withRegist
       -> LoE (AnchoredFragment (HeaderWithTime blk))
          -- ^ LoE fragment
       -> Maybe (Point blk)
+      -- ^ Leashing point
       -> m ()
     addToCurrentChain rr succsOf curChainAndLedger loeFrag leashingPoint = do
         -- Extensions of @B@ that do not exceed the LoE
@@ -686,7 +687,7 @@ chainSelectionForBlock cdb@CDB{..} blockCache hdr punish = electric $ withRegist
         -- extension of the current chain.
         case chainDiffs of
           Nothing          -> return ()
-          Just chainDiffs' -> 
+          Just chainDiffs' ->
             chainSelection chainSelEnv rr chainDiffs' >>= \case
               Nothing ->
                 return ()
@@ -741,7 +742,7 @@ chainSelectionForBlock cdb@CDB{..} blockCache hdr punish = electric $ withRegist
                       else candPrefix
               in Diff.diff (VF.validatedFragment curChain) trimmedCand
 
-    trimLeashing :: 
+    trimLeashing ::
       Maybe (Point blk) ->
       ChainAndLedger m blk ->
       ChainDiff (Header blk) ->
@@ -761,7 +762,7 @@ chainSelectionForBlock cdb@CDB{..} blockCache hdr punish = electric $ withRegist
 
             -- if the leashingPoint > anchor
             --
-            -- a. volatile tip < leashingPoint 
+            -- a. volatile tip < leashingPoint
             -- b. anchor < leashingPoint < volatile tip
             --
             -- we want the diff = anchor :| [ b_x | x < leashingPoint]
@@ -786,6 +787,7 @@ chainSelectionForBlock cdb@CDB{..} blockCache hdr punish = electric $ withRegist
       -> ChainDiff (HeaderFields blk)
          -- ^ Header fields for @(x,b]@
       -> Maybe (Point blk)
+      -- ^ Leashing point
       -> m ()
     switchToAFork rr succsOf lookupBlockInfo curChainAndLedger loeFrag diff leashingPoint = do
         -- We use a cache to avoid reading the headers from disk multiple
@@ -828,7 +830,7 @@ chainSelectionForBlock cdb@CDB{..} blockCache hdr punish = electric $ withRegist
             chainSelection chainSelEnv rr chainDiffs' >>= \case
               Nothing                 ->
                 return ()
-              Just validatedChainDiff -> 
+              Just validatedChainDiff ->
                   switchTo
                     validatedChainDiff
                     (varTentativeHeader chainSelEnv)
