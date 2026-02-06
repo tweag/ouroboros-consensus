@@ -1,4 +1,4 @@
-module DBServer.Types (IPOctets, fromIPTuple, parseIPOctets, printIP, toIPTuple, toSockAddrV4) where
+module Ouroboros.Consensus.Util.IPOctets (IPOctets, fromIPTuple, parseIPOctets, printIP, toIPTuple, toSockAddrV4) where
 
 import qualified Data.IP as IP
 import Data.List (intercalate)

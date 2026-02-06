@@ -10,12 +10,12 @@ import qualified Cardano.Tools.DBAnalyser.Block.Cardano as Cardano
 import Cardano.Tools.DBAnalyser.HasAnalysis (mkProtocolInfo)
 import qualified Cardano.Tools.ImmDBServer.Diffusion as ImmDBServer
 import qualified Cardano.Tools.ImmDBServer.RemoteStorage as RemoteStorage
-import DBServer.Types (IPOctets, fromIPTuple, parseIPOctets, printIP, toIPTuple)
 import Data.Void
 import Main.Utf8 (withStdTerminalHandles)
 import qualified Network.Socket as Socket
 import Options.Applicative
 import Ouroboros.Consensus.Node.ProtocolInfo (ProtocolInfo (..))
+import Ouroboros.Consensus.Util.IPOctets (IPOctets, fromIPTuple, parseIPOctets, printIP, toIPTuple)
 import "contra-tracer" Control.Tracer (showTracing, stdoutTracer, traceWith)
 
 main :: IO ()

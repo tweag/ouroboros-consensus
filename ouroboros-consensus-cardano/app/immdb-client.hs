@@ -18,7 +18,6 @@ import qualified Cardano.Tools.DBAnalyser.Block.Cardano as Cardano
 import Cardano.Tools.DBAnalyser.HasAnalysis (mkProtocolInfo)
 import Control.Concurrent.Class.MonadSTM.Strict
 import Control.Tracer (Tracer, nullTracer, showTracing, stdoutTracer)
-import DBServer.Types (IPOctets, fromIPTuple, parseIPOctets, toSockAddrV4)
 import qualified Data.ByteString.Lazy as LBS
 import Data.Functor (void)
 import qualified Data.Map.Strict as Map
@@ -40,6 +39,7 @@ import Ouroboros.Consensus.Node.NetworkProtocolVersion
 import Ouroboros.Consensus.Node.ProtocolInfo (ProtocolInfo (..))
 import Ouroboros.Consensus.Node.Run (SerialiseNodeToNodeConstraints)
 import Ouroboros.Consensus.Storage.Serialisation (SerialisedHeader)
+import Ouroboros.Consensus.Util.IPOctets (IPOctets, fromIPTuple, parseIPOctets, toSockAddrV4)
 import qualified Ouroboros.Network.AnchoredFragment as AF
 import Ouroboros.Network.Block
 import Ouroboros.Network.ControlMessage (continueForever)
