@@ -18,8 +18,7 @@ import qualified Cardano.Tools.DBAnalyser.Block.Cardano as Cardano
 import Cardano.Tools.DBAnalyser.HasAnalysis (mkProtocolInfo)
 import Control.Concurrent.Class.MonadSTM.Strict
 import Control.Tracer (Tracer, nullTracer, showTracing, stdoutTracer)
-import DBServer.Parsers (parseAddr)
-import DBServer.Types (HostAddr)
+import DBServer.Types (IPOctets, fromIPTuple, parseIPOctets, toSockAddrV4)
 import qualified Data.ByteString.Lazy as LBS
 import Data.Functor (void)
 import qualified Data.Map.Strict as Map
@@ -57,7 +56,7 @@ import Ouroboros.Network.Socket
 import Ouroboros.Network.Util.ShowProxy (ShowProxy)
 
 data Options = Options
-  { addr :: HostAddr
+  { ip :: IPOctets
   , port :: Socket.PortNumber
   , configFile :: FilePath
   , maxSlotNo :: Maybe SlotNo
@@ -72,11 +71,11 @@ optionsParser =
 
   parse = do
     addr <-
-      option (eitherReader parseAddr) $
+      option (maybeReader parseIPOctets) $
         mconcat
           [ long "addr"
           , help "Address of the server"
-          , value (127, 0, 0, 1)
+          , value $ fromIPTuple (127, 0, 0, 1)
           , showDefault
           ]
     port <-
@@ -102,14 +101,14 @@ optionsParser =
           , value Nothing
           , metavar "SLOTNO"
           ]
-    pure Options{addr, port, configFile, maxSlotNo}
+    pure Options{ip = addr, port, configFile, maxSlotNo}
 
 main :: IO ()
 main = do
   cryptoInit
-  opts@Options{addr, port, configFile, maxSlotNo} <- execParser optionsParser
+  opts@Options{ip, port, configFile, maxSlotNo} <- execParser optionsParser
   print opts
-  let sockAddr = Socket.SockAddrInet port (Socket.tupleToHostAddress addr)
+  let sockAddr = toSockAddrV4 ip port
       args = Cardano.CardanoBlockArgs configFile Nothing
   ProtocolInfo{pInfoConfig} <- mkProtocolInfo args
   let cfgCodec = configCodec pInfoConfig

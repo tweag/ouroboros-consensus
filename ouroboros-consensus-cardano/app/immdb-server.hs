@@ -10,9 +10,7 @@ import qualified Cardano.Tools.DBAnalyser.Block.Cardano as Cardano
 import Cardano.Tools.DBAnalyser.HasAnalysis (mkProtocolInfo)
 import qualified Cardano.Tools.ImmDBServer.Diffusion as ImmDBServer
 import qualified Cardano.Tools.ImmDBServer.RemoteStorage as RemoteStorage
-import DBServer.Parsers (parseAddr)
-import DBServer.Types (HostAddr)
-import Data.List (intercalate)
+import DBServer.Types (IPOctets, fromIPTuple, parseIPOctets, printIP, toIPTuple)
 import Data.Void
 import Main.Utf8 (withStdTerminalHandles)
 import qualified Network.Socket as Socket
@@ -23,18 +21,15 @@ import "contra-tracer" Control.Tracer (showTracing, stdoutTracer, traceWith)
 main :: IO ()
 main = withStdTerminalHandles $ do
   cryptoInit
-  Opts{immDBDir, addr, port, configFile, rtsFrequency, remoteStorageCacheDir, remoteStorageSrcUrl, maxCachedChunks} <-
+  Opts{immDBDir, ip, port, configFile, rtsFrequency, remoteStorageCacheDir, remoteStorageSrcUrl, maxCachedChunks} <-
     execParser optsParser
-  let sockAddr = Socket.SockAddrInet port hostAddr
-       where
-        -- could also be passed in
-        hostAddr = Socket.tupleToHostAddress addr
+  let sockAddr = Socket.SockAddrInet port (Socket.tupleToHostAddress (toIPTuple ip))
       args = Cardano.CardanoBlockArgs configFile Nothing
       eventTracer = showTracing stdoutTracer
       -- msgTracer = getTrivialSendRecvTracer stdoutTracer
       msgTracer = showTracing stdoutTracer
   ProtocolInfo{pInfoConfig} <- mkProtocolInfo args
-  traceWith stdoutTracer $ "Running ImmDB server at " ++ printHost (addr, port)
+  traceWith stdoutTracer $ "Running ImmDB server at " ++ printHost (ip, port)
   startResourceTracer stdoutTracer rtsFrequency
   let remoteConfig = fmap (\url -> RemoteStorage.RemoteStorageConfig url remoteStorageCacheDir) remoteStorageSrcUrl
   absurd
@@ -46,7 +41,7 @@ type RTSFrequency = Int
 data Opts = Opts
   { immDBDir :: FilePath
   -- ^ Local path to the ImmutableDB directory.
-  , addr :: HostAddr
+  , ip :: IPOctets
   -- ^ IP address to bind to.
   , port :: Socket.PortNumber
   -- ^ TCP port to listen on.
@@ -62,10 +57,8 @@ data Opts = Opts
   -- ^ Maximum number of chunks to keep in cache.
   }
 
-printHost :: (HostAddr, Socket.PortNumber) -> String
-printHost ((a, b, c, d), port) = intercalate "." subs ++ ":" ++ show port
- where
-  subs = map show [a, b, c, d]
+printHost :: (IPOctets, Socket.PortNumber) -> String
+printHost (ip, port) = printIP ip ++ ":" ++ show port
 
 optsParser :: ParserInfo Opts
 optsParser =
@@ -82,11 +75,11 @@ optsParser =
           , metavar "PATH"
           ]
     addr <-
-      option (eitherReader parseAddr) $
+      option (maybeReader parseIPOctets) $
         mconcat
           [ long "addr"
           , help "Address to serve at"
-          , value (127, 0, 0, 1)
+          , value $ fromIPTuple (127, 0, 0, 1)
           , showDefault
           ]
     port <-
@@ -137,4 +130,4 @@ optsParser =
           , value 10
           , showDefault
           ]
-    pure Opts{immDBDir, addr, port, configFile, rtsFrequency, remoteStorageCacheDir, remoteStorageSrcUrl, maxCachedChunks}
+    pure Opts{immDBDir, ip = addr, port, configFile, rtsFrequency, remoteStorageCacheDir, remoteStorageSrcUrl, maxCachedChunks}

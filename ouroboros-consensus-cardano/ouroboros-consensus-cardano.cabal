@@ -705,6 +705,7 @@ executable immdb-client
     containers,
     contra-tracer,
     io-classes:{strict-stm},
+    iproute,
     network,
     network-mux,
     optparse-applicative,
@@ -716,7 +717,6 @@ executable immdb-client
     ouroboros-network-framework,
     ouroboros-network-protocols,
   other-modules:
-    DBServer.Parsers
     DBServer.Tracing
     DBServer.Types
 
@@ -728,6 +728,7 @@ executable immdb-server
     base,
     cardano-crypto-class,
     contra-tracer,
+    iproute,
     network,
     optparse-applicative,
     ouroboros-consensus,
@@ -735,7 +736,6 @@ executable immdb-server
     ouroboros-network-framework,
     with-utf8,
   other-modules:
-    DBServer.Parsers
     DBServer.Types
     DBServer.Tracing
 
