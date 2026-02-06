@@ -7,21 +7,22 @@
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeApplications #-}
 
 -- | On-demand fetching wrapper for ImmutableDB.
 --
 -- This module provides a decorator for 'ImmutableDB' that intercepts streaming
 -- requests. If the requested data is beyond the current indexed tip, it downloads
--- the missing chunks from a CDN and serves them using a 'LightweightIterator'.
+-- the missing chunks from a CDN and serves them using a local iterator that
+-- reads directly from the downloaded chunk files.
 module Cardano.Tools.ImmDBServer.OnDemand
   ( decorateImmutableDB
   , OnDemandConfig (..)
   ) where
 
-import qualified Cardano.Tools.ImmDBServer.LightweightIterator as Lightweight
 import qualified Cardano.Tools.ImmDBServer.RemoteStorage as Remote
-import Control.Monad (unless, void)
+import Control.Monad (forM, unless, void)
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Data.ByteString.Lazy (ByteString)
 import qualified Data.ByteString.Lazy as LBS
@@ -39,6 +40,7 @@ import Ouroboros.Consensus.Block
   , Header
   , IsEBB (..)
   , NestedCtxt
+  , RealPoint (..)
   , SlotNo (..)
   , WithOrigin (..)
   , pointSlot
@@ -56,6 +58,10 @@ import Ouroboros.Consensus.Storage.ImmutableDB.API
 import Ouroboros.Consensus.Storage.ImmutableDB.Chunks.Internal (ChunkInfo, ChunkNo (..))
 import qualified Ouroboros.Consensus.Storage.ImmutableDB.Chunks.Internal as ChunkInfo
 import qualified Ouroboros.Consensus.Storage.ImmutableDB.Chunks.Layout as ChunkLayout
+import Ouroboros.Consensus.Storage.ImmutableDB.Impl.Index.Secondary (Entry (..))
+import qualified Ouroboros.Consensus.Storage.ImmutableDB.Impl.Index.Secondary as Secondary
+import Ouroboros.Consensus.Storage.ImmutableDB.Impl.Iterator (extractBlockComponent)
+import Ouroboros.Consensus.Storage.ImmutableDB.Impl.Types (WithBlockSize (..))
 import Ouroboros.Consensus.Storage.ImmutableDB.Impl.Util
   ( fsPathChunkFile
   , fsPathPrimaryIndexFile
@@ -74,7 +80,7 @@ import Ouroboros.Consensus.Util.IOLike
   , try
   )
 import Ouroboros.Consensus.Util.NormalForm.StrictTVar (writeTVar)
-import System.FS.API (HasFS, removeFile)
+import System.FS.API (HasFS, OpenMode (ReadMode), hGetSize, removeFile, withFile)
 
 -- | Configuration for the On-Demand decorator.
 data OnDemandConfig m blk h = OnDemandConfig
@@ -199,7 +205,7 @@ mkOnDemandIterator cfg@OnDemandConfig{odcHasFS, odcChunkInfo, odcCodecConfig, od
               -- Download only the current chunk before serving it
               ensureChunks cfg stateVar [c]
               it <-
-                Lightweight.mkLightweightIterator
+                mkRawChunkIterator
                   odcHasFS
                   odcChunkInfo
                   odcCodecConfig
@@ -283,3 +289,83 @@ chunkForFrom ci (StreamFromExclusive pt) = case pointSlot pt of
 -- | Translates a 'StreamTo' bound to its ending 'ChunkNo'.
 chunkForTo :: ChunkInfo -> StreamTo blk -> ChunkNo
 chunkForTo ci (StreamToInclusive pt) = ChunkLayout.chunkIndexOfSlot ci (realPointSlot pt)
+
+-- | Creates a "Raw Chunk Iterator" that serves blocks from a specific list of chunks.
+--
+-- This iterator is "stateless" in the sense that it does not rely on the global
+-- 'ImmutableDB' state (tip, indices, etc.). Instead, it directly parses the
+-- secondary index files on disk to find the requested blocks.
+mkRawChunkIterator ::
+  forall m blk b h.
+  ( IOLike m
+  , HasHeader blk
+  , DecodeDisk blk (LBS.ByteString -> blk)
+  , DecodeDiskDep (NestedCtxt Header) blk
+  , ReconstructNestedCtxt Header blk
+  , ConvertRawHash blk
+  ) =>
+  HasFS m h ->
+  ChunkInfo ->
+  CodecConfig blk ->
+  -- | Integrity check function to validate blocks read from disk.
+  (blk -> Bool) ->
+  -- | The component of the block to stream (e.g., the whole block, just the header, etc.).
+  BlockComponent blk b ->
+  -- | The list of chunks (epochs) to iterate over.
+  [ChunkNo] ->
+  m (Iterator m blk b)
+mkRawChunkIterator hasFS chunkInfo codecConfig checkIntegrity component chunks = do
+  -- 1. Read all entries from all requested chunks.
+  -- We map over the chunks, open the corresponding secondary index file, and parse all entries.
+  allEntries <- forM chunks $ \chunk -> do
+    chunkSize <- withFile hasFS (fsPathChunkFile chunk) ReadMode (hGetSize hasFS)
+    -- We assume the first block might be an EBB if the chunk supports it.
+    let firstIsEBB = if ChunkInfo.chunkInfoSupportsEBBs chunkInfo then IsEBB else IsNotEBB
+    entries <- Secondary.readAllEntries hasFS 0 chunk (const False) chunkSize firstIsEBB
+    return $ map (chunk,) entries
+
+  let flatEntries = concat allEntries
+  varEntries <- newTVarIO flatEntries
+
+  -- 2. Define the 'iteratorNext' action.
+  -- This action pops the next entry from the queue, opens the corresponding chunk file,
+  -- reads the block data, and extracts the requested component.
+  let next =
+        atomically (readTVar varEntries) >>= \case
+          [] -> return IteratorExhausted
+          ((chunk, WithBlockSize size entry) : rest) -> do
+            atomically $ writeTVar varEntries rest
+            -- We open the file for every block. This is inefficient but safe.
+            -- Optimization: Keep the file handle open until the chunk changes.
+            res <- withFile hasFS (fsPathChunkFile chunk) ReadMode $ \hnd ->
+              extractBlockComponent
+                hasFS
+                chunkInfo
+                chunk
+                codecConfig
+                checkIntegrity
+                hnd
+                (WithBlockSize size entry)
+                component
+            return $ IteratorResult res
+
+      -- 3. Define the 'iteratorHasNext' action.
+      -- Peeks at the next entry in the queue to return its Point.
+      hasNext =
+        readTVar varEntries >>= \case
+          [] -> return Nothing
+          ((_, WithBlockSize _ entry) : _) ->
+            return $ Just (tipToRealPoint chunkInfo entry)
+
+      -- 4. Define the 'iteratorClose' action.
+      -- Since we don't keep persistent file handles (we open/close per block),
+      -- there is nothing to clean up here.
+      close = return ()
+
+  return Iterator{iteratorNext = next, iteratorHasNext = hasNext, iteratorClose = close}
+
+-- | Helper to convert an Index 'Entry' (which stores hash and slot/epoch)
+-- into a 'RealPoint' (which uses SlotNo).
+tipToRealPoint :: ChunkInfo -> Entry blk -> RealPoint blk
+tipToRealPoint ci Secondary.Entry{blockOrEBB, headerHash} =
+  RealPoint (ChunkLayout.slotNoOfBlockOrEBB ci blockOrEBB) headerHash

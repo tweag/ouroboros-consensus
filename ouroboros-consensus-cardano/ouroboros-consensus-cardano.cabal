@@ -539,7 +539,6 @@ library unstable-cardano-tools
     Cardano.Tools.GitRev
     Cardano.Tools.Headers
     Cardano.Tools.ImmDBServer.Diffusion
-    Cardano.Tools.ImmDBServer.LightweightIterator
     Cardano.Tools.ImmDBServer.MiniProtocols
     Cardano.Tools.ImmDBServer.OnDemand
     Cardano.Tools.ImmDBServer.RemoteStorage
