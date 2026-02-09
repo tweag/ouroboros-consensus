@@ -131,14 +131,12 @@ decorateImmutableDB cfg@OnDemandConfig{odcChunkInfo} db = do
   stateVar <- newTVarIO (OnDemandState Set.empty [])
   pure $
     db
-      { getTip_ = do
+      { getTip_ =
           -- Return a fake tip far in the future to allow streamAfterPoint to proceed.
           -- ChainSync uses the tip to decide whether to stream blocks.
-          let dummyHash = fromRawHash (Proxy @blk) (LBS.toStrict (LBS.replicate (fromIntegral (hashSize (Proxy @blk))) 0))
-              fakeTip = NotOrigin $ Tip maxBound IsNotEBB maxBound dummyHash
-          trace ("DEBUG: getTip_ (Fake) called, returning: " ++ show fakeTip) (return fakeTip)
+          let dummyHash = fromRawHash (Proxy @blk) (LBS.toStrict (LBS.replicate (fromIntegral (hashSize (Proxy @blk))) 0)) in
+          return . NotOrigin $ Tip maxBound IsNotEBB maxBound dummyHash
       , stream_ = \registry component from to -> do
-          liftIO $ putStrLn "DEBUG: stream_ called"
           let requestedChunks = getChunksInRange odcChunkInfo from to
 
           -- Check if ImmutableDB already has this range
@@ -149,13 +147,8 @@ decorateImmutableDB cfg@OnDemandConfig{odcChunkInfo} db = do
 
           -- Logic: If we are syncing beyond the current local tip, use Lazy On-Demand Iterator
           if tipPoint >= toPoint
-            then do
-              liftIO $ putStrLn "DEBUG: Range is local, delegating to original ImmutableDB"
-              stream_ db registry component from to
-            else do
-              liftIO $
-                putStrLn $
-                  "DEBUG: Range is remote, creating Lazy On-Demand Iterator for chunks: " ++ show requestedChunks
+            then stream_ db registry component from to
+            else
               Right
                 <$> mkOnDemandIterator
                   cfg
