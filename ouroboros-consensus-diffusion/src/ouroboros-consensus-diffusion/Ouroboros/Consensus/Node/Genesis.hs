@@ -204,7 +204,7 @@ setGetLoEFragment ::
   -> STM m GSM.GsmState
   -> STM m (Maybe (AnchoredFragment (HeaderWithTime blk)))
      -- ^ The Genesis LoE fragment.
-  -> STM m (AnchoredFragment (HeaderWithTime blk))
+  -> STM m (Maybe (AnchoredFragment (HeaderWithTime blk)))
      -- ^ The LoE fragment.
   -> StrictTVar m (ChainDB.GetLoEFragment m blk)
   -> m ()
@@ -214,8 +214,10 @@ setGetLoEFragment readLeashingState readGsmState readGenesisLoEFragment readLoEF
     getLoEFragment :: ChainDB.GetLoEFragment m blk
     getLoEFragment = atomically $ do
       leashingState <- readLeashingState
-      if not $ Map.null leashingState then do
-        ChainDB.LoEEnabled <$> readLoEFragment
+      if not $ Map.null leashingState then
+        readLoEFragment >>= \case
+          Just loeFrag -> pure $ ChainDB.LoEEnabled loeFrag
+          Nothing -> pure ChainDB.LoEDisabled
       else 
         readGenesisLoEFragment >>= \case
           Just glf -> do

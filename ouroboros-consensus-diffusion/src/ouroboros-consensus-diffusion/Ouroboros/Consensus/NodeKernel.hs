@@ -303,7 +303,7 @@ initNodeKernel args@NodeKernelArgs { registry, cfg, tracers
 
     varLeashingState <- newTVarIO $ mempty 
     varGenesisLoEFragment <- newTVarIO Nothing 
-    varLoEFragment <- newTVarIO $ AF.Empty AF.AnchorGenesis
+    varLoEFragment <- newTVarIO $ Nothing
 
     setGetLoEFragment
       (readTVar varLeashingState)

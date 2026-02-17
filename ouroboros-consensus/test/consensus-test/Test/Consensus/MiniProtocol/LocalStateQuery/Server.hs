@@ -133,17 +133,17 @@ checkOutcome ::
   -> Chain TestBlock
   -> [(Target (Point TestBlock), Bool, Either AcquireFailure (Point TestBlock))]
   -> Property
-checkOutcome k chain = conjoin . map (\(tgt, _leashed, er) -> (uncurry checkResult) (tgt, er))
+checkOutcome k chain = conjoin . map (\(tgt, leashed, er) -> (uncurry checkResult) ((tgt, leashed), er))
   where
     immutableSlot :: WithOrigin SlotNo
     immutableSlot = Chain.headSlot $
       Chain.drop (fromIntegral $ unNonZero (maxRollbacks k)) chain
 
     checkResult
-      :: Target (Point TestBlock)
+      :: (Target (Point TestBlock), Bool)
       -> Either AcquireFailure (Point TestBlock)
       -> Property
-    checkResult (SpecificPoint pt) = \case
+    checkResult (SpecificPoint pt, leashed) = \case
       Right result
         -> tabulate "Acquired" ["Success"] $ result === pt
       Left AcquireFailurePointNotOnChain
@@ -163,12 +163,16 @@ checkOutcome k chain = conjoin . map (\(tgt, _leashed, er) -> (uncurry checkResu
         | otherwise
         -> tabulate "Acquired" ["AcquireFailurePointTooOld"] $ property True
       Left AcquireFailurePointStateIsBusy
-        -- NOTE: implement
-        -> tabulate "Acquired" ["AcquireFailurePointStateIsBusy"] $ property True
-    checkResult VolatileTip = \case
+        | leashed -> tabulate "Acquired" ["AcquireFailurePointStateIsBusy"] $ property True
+        | otherwise ->
+          counterexample
+          ("Leashing is off " <> show pt <>
+           " but got AcquireFailurePointStateIsBusy")
+          (property False)
+    checkResult (VolatileTip, _) = \case
       Right _result -> tabulate "Acquired" ["Success"] True
       Left  failure -> counterexample ("acquire tip point resulted in " ++ show failure) False
-    checkResult ImmutableTip = \case
+    checkResult (ImmutableTip, _) = \case
       Right _result -> tabulate "Acquired" ["Success"] True
       Left  failure -> counterexample ("acquire tip point resulted in " ++ show failure) False
 

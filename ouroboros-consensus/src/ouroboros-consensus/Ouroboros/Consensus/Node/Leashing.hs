@@ -55,7 +55,7 @@ leashingWatcher ::
   -> StrictTVar m (LeashingState blk) 
   -> StrictTVar m (Maybe (AnchoredFragment (HeaderWithTime blk)))
    -- ^ The Genesis LoE fragment.
-  -> StrictTVar m (AnchoredFragment (HeaderWithTime blk))
+  -> StrictTVar m (Maybe (AnchoredFragment (HeaderWithTime blk)))
    -- ^ The leashing LoE fragment. 
   -> Watcher m (LeashingWatcherState blk) (LeashingFingerprint blk)
 leashingWatcher tracer chainDb varLeashingState varGenesisLoEFrag varLoEFrag =
@@ -83,12 +83,12 @@ leashingWatcher tracer chainDb varLeashingState varGenesisLoEFrag varLoEFrag =
         let
           leashingCandidates = Map.toList leashingState
           prefix = maybe curChain id genesisLoEFrag
-          leashingLoE = fst $ sharedCandidatePrefix prefix leashingCandidates 
+          leashingLoE = if null leashingCandidates then genesisLoEFrag else Just $ fst $ sharedCandidatePrefix prefix leashingCandidates 
 
         oldLoEFrag <- atomically $ swapTVar varLoEFrag leashingLoE 
         -- The chain selection only depends on the LoE tip, so there
         -- is no point in retriggering it if the LoE tip hasn't changed.
-        when (AF.headHash oldLoEFrag /= AF.headHash leashingLoE) $
+        when ((AF.headHash <$> oldLoEFrag) /= (AF.headHash <$> leashingLoE)) $
           void $ ChainDB.triggerChainSelectionAsync chainDb
 
         traceWith tracer $ TraceLeashingDebug "updated"

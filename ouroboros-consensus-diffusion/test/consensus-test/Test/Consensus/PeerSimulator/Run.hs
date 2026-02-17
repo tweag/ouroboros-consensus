@@ -423,8 +423,8 @@ startNode schedulerConfig genesisTest interval = do
     fetchClientRegistry
     handles
 
-  varGenesisLoE <- newTVarIO Nothing -- AF.Empty AF.AnchorGenesis
-  for_ lrLoEVar $ \ _var -> do
+  varGenesisLoE <- newTVarIO Nothing
+  for_ lrLoEVar $ \ var -> do
       forkLinkedWatcher lrRegistry "LoE updater background" $
         gddWatcher
           lrConfig
@@ -438,7 +438,6 @@ startNode schedulerConfig genesisTest interval = do
           (cschcMap handles)
           varGenesisLoE
 
-  for_ lrLoEVar $ \ var -> do
       forkLinkedWatcher lrRegistry "LoE leashing updater background" $
         Leashing.leashingWatcher 
           nullTracer
