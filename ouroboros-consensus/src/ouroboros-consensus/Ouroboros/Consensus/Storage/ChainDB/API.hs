@@ -393,7 +393,7 @@ data ChainDB m blk = ChainDB {
       -- in the tables.
     , getStatistics      :: m (Maybe Statistics)
 
-    , getLeashingPointVar   :: !(StrictTVar m (Maybe (Point blk)))
+    , getLeashingPointVar   :: !(StrictTVar m (Maybe (LeashID, Point blk)))
 
        -- | Close the ChainDB
       --

@@ -47,7 +47,7 @@ import           Ouroboros.Consensus.Storage.LedgerDB
 import qualified Ouroboros.Consensus.Storage.LedgerDB as LedgerDB
 import           Ouroboros.Consensus.Storage.LedgerDB.Snapshots
 import           Ouroboros.Consensus.Storage.LedgerDB.V1.Args
-import           Ouroboros.Consensus.Util.IOLike 
+import           Ouroboros.Consensus.Util.IOLike
 import           Ouroboros.Network.Mock.Chain (Chain (..))
 import qualified Ouroboros.Network.Mock.Chain as Chain
 import           Ouroboros.Network.Protocol.LocalStateQuery.Client
@@ -55,7 +55,7 @@ import           Ouroboros.Network.Protocol.LocalStateQuery.Examples
                      (localStateQueryClient)
 import           Ouroboros.Network.Protocol.LocalStateQuery.Server
 import           Ouroboros.Network.Protocol.LocalStateQuery.Type
-                     (AcquireFailure (..), State (..), Target (..))
+                     (AcquireFailure (..), State (..), Target (..), LeashID)
 import           System.FS.API (SomeHasFS (..))
 import qualified System.FS.Sim.MockFS as MockFS
 import           System.FS.Sim.STM
@@ -103,7 +103,7 @@ prop_localStateQueryServer k bt p (Positive (Small n)) = checkOutcome k chain ac
       ++ (SpecificPoint . blockPoint <$> treeToBlocks bt)
 
 
-    actualOutcome :: [(Target (Point TestBlock), Bool, Either AcquireFailure (Point TestBlock))]
+    actualOutcome :: [(Target (Point TestBlock), Maybe LeashID, Either AcquireFailure (Point TestBlock))]
     actualOutcome = runSimOrThrow $ withRegistry $ \rr ->do
       let client = mkClient points
       server <- mkServer rr k chain
@@ -130,7 +130,7 @@ prop_localStateQueryServer k bt p (Positive (Small n)) = checkOutcome k chain ac
 checkOutcome ::
      SecurityParam
   -> Chain TestBlock
-  -> [(Target (Point TestBlock), Bool, Either AcquireFailure (Point TestBlock))]
+  -> [(Target (Point TestBlock), Maybe LeashID, Either AcquireFailure (Point TestBlock))]
   -> Property
 checkOutcome k chain = conjoin . map (\(tgt, _leashed, er) -> (uncurry checkResult) (tgt, er))
   where
@@ -179,8 +179,8 @@ mkClient ::
        (Point TestBlock)
        (Query TestBlock)
        m
-       [(Target (Point TestBlock), Bool, Either AcquireFailure (Point TestBlock))]
-mkClient points = localStateQueryClient [(pt, False, BlockQuery QueryLedgerTip) | pt <- points]
+       [(Target (Point TestBlock), Maybe LeashID, Either AcquireFailure (Point TestBlock))]
+mkClient points = localStateQueryClient [(pt, Nothing, BlockQuery QueryLedgerTip) | pt <- points]
 
 mkServer ::
      IOLike m

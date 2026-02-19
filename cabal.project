@@ -68,7 +68,7 @@ if impl (ghc >= 9.12)
 source-repository-package
     type: git
     location: https://github.com/tweag/ouroboros-network
-    tag: 8aa240eef5673d4f397f2037fa95b6fec250f89b
-    --sha256: sha256-rBWeRG83zu67KJGl+eYxB1tZ7GWyjeKaegVnk+YUcCE=
+    tag: 63601d2bd9fa447c1f21efa1a2466e131945cf6e
+    --sha256: sha256-FC/CI67Jk4GNgPPyrWCWl5trCxeon2RSHzhHRZHluak=
     subdir:
       ouroboros-network-protocols
