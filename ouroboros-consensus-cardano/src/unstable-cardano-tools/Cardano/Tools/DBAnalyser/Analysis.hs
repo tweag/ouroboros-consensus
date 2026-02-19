@@ -934,10 +934,10 @@ benchmarkLedgerOps mOutfile ledgerAppMode AnalysisEnv{db, registry, startFrom, c
     -- 'time' takes care of forcing the evaluation of its argument's result.
     (ldgrView, tForecast) <- time $ forecast slot prevLedgerState
     (tkHdrSt, tHdrTick) <- time $ tickTheHeaderState slot prevLedgerState ldgrView
-    (!newHeader, tHdrApp) <- time $ applyTheHeader ldgrView tkHdrSt
+    ((!newHeader, !couldn'tApplyHeader), tHdrApp) <- time $ applyTheHeader ldgrView tkHdrSt
     (tkLdgrSt, tBlkTick) <- time $ tickTheLedgerState slot prevLedgerState
     let !tkLdgrSt' = applyDiffs (prevLedgerState `withLedgerTables` tables) tkLdgrSt
-    (!newLedger, tBlkApp) <- time $ applyTheBlock tkLdgrSt'
+    ((!newLedger, !couldn'tApplyBlk), tBlkApp) <- time $ applyTheBlock tkLdgrSt'
 
     currentRtsStats <- GC.getRTSStats
     let
@@ -957,8 +957,10 @@ benchmarkLedgerOps mOutfile ledgerAppMode AnalysisEnv{db, registry, startFrom, c
           , DP.mut_forecast = tForecast `div` 1000
           , DP.mut_headerTick = tHdrTick `div` 1000
           , DP.mut_headerApply = tHdrApp `div` 1000
+          , DP.mut_couldn'tApplyHeader = couldn'tApplyHeader
           , DP.mut_blockTick = tBlkTick `div` 1000
           , DP.mut_blockApply = tBlkApp `div` 1000
+          , DP.mut_couldn'tApplyBlock = couldn'tApplyBlk
           , DP.blockByteSize = getSizeInBytes sz
           , DP.blockStats = DP.BlockStats $ HasAnalysis.blockStats blk
           }
@@ -1001,14 +1003,14 @@ benchmarkLedgerOps mOutfile ledgerAppMode AnalysisEnv{db, registry, startFrom, c
     applyTheHeader ::
       LedgerView (BlockProtocol blk) ->
       Ticked (HeaderState blk) ->
-      IO (HeaderState blk)
+      IO (HeaderState blk, Bool)
     applyTheHeader ledgerView tickedHeaderState = case ledgerAppMode of
       LedgerApply ->
         case runExcept $ validateHeader cfg ledgerView (getHeader blk) tickedHeaderState of
-          Left err -> fail $ "benchmark doesn't support invalid headers: " <> show rp <> " " <> show err
-          Right x -> pure x
+          Left _err -> pure $! (revalidateHeader cfg ledgerView (getHeader blk) tickedHeaderState, True)
+          Right x -> pure (x, False)
       LedgerReapply ->
-        pure $! revalidateHeader cfg ledgerView (getHeader blk) tickedHeaderState
+        pure $! (revalidateHeader cfg ledgerView (getHeader blk) tickedHeaderState, False)
 
     tickTheLedgerState ::
       SlotNo ->
@@ -1019,14 +1021,14 @@ benchmarkLedgerOps mOutfile ledgerAppMode AnalysisEnv{db, registry, startFrom, c
 
     applyTheBlock ::
       TickedLedgerState blk ValuesMK ->
-      IO (LedgerState blk DiffMK)
+      IO (LedgerState blk DiffMK, Bool)
     applyTheBlock tickedLedgerSt = case ledgerAppMode of
       LedgerApply ->
         case runExcept (lrResult <$> applyBlockLedgerResult OmitLedgerEvents lcfg blk tickedLedgerSt) of
-          Left err -> fail $ "benchmark doesn't support invalid blocks: " <> show rp <> " " <> show err
-          Right x -> pure x
+          Left _err -> pure $! (lrResult $ reapplyBlockLedgerResult OmitLedgerEvents lcfg blk tickedLedgerSt, True)
+          Right x -> pure (x, False)
       LedgerReapply ->
-        pure $! lrResult $ reapplyBlockLedgerResult OmitLedgerEvents lcfg blk tickedLedgerSt
+        pure $! (lrResult $ reapplyBlockLedgerResult OmitLedgerEvents lcfg blk tickedLedgerSt, False)
 
 withFile :: Maybe FilePath -> (IO.Handle -> IO r) -> IO r
 withFile (Just outfile) = IO.withFile outfile IO.WriteMode

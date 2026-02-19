@@ -53,8 +53,10 @@ data SlotDataPoint
   -- forecast.
   , mut_headerTick :: !Int64
   , mut_headerApply :: !Int64
+  , mut_couldn'tApplyHeader :: !Bool
   , mut_blockTick :: !Int64
   , mut_blockApply :: !Int64
+  , mut_couldn'tApplyBlock :: !Bool
   , blockByteSize :: !Word32
   , blockStats :: !BlockStats
   -- ^ Free-form information about the block.

@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TypeApplications #-}
 
 module Cardano.Tools.DBAnalyser.Analysis.BenchmarkLedgerOps.FileWriting
   ( -- * Output format
@@ -113,8 +114,10 @@ dataPointCsvBuilder =
   , ("mut_forecast", decimal . DP.mut_forecast)
   , ("mut_headerTick", decimal . DP.mut_headerTick)
   , ("mut_headerApply", decimal . DP.mut_headerApply)
+  , ("mut_ErrorApplyingHeader", Builder.string . show @Bool . DP.mut_couldn'tApplyHeader)
   , ("mut_blockTick", decimal . DP.mut_blockTick)
   , ("mut_blockApply", decimal . DP.mut_blockApply)
+  , ("mut_ErrorApplyingBlock", Builder.string . show @Bool. DP.mut_couldn'tApplyBlock)
   , ("blockBytes", decimal . DP.blockByteSize)
   , ("...era-specific stats", Builder.intercalate csvSeparator . DP.unBlockStats . DP.blockStats)
   ]
