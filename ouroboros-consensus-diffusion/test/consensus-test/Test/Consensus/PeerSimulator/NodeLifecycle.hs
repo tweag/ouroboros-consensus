@@ -91,6 +91,7 @@ data LiveResources blk m = LiveResources
   -- The rest is reset when the chain DB is recreated.
   , lrLoEVar :: LoE (StrictTVar m (AnchoredFragment (HeaderWithTime blk)))
   -- ^ The LoE fragment must be reset for each live interval.
+  , lrLeashingStateVar :: StrictTVar m (LeashingState blk)
   }
 
 data LiveInterval blk m = LiveInterval

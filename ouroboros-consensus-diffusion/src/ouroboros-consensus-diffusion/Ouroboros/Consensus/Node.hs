@@ -71,7 +71,7 @@ import qualified Codec.CBOR.Encoding as CBOR
 import Codec.Serialise (DeserialiseFailure)
 import qualified Control.Concurrent.Class.MonadSTM.Strict as StrictSTM
 import Control.DeepSeq (NFData)
-import Control.Monad (forM_, when)
+import Control.Monad (forM_, when, join)
 import Control.Monad.Class.MonadTime.SI (MonadTime)
 import Control.Monad.Class.MonadTimer.SI (MonadTimer)
 import Control.ResourceRegistry
@@ -504,8 +504,12 @@ runWith RunNodeArgs{..} encAddrNtN decAddrNtN LowLevelRunNodeArgs{..} =
                   systemStart
                   (blockchainTimeTracer rnTraceConsensus)
 
-          (genesisArgs, setLoEinChainDbArgs) <-
-            mkGenesisNodeKernelArgs llrnGenesisConfig
+          genesisArgs <- mkGenesisNodeKernelArgs llrnGenesisConfig
+          varGetLoEFragment <- newTVarIO $ pure ChainDB.LoEDisabled
+          let setLoEinChainDbArgs argsCfg = argsCfg
+                    { ChainDB.cdbsArgs =
+                      (ChainDB.cdbsArgs argsCfg) { ChainDB.cdbsLoE = join $ readTVarIO varGetLoEFragment }
+                    } 
 
           let maybeValidateAll
                 | lastShutDownWasClean =
@@ -585,6 +589,7 @@ runWith RunNodeArgs{..} encAddrNtN decAddrNtN LowLevelRunNodeArgs{..} =
                   genesisArgs
                   DiffusionPipeliningOn
                   rnMempoolTimeoutConfig
+                  varGetLoEFragment
             nodeKernel <- initNodeKernel nodeKernelArgs
             rnNodeKernelHook registry nodeKernel
             churnModeVar <- StrictSTM.newTVarIO ChurnModeNormal
@@ -858,9 +863,10 @@ mkNodeKernelArgs ::
   GSM.MarkerFileView m ->
   STM m UseBootstrapPeers ->
   StrictSTM.StrictTVar m (PublicPeerSelectionState addrNTN) ->
-  GenesisNodeKernelArgs m blk ->
+  GenesisNodeKernelArgs ->
   DiffusionPipeliningSupport ->
   Maybe Mempool.MempoolTimeoutConfig ->
+  StrictTVar m (ChainDB.GetLoEFragment m blk) ->
   m (NodeKernelArgs m addrNTN (ConnectionId addrNTC) blk)
 mkNodeKernelArgs
   registry
@@ -880,7 +886,8 @@ mkNodeKernelArgs
   publicPeerSelectionStateVar
   genesisArgs
   getDiffusionPipeliningSupport
-  mempoolTimeoutConfig =
+  mempoolTimeoutConfig
+  varGetLoEFragment =
     do
       let (kaRng, psRng) = split rng
       return
@@ -911,6 +918,7 @@ mkNodeKernelArgs
           , publicPeerSelectionStateVar
           , genesisArgs
           , getDiffusionPipeliningSupport
+          , varGetLoEFragment
           }
 
 -- | We allow the user running the node to customise the 'NodeKernelArgs'

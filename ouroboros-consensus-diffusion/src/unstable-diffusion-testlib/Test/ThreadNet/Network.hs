@@ -1043,6 +1043,7 @@ runThreadNetwork
           (gsmRng, rng'') = split rng'
           (psRng, chainSyncRng) = split rng''
       publicPeerSelectionStateVar <- makePublicPeerSelectionStateVar
+      varGetLoEFragment <- uncheckedNewTVarM $ pure ChainDB.LoEDisabled 
       let nodeKernelArgs =
             NodeKernelArgs
               { tracers
@@ -1095,9 +1096,10 @@ runThreadNetwork
               , publicPeerSelectionStateVar
               , genesisArgs =
                   GenesisNodeKernelArgs
-                    { gnkaLoEAndGDDArgs = LoEAndGDDDisabled
+                    { gnkaGDDArgs = GDDDisabled
                     }
               , getDiffusionPipeliningSupport = DiffusionPipeliningOn
+              , varGetLoEFragment
               }
 
       nodeKernel <- initNodeKernel nodeKernelArgs

@@ -30,23 +30,20 @@ module Ouroboros.Consensus.Genesis.Governor
   , TraceGDDEvent (..)
   , densityDisconnect
   , gddWatcher
-  , sharedCandidatePrefix
   ) where
 
 import Cardano.Ledger.BaseTypes (unNonZero)
-import Control.Monad (guard, void, when)
+import Control.Monad (guard, void)
 import Control.Tracer (Tracer, traceWith)
 import Data.Bifunctor (second)
 import Data.Containers.ListUtils (nubOrd)
 import Data.Foldable (for_, toList)
-import Data.Functor.Compose (Compose (..))
 import Data.List.NonEmpty (NonEmpty)
 import qualified Data.List.NonEmpty as NE
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Maybe (maybeToList)
 import Data.Maybe.Strict (StrictMaybe)
-import Data.Typeable (Typeable)
 import Data.Word (Word64)
 import Ouroboros.Consensus.Block
 import Ouroboros.Consensus.Config
@@ -80,11 +77,12 @@ import Ouroboros.Consensus.Node.GsmState
 import Ouroboros.Consensus.Storage.ChainDB.API (ChainDB)
 import qualified Ouroboros.Consensus.Storage.ChainDB.API as ChainDB
 import Ouroboros.Consensus.Util (eitherToMaybe, whenJust)
-import Ouroboros.Consensus.Util.AnchoredFragment (stripCommonPrefix)
+import Ouroboros.Consensus.Util.AnchoredFragment (sharedCandidatePrefix)
 import Ouroboros.Consensus.Util.IOLike
 import Ouroboros.Consensus.Util.STM (Watcher (..))
 import Ouroboros.Network.AnchoredFragment (AnchoredFragment)
 import qualified Ouroboros.Network.AnchoredFragment as AF
+
 
 -- | A 'Watcher' that evaluates the GDD rule whenever necessary, writing the LoE
 -- fragment to @varLoEFrag@, and then triggering ChainSel to reprocess all
@@ -114,7 +112,7 @@ gddWatcher ::
   STM m (Map peer (ChainSyncClientHandle m blk)) ->
   -- | The LoE fragment. It starts at a (recent) immutable tip and ends at
   -- the common intersection of the candidate fragments.
-  StrictTVar m (AnchoredFragment (HeaderWithTime blk)) ->
+  StrictTVar m (Maybe (AnchoredFragment (HeaderWithTime blk))) ->
   Watcher
     m
     (GDDTrigger (GDDStateView m blk peer))
@@ -177,12 +175,7 @@ gddWatcher cfg tracer chainDb rateLimit getGsmState getHandles varLoEFrag =
     GDDSyncing stateView -> do
       t0 <- getMonotonicTime
       loeFrag <- evaluateGDD cfg tracer stateView
-      oldLoEFrag <- atomically $ swapTVar varLoEFrag loeFrag
-      -- The chain selection only depends on the LoE tip, so there
-      -- is no point in retriggering it if the LoE tip hasn't changed.
-      when (AF.headHash oldLoEFrag /= AF.headHash loeFrag) $
-        void $
-          ChainDB.triggerChainSelectionAsync chainDb
+      void $ atomically $ writeTVar varLoEFrag (Just loeFrag)
       tf <- getMonotonicTime
       -- We limit the rate at which GDD is evaluated, otherwise it would
       -- be called every time a new header is validated.
@@ -284,36 +277,6 @@ evaluateGDD cfg tracer stateView = do
       traceWith tracer $ TraceGDDDisconnected losingPeersNE
 
   pure loeFrag
-
--- | Compute the fragment @loeFrag@ between the immutable tip and the
--- earliest intersection between @curChain@ and any of the @candidates@.
---
--- The immutable tip is the anchor of @curChain@.
---
--- The function also yields the suffixes of the intersection of @loeFrag@ with
--- every candidate fragment.
-sharedCandidatePrefix ::
-  (GetHeader blk, Typeable blk) =>
-  AnchoredFragment (HeaderWithTime blk) ->
-  [(peer, AnchoredFragment (HeaderWithTime blk))] ->
-  (AnchoredFragment (HeaderWithTime blk), [(peer, AnchoredFragment (HeaderWithTime blk))])
-sharedCandidatePrefix curChain candidates =
-  second getCompose $
-    stripCommonPrefix (AF.castAnchor $ AF.anchor curChain) $
-      Compose immutableTipSuffixes
- where
-  immutableTip = AF.anchorPoint curChain
-
-  splitAfterImmutableTip (peer, frag) =
-    case AF.splitAfterPoint frag immutableTip of
-      -- When there is no intersection, we assume the candidate fragment is
-      -- empty and anchored at the immutable tip.
-      -- See Note [CSJ truncates the candidate fragments].
-      Nothing -> (peer, AF.takeOldest 0 curChain)
-      Just (_, suffix) -> (peer, suffix)
-
-  immutableTipSuffixes =
-    map splitAfterImmutableTip candidates
 
 -- Note [CSJ truncates the candidate fragments]
 -- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

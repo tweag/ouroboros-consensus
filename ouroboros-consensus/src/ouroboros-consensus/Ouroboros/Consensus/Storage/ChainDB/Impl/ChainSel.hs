@@ -9,6 +9,8 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
 
+{-# OPTIONS_GHC -Wno-unused-matches -Wno-unused-local-binds #-}
+
 -- | Operations involving chain selection: the initial chain selection and
 -- adding a block.
 module Ouroboros.Consensus.Storage.ChainDB.Impl.ChainSel

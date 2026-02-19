@@ -11,7 +11,7 @@ module Ouroboros.Consensus.Node.Genesis
   ( -- * 'GenesisConfig'
     GenesisConfig (..)
   , GenesisConfigFlags (..)
-  , LoEAndGDDConfig (..)
+  , GDDConfig (..)
   , defaultGenesisConfigFlags
   , disableGenesisConfig
   , enableGenesisConfigDefault
@@ -19,13 +19,13 @@ module Ouroboros.Consensus.Node.Genesis
 
     -- * NodeKernel helpers
   , GenesisNodeKernelArgs (..)
-  , LoEAndGDDNodeKernelArgs (..)
+  , GDDNodeKernelArgs (..)
   , mkGenesisNodeKernelArgs
   , setGetLoEFragment
   ) where
 
-import Control.Monad (join)
 import Data.Maybe (fromMaybe)
+import qualified Data.Map.Strict as Map
 import Data.Traversable (for)
 import Data.Typeable (Typeable)
 import GHC.Generics (Generic)
@@ -41,10 +41,7 @@ import Ouroboros.Consensus.MiniProtocol.ChainSync.Client.HistoricityCheck
   ( HistoricityCutoff (..)
   )
 import qualified Ouroboros.Consensus.Node.GsmState as GSM
-import Ouroboros.Consensus.Storage.ChainDB (ChainDbArgs)
 import qualified Ouroboros.Consensus.Storage.ChainDB as ChainDB
-import qualified Ouroboros.Consensus.Storage.ChainDB.Impl.Args as ChainDB
-import Ouroboros.Consensus.Util.Args
 import Ouroboros.Consensus.Util.IOLike
 import Ouroboros.Network.AnchoredFragment (AnchoredFragment)
 import qualified Ouroboros.Network.AnchoredFragment as AF
@@ -52,11 +49,11 @@ import Ouroboros.Network.BlockFetch
   ( GenesisBlockFetchConfiguration (..)
   )
 
--- | Whether to en-/disable the Limit on Eagerness and the Genesis Density
+-- | Whether to en-/disable the Genesis Density
 -- Disconnector.
-data LoEAndGDDConfig a
-  = LoEAndGDDEnabled !a
-  | LoEAndGDDDisabled
+data GDDConfig a =
+    GDDEnabled !a
+  | GDDDisabled
   deriving stock (Eq, Generic, Show, Functor, Foldable, Traversable)
 
 -- | Aggregating the various configs for Genesis-related subcomponents.
@@ -67,7 +64,7 @@ data GenesisConfig = GenesisConfig
   { gcBlockFetchConfig :: !GenesisBlockFetchConfiguration
   , gcChainSyncLoPBucketConfig :: !ChainSyncLoPBucketConfig
   , gcCSJConfig :: !CSJConfig
-  , gcLoEAndGDDConfig :: !(LoEAndGDDConfig LoEAndGDDParams)
+  , gcGDDConfig :: !(GDDConfig GDDParams)
   , gcHistoricityCutoff :: !(Maybe HistoricityCutoff)
   }
   deriving stock (Eq, Generic, Show)
@@ -75,7 +72,7 @@ data GenesisConfig = GenesisConfig
 -- | Genesis configuration flags and low-level args, as parsed from config file or CLI
 data GenesisConfigFlags = GenesisConfigFlags
   { gcfEnableCSJ :: Bool
-  , gcfEnableLoEAndGDD :: Bool
+  , gcfEnableGDD :: Bool
   , gcfEnableLoP :: Bool
   , gcfBlockFetchGracePeriod :: Maybe DiffTime
   , gcfBucketCapacity :: Maybe Integer
@@ -89,7 +86,7 @@ defaultGenesisConfigFlags :: GenesisConfigFlags
 defaultGenesisConfigFlags =
   GenesisConfigFlags
     { gcfEnableCSJ = True
-    , gcfEnableLoEAndGDD = True
+    , gcfEnableGDD = True
     , gcfEnableLoP = True
     , gcfBlockFetchGracePeriod = Nothing
     , gcfBucketCapacity = Nothing
@@ -115,7 +112,7 @@ mkGenesisConfig Nothing =
           }
     , gcChainSyncLoPBucketConfig = ChainSyncLoPBucketDisabled
     , gcCSJConfig = CSJDisabled
-    , gcLoEAndGDDConfig = LoEAndGDDDisabled
+    , gcGDDConfig = GDDDisabled
     , gcHistoricityCutoff = Nothing
     }
 mkGenesisConfig (Just cfg) =
@@ -141,10 +138,10 @@ mkGenesisConfig (Just cfg) =
                 { csjcJumpSize
                 }
           else CSJDisabled
-    , gcLoEAndGDDConfig =
-        if gcfEnableLoEAndGDD
-          then LoEAndGDDEnabled LoEAndGDDParams{lgpGDDRateLimit}
-          else LoEAndGDDDisabled
+    , gcGDDConfig =
+        if gcfEnableGDD
+          then GDDEnabled GDDParams{lgpGDDRateLimit}
+          else GDDDisabled
     , -- Duration in seconds of one Cardano mainnet Shelley stability window
       -- (3k/f slots times one second per slot) plus one extra hour as a
       -- safety margin.
@@ -154,7 +151,7 @@ mkGenesisConfig (Just cfg) =
   GenesisConfigFlags
     { gcfEnableLoP
     , gcfEnableCSJ
-    , gcfEnableLoEAndGDD
+    , gcfEnableGDD
     , gcfBlockFetchGracePeriod
     , gcfBucketCapacity
     , gcfBucketRate
@@ -189,7 +186,7 @@ mkGenesisConfig (Just cfg) =
   csjcJumpSize = fromMaybe defaultCSJJumpSize gcfCSJJumpSize
   lgpGDDRateLimit = fromMaybe defaultGDDRateLimit gcfGDDRateLimit
 
-newtype LoEAndGDDParams = LoEAndGDDParams
+newtype GDDParams = GDDParams
   { lgpGDDRateLimit :: DiffTime
   -- ^ How often to evaluate GDD. 0 means as soon as possible.
   -- Otherwise, no faster than once every T seconds, where T is the
@@ -198,81 +195,66 @@ newtype LoEAndGDDParams = LoEAndGDDParams
   deriving stock (Eq, Generic, Show)
 
 -- | Genesis-related arguments needed by the NodeKernel initialization logic.
-data GenesisNodeKernelArgs m blk = GenesisNodeKernelArgs
-  { gnkaLoEAndGDDArgs :: !(LoEAndGDDConfig (LoEAndGDDNodeKernelArgs m blk))
+data GenesisNodeKernelArgs = GenesisNodeKernelArgs
+  { gnkaGDDArgs :: !(GDDConfig GDDNodeKernelArgs)
   }
 
-data LoEAndGDDNodeKernelArgs m blk = LoEAndGDDNodeKernelArgs
-  { lgnkaLoEFragmentTVar :: !(StrictTVar m (ChainDB.GetLoEFragment m blk))
-  -- ^ A TVar containing an action that returns the 'ChainDB.GetLoEFragment'
-  -- action. We use this extra indirection to update this action after we
-  -- opened the ChainDB (which happens before we initialize the NodeKernel).
-  -- After that, this TVar will not be modified again.
-  , lgnkaGDDRateLimit :: DiffTime
+data GDDNodeKernelArgs = GDDNodeKernelArgs
+  { lgnkaGDDRateLimit :: DiffTime
   }
 
--- | Create the initial 'GenesisNodeKernelArgs" (with a temporary
--- 'ChainDB.GetLoEFragment' that will be replaced via 'setGetLoEFragment') and a
--- function to update the 'ChainDbArgs' accordingly.
+-- | Create the initial 'GenesisNodeKernelArgs" .
 mkGenesisNodeKernelArgs ::
-  forall m blk.
-  (IOLike m, GetHeader blk, Typeable blk) =>
+  forall m.
+  (IOLike m) =>
   GenesisConfig ->
-  m
-    ( GenesisNodeKernelArgs m blk
-    , Complete ChainDbArgs m blk -> Complete ChainDbArgs m blk
-    )
+  m GenesisNodeKernelArgs
 mkGenesisNodeKernelArgs gcfg = do
-  gnkaLoEAndGDDArgs <- for (gcLoEAndGDDConfig gcfg) $ \p -> do
-    loeFragmentTVar <-
-      newTVarIO $
-        pure $
-          -- Use the most conservative LoE fragment until 'setGetLoEFragment'
-          -- is called.
-          ChainDB.LoEEnabled $
-            AF.Empty AF.AnchorGenesis
+  gnkaGDDArgs <- for (gcGDDConfig gcfg) $ \p -> do
     pure
-      LoEAndGDDNodeKernelArgs
-        { lgnkaLoEFragmentTVar = loeFragmentTVar
-        , lgnkaGDDRateLimit = lgpGDDRateLimit p
+      GDDNodeKernelArgs
+        { lgnkaGDDRateLimit = lgpGDDRateLimit p
         }
-  let updateChainDbArgs = case gnkaLoEAndGDDArgs of
-        LoEAndGDDDisabled -> id
-        LoEAndGDDEnabled lgnkArgs -> \cfg ->
-          cfg
-            { ChainDB.cdbsArgs =
-                (ChainDB.cdbsArgs cfg){ChainDB.cdbsLoE = getLoEFragment}
-            }
-         where
-          getLoEFragment = join $ readTVarIO $ lgnkaLoEFragmentTVar lgnkArgs
-  pure (GenesisNodeKernelArgs{gnkaLoEAndGDDArgs}, updateChainDbArgs)
+  pure GenesisNodeKernelArgs{gnkaGDDArgs}
 
--- | Set 'gnkaGetLoEFragment' to the actual logic for determining the current
--- LoE fragment.
+-- | Set the actual logic for determining the current LoE fragment.
 setGetLoEFragment ::
-  forall m blk.
-  (IOLike m, GetHeader blk, Typeable blk) =>
-  STM m GSM.GsmState ->
-  -- | The LoE fragment.
-  STM m (AnchoredFragment (HeaderWithTime blk)) ->
-  StrictTVar m (ChainDB.GetLoEFragment m blk) ->
-  m ()
-setGetLoEFragment readGsmState readLoEFragment varGetLoEFragment =
-  atomically $ writeTVar varGetLoEFragment getLoEFragment
- where
-  getLoEFragment :: ChainDB.GetLoEFragment m blk
-  getLoEFragment =
-    atomically $
-      readGsmState >>= \case
-        -- When the Honest Availability Assumption cannot currently be
-        -- guaranteed, we should not select any blocks that would cause our
-        -- immutable tip to advance, so we return the most conservative LoE
-        -- fragment.
-        GSM.PreSyncing ->
-          pure $ ChainDB.LoEEnabled $ AF.Empty AF.AnchorGenesis
-        -- When we are syncing, return the current LoE fragment.
-        GSM.Syncing ->
-          ChainDB.LoEEnabled <$> readLoEFragment
-        -- When we are caught up, the LoE is disabled.
-        GSM.CaughtUp ->
-          pure ChainDB.LoEDisabled
+     forall m blk. (IOLike m, GetHeader blk, Typeable blk)
+  => STM m (ChainDB.LeashingState blk)
+  -> STM m GSM.GsmState
+  -> STM m (Maybe (AnchoredFragment (HeaderWithTime blk)))
+     -- ^ The Genesis LoE fragment.
+  -> STM m (AnchoredFragment (HeaderWithTime blk))
+     -- ^ The LoE fragment.
+  -> StrictTVar m (ChainDB.GetLoEFragment m blk)
+  -> m ()
+setGetLoEFragment readLeashingState readGsmState readGenesisLoEFragment readLoEFragment varGetLoEFragment =
+    atomically $ writeTVar varGetLoEFragment getLoEFragment
+  where
+    getLoEFragment :: ChainDB.GetLoEFragment m blk
+    getLoEFragment = atomically $ do
+      leashingState <- readLeashingState
+      if not $ Map.null leashingState then
+        ChainDB.LoEEnabled <$> readLoEFragment
+--        readLoEFragment >>= \case
+--          Just loeFrag -> pure $ ChainDB.LoEEnabled loeFrag
+--          Nothing -> pure ChainDB.LoEDisabled
+      else 
+        readGenesisLoEFragment >>= \case
+          Just glf -> do
+            -- leashing is disabled, run old behavior
+            readGsmState >>= \case
+              -- When the Honest Availability Assumption cannot currently be
+              -- guaranteed, we should not select any blocks that would cause our
+              -- immutable tip to advance, so we return the most conservative LoE
+              -- fragment.
+              GSM.PreSyncing ->
+                pure $ ChainDB.LoEEnabled $ AF.Empty AF.AnchorGenesis
+              -- When we are syncing, return the current LoE fragment.
+              GSM.Syncing    ->
+                pure $ ChainDB.LoEEnabled glf 
+              -- When we are caught up, the LoE is disabled.
+              GSM.CaughtUp   ->
+                pure ChainDB.LoEDisabled
+          Nothing -> 
+            pure ChainDB.LoEDisabled

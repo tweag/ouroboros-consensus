@@ -42,6 +42,7 @@ import Ouroboros.Consensus.MiniProtocol.ChainSync.Client
 import qualified Ouroboros.Consensus.MiniProtocol.ChainSync.Client as CSClient
 import qualified Ouroboros.Consensus.Node.GsmState as GSM
 import Ouroboros.Consensus.Storage.ChainDB.API
+import qualified Ouroboros.Consensus.Node.Leashing as Leashing 
 import qualified Ouroboros.Consensus.Storage.ChainDB.API as ChainDB
 import Ouroboros.Consensus.Util.Condense (Condense (..))
 import Ouroboros.Consensus.Util.IOLike
@@ -454,8 +455,9 @@ startNode schedulerConfig genesisTest interval = do
     fetchClientRegistry
     handles
 
+  varGenesisLoE <- newTVarIO Nothing
   for_ lrLoEVar $ \var -> do
-    forkLinkedWatcher lrRegistry "LoE updater background" $
+    _ <- forkLinkedWatcher lrRegistry "LoE updater background" $
       gddWatcher
         lrConfig
         (mkGDDTracerTestBlock lrTracer)
@@ -466,13 +468,21 @@ startNode schedulerConfig genesisTest interval = do
         -- Test.Consensus.PeerSimulator.BlockFetch
         (pure GSM.Syncing) -- TODO actually run GSM
         (cschcMap handles)
+        varGenesisLoE
+
+    forkLinkedWatcher lrRegistry "LoE leashing updater background" $
+      Leashing.leashingWatcher 
+        nullTracer
+        lnChainDb
+        lrLeashingStateVar
+        varGenesisLoE
         var
 
   void $
     forkLinkedWatcher lrRegistry "CSJ invariants watcher" $
       CSJInvariants.watcher (cschcMap handles)
  where
-  LiveResources{lrRegistry, lrTracer, lrConfig, lrPeerSim, lrLoEVar} = resources
+  LiveResources{lrRegistry, lrTracer, lrConfig, lrPeerSim, lrLoEVar, lrLeashingStateVar} = resources
 
   LiveInterval
     { liResources = resources
@@ -530,6 +540,7 @@ nodeLifecycle ::
 nodeLifecycle schedulerConfig genesisTest lrTracer lrRegistry lrPeerSim = do
   lrCdb <- emptyNodeDBs
   lrLoEVar <- mkLoEVar schedulerConfig
+  lrLeashingStateVar <- newTVarIO Map.empty 
   let
     resources =
       LiveResources
@@ -540,6 +551,7 @@ nodeLifecycle schedulerConfig genesisTest lrTracer lrRegistry lrPeerSim = do
         , lrPeerSim
         , lrCdb
         , lrLoEVar
+        , lrLeashingStateVar
         }
   pure
     NodeLifecycle
