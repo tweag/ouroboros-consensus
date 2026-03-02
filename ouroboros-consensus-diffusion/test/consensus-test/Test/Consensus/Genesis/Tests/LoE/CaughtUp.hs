@@ -92,6 +92,8 @@ run :: forall m. (IOLike m, SI.MonadTimer m) => m Property
 run = withRegistry \registry -> do
   -- Setup
   varGsmState <- newTVarIO PreSyncing
+  varLeashingState <- newTVarIO mempty 
+  varGenesisLoEFragment <- newTVarIO Nothing
   varLoEFragment <- newTVarIO $ AF.Empty AF.AnchorGenesis
   varGetLoEFragment <-
     newTVarIO $
@@ -99,7 +101,9 @@ run = withRegistry \registry -> do
         ChainDB.LoEEnabled $
           AF.Empty AF.AnchorGenesis
   setGetLoEFragment
+    (readTVar varLeashingState)
     (readTVar varGsmState)
+    (readTVar varGenesisLoEFragment)
     (readTVar varLoEFragment)
     varGetLoEFragment
 
@@ -121,7 +125,7 @@ run = withRegistry \registry -> do
     chainSyncHandles
     chainDB
     (readTVar varGsmState)
-    varLoEFragment
+    varGenesisLoEFragment 
 
   -- Make sure that the ChainDB background thread, the GSM and the GDD are
   -- running (any positive amount should do).
@@ -312,7 +316,7 @@ forkGDD ::
   ChainSyncClientHandleCollection CoreNodeId m TestBlock ->
   ChainDB m TestBlock ->
   STM m GsmState ->
-  StrictTVar m (AnchoredFragment (HeaderWithTime TestBlock)) ->
+  StrictTVar m (Maybe (AnchoredFragment (HeaderWithTime TestBlock))) ->
   m ()
 forkGDD registry varChainSyncHandles chainDB getGsmState varLoEFrag =
   void $
