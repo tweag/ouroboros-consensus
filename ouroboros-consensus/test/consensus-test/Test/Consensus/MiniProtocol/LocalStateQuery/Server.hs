@@ -147,10 +147,10 @@ checkOutcome k chain = conjoin . map (\(tgt, leashId, er) -> (uncurry checkResul
       Chain.drop (fromIntegral $ unNonZero (maxRollbacks k)) chain
 
   checkResult ::
-    (Target (Point TestBlock), LeashID) ->
+    (Target (Point TestBlock), Maybe LeashID) ->
     Either AcquireFailure (Point TestBlock) ->
     Property
-  checkResult (SpecificPoint pt, _leashId) = \case
+  checkResult (SpecificPoint pt, mLeashId) = \case
     Right result ->
       tabulate "Acquired" ["Success"] $ result === pt
     Left AcquireFailurePointNotOnChain
@@ -176,7 +176,7 @@ checkOutcome k chain = conjoin . map (\(tgt, leashId, er) -> (uncurry checkResul
       | otherwise ->
           tabulate "Acquired" ["AcquireFailurePointTooOld"] $ property True
     Left AcquireFailurePointStateIsBusy
-      | leashId /= Nothing -> tabulate "Acquired" ["AcquireFailurePointStateIsBusy"] $ property True
+      | mLeashId /= Nothing -> tabulate "Acquired" ["AcquireFailurePointStateIsBusy"] $ property True
       | otherwise ->
         counterexample
         ("Leashing is off " <> show pt <>

@@ -89,7 +89,7 @@ import Ouroboros.Consensus.Node.Genesis
   , setGetLoEFragment
   )
 import Ouroboros.Consensus.Node.Run
-import Ouroboros.Consensus.Node.Leashing (leashingWatcher)
+import Ouroboros.Consensus.Node.LsqLeashing (lsqLeashingWatcher)
 import Ouroboros.Consensus.Node.Tracers
 import Ouroboros.Consensus.Protocol.Abstract
 import Ouroboros.Consensus.Storage.ChainDB.API
@@ -189,7 +189,7 @@ data NodeKernel m addrNTN addrNTC blk = NodeKernel
   , getDiffusionPipeliningSupport ::
       DiffusionPipeliningSupport
   , getBlockchainTime :: BlockchainTime m
-  , getLeashingStateVar :: StrictTVar m (ChainDB.LeashingState blk)
+  , getLsqLeashingStateVar :: StrictTVar m (ChainDB.LsqLeashingState blk)
   }
 
 -- | Arguments required when initializing a node
@@ -324,23 +324,23 @@ initNodeKernel
         ps_POLICY_PEER_SHARE_STICKY_TIME
         ps_POLICY_PEER_SHARE_MAX_PEERS
 
-    varLeashingState <- newTVarIO $ mempty 
+    varLsqLeashingState <- newTVarIO $ mempty 
     varGenesisLoEFragment <- newTVarIO Nothing 
     varLoEFragment <- newTVarIO $ AF.Empty AF.AnchorGenesis
 
     setGetLoEFragment
-      (readTVar varLeashingState)
+      (readTVar varLsqLeashingState)
       (readTVar varGsmState)
       (readTVar varGenesisLoEFragment)
       (readTVar varLoEFragment)
       varGetLoEFragment
 
     void $ forkLinkedWatcher registry "NodeKernel.Leashing" $
-        leashingWatcher 
-          (leashingTracer tracers)
+        lsqLeashingWatcher 
+          (lsqLeashingTracer tracers)
           chainDB
-          varLeashingState
-          varGenesisLoEFragment
+          (readTVar varLsqLeashingState)
+          (readTVar varGenesisLoEFragment)
           varLoEFragment
 
     case gnkaGDDArgs genesisArgs of
@@ -388,7 +388,7 @@ initNodeKernel
             varOutboundConnectionsState
         , getDiffusionPipeliningSupport
         , getBlockchainTime = btime
-        , getLeashingStateVar = varLeashingState
+        , getLsqLeashingStateVar = varLsqLeashingState
         }
    where
     blockForgingController ::

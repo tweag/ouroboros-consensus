@@ -134,7 +134,7 @@ mkHandlers ::
   NodeKernelArgs m addrNTN addrNTC blk ->
   NodeKernel m addrNTN addrNTC blk ->
   Handlers m addrNTC blk
-mkHandlers NodeKernelArgs{cfg, tracers} NodeKernel{getLeashingStateVar, getChainDB, getMempool} =
+mkHandlers NodeKernelArgs{cfg, tracers} NodeKernel{getLsqLeashingStateVar, getChainDB, getMempool} =
   Handlers
     { hChainSyncServer =
         chainSyncBlocksServer
@@ -147,7 +147,7 @@ mkHandlers NodeKernelArgs{cfg, tracers} NodeKernel{getLeashingStateVar, getChain
     , hStateQueryServer = \rr ->
         localStateQueryServer
           (ExtLedgerCfg cfg)
-          getLeashingStateVar
+          getLsqLeashingStateVar
           (ChainDB.getCurrentChainWithTime getChainDB)
           (ChainDB.getReadOnlyForkerAtPoint getChainDB $ rr) 
     , hTxMonitorServer =

@@ -250,10 +250,10 @@ stripCommonPrefix sharedAnchor frags
 -- The function also yields the suffixes of the intersection of @loeFrag@ with
 -- every candidate fragment.
 sharedCandidatePrefix ::
-  (GetHeader blk, Typeable blk) =>
+  (GetHeader blk, Typeable blk, Functor f, Foldable f) =>
   AnchoredFragment (HeaderWithTime blk) ->
-  [(peer, AnchoredFragment (HeaderWithTime blk))] ->
-  (AnchoredFragment (HeaderWithTime blk), [(peer, AnchoredFragment (HeaderWithTime blk))])
+  f (peer, AnchoredFragment (HeaderWithTime blk)) ->
+  (AnchoredFragment (HeaderWithTime blk), f (peer, AnchoredFragment (HeaderWithTime blk)))
 sharedCandidatePrefix curChain candidates =
   second getCompose $
   stripCommonPrefix (AF.castAnchor $ AF.anchor curChain) $
@@ -270,4 +270,4 @@ sharedCandidatePrefix curChain candidates =
         Just (_, suffix) -> (peer, suffix)
 
     immutableTipSuffixes =
-      map splitAfterImmutableTip candidates
+      fmap splitAfterImmutableTip candidates

@@ -196,7 +196,7 @@ library
     Ouroboros.Consensus.Node.NetworkProtocolVersion
     Ouroboros.Consensus.Node.ProtocolInfo
     Ouroboros.Consensus.Node.Run
-    Ouroboros.Consensus.Node.Leashing
+    Ouroboros.Consensus.Node.LsqLeashing
     Ouroboros.Consensus.Node.Serialisation
     Ouroboros.Consensus.NodeId
     Ouroboros.Consensus.Peras.Weight

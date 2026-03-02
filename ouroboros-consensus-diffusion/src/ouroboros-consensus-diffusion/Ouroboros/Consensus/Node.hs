@@ -504,7 +504,7 @@ runWith RunNodeArgs{..} encAddrNtN decAddrNtN LowLevelRunNodeArgs{..} =
                   systemStart
                   (blockchainTimeTracer rnTraceConsensus)
 
-          genesisArgs <- mkGenesisNodeKernelArgs llrnGenesisConfig
+          let genesisArgs = mkGenesisNodeKernelArgs llrnGenesisConfig
           varGetLoEFragment <- newTVarIO $ pure ChainDB.LoEDisabled
           let setLoEinChainDbArgs argsCfg = argsCfg
                     { ChainDB.cdbsArgs =

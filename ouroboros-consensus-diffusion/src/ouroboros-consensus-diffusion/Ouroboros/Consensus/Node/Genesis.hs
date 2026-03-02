@@ -25,8 +25,8 @@ module Ouroboros.Consensus.Node.Genesis
   ) where
 
 import Data.Maybe (fromMaybe)
+import Data.Functor ((<&>))
 import qualified Data.Map.Strict as Map
-import Data.Traversable (for)
 import Data.Typeable (Typeable)
 import GHC.Generics (Generic)
 import Ouroboros.Consensus.Block
@@ -205,22 +205,19 @@ data GDDNodeKernelArgs = GDDNodeKernelArgs
 
 -- | Create the initial 'GenesisNodeKernelArgs" .
 mkGenesisNodeKernelArgs ::
-  forall m.
-  (IOLike m) =>
   GenesisConfig ->
-  m GenesisNodeKernelArgs
-mkGenesisNodeKernelArgs gcfg = do
-  gnkaGDDArgs <- for (gcGDDConfig gcfg) $ \p -> do
-    pure
-      GDDNodeKernelArgs
-        { lgnkaGDDRateLimit = lgpGDDRateLimit p
-        }
-  pure GenesisNodeKernelArgs{gnkaGDDArgs}
+  GenesisNodeKernelArgs
+mkGenesisNodeKernelArgs gcfg =
+  let gnkaGDDArgs = (gcGDDConfig gcfg) <&> \p ->
+            GDDNodeKernelArgs
+              { lgnkaGDDRateLimit = lgpGDDRateLimit p
+              }
+  in GenesisNodeKernelArgs{gnkaGDDArgs}
 
 -- | Set the actual logic for determining the current LoE fragment.
 setGetLoEFragment ::
      forall m blk. (IOLike m, GetHeader blk, Typeable blk)
-  => STM m (ChainDB.LeashingState blk)
+  => STM m (ChainDB.LsqLeashingState blk)
   -> STM m GSM.GsmState
   -> STM m (Maybe (AnchoredFragment (HeaderWithTime blk)))
      -- ^ The Genesis LoE fragment.
@@ -228,21 +225,19 @@ setGetLoEFragment ::
      -- ^ The LoE fragment.
   -> StrictTVar m (ChainDB.GetLoEFragment m blk)
   -> m ()
-setGetLoEFragment readLeashingState readGsmState readGenesisLoEFragment readLoEFragment varGetLoEFragment =
+setGetLoEFragment readLsqLeashingState readGsmState readGenesisLoEFragment readLoEFragment varGetLoEFragment =
     atomically $ writeTVar varGetLoEFragment getLoEFragment
   where
     getLoEFragment :: ChainDB.GetLoEFragment m blk
     getLoEFragment = atomically $ do
-      leashingState <- readLeashingState
-      if not $ Map.null leashingState then
+      lsqLeashingState <- readLsqLeashingState
+      -- lsq leashing is enabled, read the resulting LoE fragment 
+      if not $ Map.null lsqLeashingState then
         ChainDB.LoEEnabled <$> readLoEFragment
---        readLoEFragment >>= \case
---          Just loeFrag -> pure $ ChainDB.LoEEnabled loeFrag
---          Nothing -> pure ChainDB.LoEDisabled
       else 
+        -- lsq leashing is disabled, run old behavior
         readGenesisLoEFragment >>= \case
           Just glf -> do
-            -- leashing is disabled, run old behavior
             readGsmState >>= \case
               -- When the Honest Availability Assumption cannot currently be
               -- guaranteed, we should not select any blocks that would cause our

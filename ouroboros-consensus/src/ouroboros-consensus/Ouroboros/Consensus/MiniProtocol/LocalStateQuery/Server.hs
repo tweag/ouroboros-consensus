@@ -8,7 +8,7 @@ import qualified Data.Map.Strict as Map
 import Ouroboros.Consensus.HeaderValidation (HeaderWithTime (..))
 import Ouroboros.Network.AnchoredFragment (AnchoredFragment)
 import qualified Ouroboros.Network.AnchoredFragment as AF
-import Ouroboros.Consensus.Storage.ChainDB.API (LeashingState)
+import Ouroboros.Consensus.Storage.ChainDB.API (LsqLeashingState)
 import Ouroboros.Consensus.Block
 import Ouroboros.Consensus.Ledger.Extended
 import Ouroboros.Consensus.Ledger.Query
@@ -36,13 +36,13 @@ localStateQueryServer ::
   , LedgerSupportsProtocol blk
   ) =>
   ExtLedgerCfg blk ->
-  ( StrictTVar m (LeashingState blk)) ->
+  ( StrictTVar m (LsqLeashingState blk)) ->
   ( STM m (AnchoredFragment (HeaderWithTime blk)) ) ->
   ( Target (Point blk) ->
     m (Either GetForkerError (ReadOnlyForker' m blk))
   ) ->
   LocalStateQueryServer blk (Point blk) (Query blk) m ()
-localStateQueryServer cfg leashingStateVar getCurrentChain getView =
+localStateQueryServer cfg lsqLeashingStateVar getCurrentChain getView =
   LocalStateQueryServer $ return idle
  where
   idle :: ServerStIdle blk (Point blk) (Query blk) m ()
@@ -59,14 +59,20 @@ localStateQueryServer cfg leashingStateVar getCurrentChain getView =
                 -> m (ServerStAcquiring blk (Point blk) (Query blk) m ())
   handleAcquire mpt mLeashId = do
     traceM $ "handleAcquire: start " <> show mLeashId 
+
+    -- by @nfrisby:
+    -- TODO: There's a race condition here; the selection might change between thegetViewcall and this getCurrentChain call.
+    -- Might just have to add the "chain that was the current chain at the time of the call" to the range of ChainDB.getReadOnlyForkerAtPoint.
+    -- TODO: or maybe a Forker's API already lets you determine what chain fragment it matches? I'm still not super-familiar with the UTxO HD api, which is where Forker comes from
+
     getView mpt >>= \case 
-      -- case if we want to leash and there is a leashing state var
+      -- case if we want to leash and there is a lsq leashing state var
       Right forker
         | Just leashId <- mLeashId -> do
           traceM $ "My leash id " <> show leashId 
           atomically $ do
-            leashingState <- readTVar leashingStateVar
-            case Map.lookup leashId leashingState of
+            lsqLeashingState <- readTVar lsqLeashingStateVar
+            case Map.lookup leashId lsqLeashingState of
               Nothing -> do
                 currentChain <- getCurrentChain 
                 let
@@ -74,9 +80,10 @@ localStateQueryServer cfg leashingStateVar getCurrentChain getView =
                       ImmutableTip -> AF.Empty $ AF.anchor currentChain
                       SpecificPoint p -> AF.takeWhileOldest (\(HeaderWithTime h _) -> headerPoint h <= p) currentChain
                       VolatileTip -> currentChain
-                let newState = Map.insert leashId leashingFragment leashingState 
-                writeTVar leashingStateVar newState
+                let newState = Map.insert leashId leashingFragment lsqLeashingState 
+                writeTVar lsqLeashingStateVar newState
                 pure $ SendMsgAcquired $ acquired mLeashId forker
+              -- If we stick with AcquireFailurePointStateIsBusy, then we'd ideally short-circuit to that before calling getView.
               Just _ -> pure $ SendMsgFailure AcquireFailurePointStateIsBusy idle
       Right forker -> pure $ SendMsgAcquired $ acquired Nothing forker
       Left PointTooOld{} -> pure $ SendMsgFailure AcquireFailurePointTooOld idle
@@ -113,6 +120,6 @@ localStateQueryServer cfg leashingStateVar getCurrentChain getView =
 
   releaseLeash :: LeashID -> m ()
   releaseLeash leashId = atomically $ do
-    leashingState <- readTVar leashingStateVar
-    let newState = Map.delete leashId leashingState 
-    writeTVar leashingStateVar newState
+    lsqLeashingState <- readTVar lsqLeashingStateVar
+    let newState = Map.delete leashId lsqLeashingState 
+    writeTVar lsqLeashingStateVar newState

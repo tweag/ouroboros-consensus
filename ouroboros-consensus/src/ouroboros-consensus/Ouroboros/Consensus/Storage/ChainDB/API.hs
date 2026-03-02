@@ -70,7 +70,7 @@ module Ouroboros.Consensus.Storage.ChainDB.API
     -- * Genesis
   , GetLoEFragment
   , LoE (..)
-  , LeashingState
+  , LsqLeashingState
   ) where
 
 import Control.Monad (void)
@@ -913,4 +913,4 @@ data LoE a
 -- chain, just like candidate fragments.
 type GetLoEFragment m blk = m (LoE (AnchoredFragment (HeaderWithTime blk)))
 
-type LeashingState blk = Map LeashID (AnchoredFragment (HeaderWithTime blk))
+type LsqLeashingState blk = Map LeashID (AnchoredFragment (HeaderWithTime blk))

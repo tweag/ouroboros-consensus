@@ -85,8 +85,8 @@ import qualified Ouroboros.Network.AnchoredFragment as AF
 
 
 -- | A 'Watcher' that evaluates the GDD rule whenever necessary, writing the LoE
--- fragment to @varLoEFrag@, and then triggering ChainSel to reprocess all
--- blocks that had previously been postponed by the LoE.
+-- fragment to @varGenesisLoEFrag@, which then is picked up by the leashingWatcher
+-- which triggers ChainSel to reprocess all blocks that had previously been postponed by the LoE.
 --
 -- Evaluating the GDD rule might cause peers to be disconnected if they have
 -- sparser chains than the best chain.
@@ -110,14 +110,15 @@ gddWatcher ::
   -- changes. Also, we use this to disconnect from peers with insufficient
   -- densities.
   STM m (Map peer (ChainSyncClientHandle m blk)) ->
-  -- | The LoE fragment. It starts at a (recent) immutable tip and ends at
+  -- | The Genesis LoE fragment. It's optional because the Genesis can be disabled.
+  -- Otherwise it starts at a (recent) immutable tip and ends at
   -- the common intersection of the candidate fragments.
   StrictTVar m (Maybe (AnchoredFragment (HeaderWithTime blk))) ->
   Watcher
     m
     (GDDTrigger (GDDStateView m blk peer))
     (GDDTrigger (Map peer (StrictMaybe (WithOrigin SlotNo), Bool)))
-gddWatcher cfg tracer chainDb rateLimit getGsmState getHandles varLoEFrag =
+gddWatcher cfg tracer chainDb rateLimit getGsmState getHandles varGenesisLoEFrag =
   Watcher
     { wInitial = Nothing
     , wReader
@@ -169,13 +170,15 @@ gddWatcher cfg tracer chainDb rateLimit getGsmState getHandles varLoEFrag =
     -- allow us to select more blocks here by design.
     GDDPreSyncing -> pure ()
     -- Make sure that any LoE-postponed blocks have a chance to be selected.
-    GDDCaughtUp ->
+    GDDCaughtUp -> do
+      -- Let lsqLeashingWatcher know that the genesis fragment is disabled
+      void $ atomically $ writeTVar varGenesisLoEFrag Nothing
       void $ ChainDB.triggerChainSelectionAsync chainDb
     -- Run the GDD on the candidate fragments.
     GDDSyncing stateView -> do
       t0 <- getMonotonicTime
       loeFrag <- evaluateGDD cfg tracer stateView
-      void $ atomically $ writeTVar varLoEFrag (Just loeFrag)
+      void $ atomically $ writeTVar varGenesisLoEFrag (Just loeFrag)
       tf <- getMonotonicTime
       -- We limit the rate at which GDD is evaluated, otherwise it would
       -- be called every time a new header is validated.
