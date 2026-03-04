@@ -77,7 +77,7 @@ localStateQueryServer cfg leashingStateVar getCurrentChain getView =
                 let newState = Map.insert leashId leashingFragment leashingState 
                 writeTVar leashingStateVar newState
                 pure $ SendMsgAcquired $ acquired mLeashId forker
-              Just _ -> pure $ SendMsgFailure AcquireFailurePointStateIsBusy idle
+              Just _ -> pure $ SendMsgAcquired $ acquired mLeashId forker
       Right forker -> pure $ SendMsgAcquired $ acquired Nothing forker
       Left PointTooOld{} -> pure $ SendMsgFailure AcquireFailurePointTooOld idle
       Left PointNotOnChain -> pure $ SendMsgFailure AcquireFailurePointNotOnChain idle
