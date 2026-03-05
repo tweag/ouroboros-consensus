@@ -163,6 +163,18 @@ instance
       txs = to (Shelley.shelleyBlockRaw @proto @era)
         . to SL.blockBody . Ledger.txSeqBlockBodyL @era . folded
 
+      refScriptSize :: Int
+      refScriptSize = getSum
+        $ foldMapOf (eraReferenceInputs
+        . folded
+        . to (\txin -> Map.findWithDefault 0 txin utxo_scripts_summary)) Sum tx
+
+      utxo_summary =
+        view (to shelleyLedgerState . LState.utxoL . to LState.unUTxO . to (Map.map packedByteCount)) lsb
+
+      utxo_scripts_summary =
+        view (to shelleyLedgerState . LState.utxoL . to LState.unUTxO . to (Map.filter (has eraFilterScriptTxOut)) . to (Map.map packedByteCount)) lsb
+
       mkTxFeatures tx =
         MkTxFeatures
             { src_block = Identity $ blockNo blk
@@ -227,18 +239,6 @@ instance
                   refScriptSize
 
             }
-            where
-              refScriptSize :: Int
-              refScriptSize = getSum
-                $ foldMapOf (eraReferenceInputs
-                . folded
-                . to (\txin -> Map.findWithDefault 0 txin utxo_scripts_summary)) Sum tx
-
-              utxo_summary =
-                view (to shelleyLedgerState . LState.utxoL . to LState.unUTxO . to (Map.map packedByteCount)) lsb
-
-              utxo_scripts_summary =
-                view (to shelleyLedgerState . LState.utxoL . to LState.unUTxO . to (Map.filter (has eraFilterScriptTxOut)) . to (Map.map packedByteCount)) lsb
 
 
 class PerEraAnalysis era where
