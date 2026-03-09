@@ -85,6 +85,10 @@ import Data.Functor.Identity (Identity (..))
 import Cardano.Ledger.Coin (Coin(..))
 import qualified Cardano.Ledger.Shelley.LedgerState as SL
 
+import Debug.Trace as Debug
+import Cardano.Ledger.Block (neededTxInsForBlock)
+import qualified Data.Set as Set
+
 -- | Usable for each Shelley-based era
 instance
   ( ShelleyCompatible proto era
@@ -164,6 +168,9 @@ instance
         . to SL.blockBody . Ledger.txSeqBlockBodyL @era . folded
 
       mkTxFeatures tx =
+        Debug.trace ("Utxo length :" ++ show (Map.size utxo_summary)) $
+        Debug.trace ("Inputs from tx: " ++ (show (length (toListOf inputs tx)))) $
+        Debug.trace ("Inputs from block: " ++ (show (Set.size (neededTxInsForBlock (Shelley.shelleyBlockRaw blk)))))
         MkTxFeatures
             { src_block = Identity $ blockNo blk
             , num_script_wits = Identity $ length $ toListOf (Ledger.witsTxL . Ledger.scriptTxWitsL) tx
