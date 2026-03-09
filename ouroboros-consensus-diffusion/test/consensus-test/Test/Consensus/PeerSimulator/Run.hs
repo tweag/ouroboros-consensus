@@ -473,6 +473,7 @@ startNode schedulerConfig genesisTest interval = do
     forkLinkedWatcher lrRegistry "LoE leashing updater background" $
       LsqLeashing.lsqLeashingWatcher 
         nullTracer
+        mempty
         lnChainDb
         (readTVar lrLsqLeashingStateVar)
         (readTVar varGenesisLoE)

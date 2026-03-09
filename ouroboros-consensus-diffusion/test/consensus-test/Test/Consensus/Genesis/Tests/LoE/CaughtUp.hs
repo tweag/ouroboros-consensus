@@ -101,6 +101,7 @@ run = withRegistry \registry -> do
         ChainDB.LoEEnabled $
           AF.Empty AF.AnchorGenesis
   setGetLoEFragment
+    mempty
     (readTVar varLeashingState)
     (readTVar varGsmState)
     (readTVar varGenesisLoEFragment)

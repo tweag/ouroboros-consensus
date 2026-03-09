@@ -16,6 +16,8 @@ module Ouroboros.Consensus.Node.LsqLeashing (
 import           Control.Monad (void, when)
 import           Control.Tracer (Tracer, traceWith)
 import qualified Data.Map.Strict as Map
+import           Data.Set (Set)
+import qualified Data.Set as Set
 import           Data.Typeable (Typeable)
 import           Ouroboros.Consensus.Block
 import           Ouroboros.Consensus.HeaderValidation (HeaderWithTime (..))
@@ -50,6 +52,7 @@ lsqLeashingWatcher ::
      , GetHeader blk
      )
   => Tracer m (TraceLsqLeashingEvent blk)
+  -> Set LeashID
   -> ChainDB m blk
   -> STM m (LsqLeashingState blk) 
   -> STM m (Maybe (AnchoredFragment (HeaderWithTime blk)))
@@ -57,7 +60,7 @@ lsqLeashingWatcher ::
   -> StrictTVar m (AnchoredFragment (HeaderWithTime blk))
    -- ^ The resulting leashing LoE fragment. 
   -> Watcher m (LsqLeashingWatcherState blk) (LsqLeashingFingerprint blk)
-lsqLeashingWatcher tracer chainDb getLsqLeashingState getGenesisLoEFrag varLoEFrag =
+lsqLeashingWatcher tracer crucialLsqClients chainDb getLsqLeashingState getGenesisLoEFrag varLoEFrag =
     Watcher {
         wInitial = Nothing
       , wReader 
@@ -82,7 +85,11 @@ lsqLeashingWatcher tracer chainDb getLsqLeashingState getGenesisLoEFrag varLoEFr
         let
           lsqLeashingCandidates = Map.toList lsqLeashingState
           prefix = maybe curChain id genesisLoEFrag
-          loeFrag = fst $ sharedCandidatePrefix prefix lsqLeashingCandidates 
+          crucialLsqClientsArePresent = crucialLsqClients == (Set.fromList $ map fst lsqLeashingCandidates)
+          loeFrag =
+            if Set.null crucialLsqClients || crucialLsqClientsArePresent
+            then fst $ sharedCandidatePrefix prefix lsqLeashingCandidates
+            else AF.Empty $ AF.castAnchor $ AF.anchor curChain
 
         oldLoEFrag <- atomically $ swapTVar varLoEFrag loeFrag 
         -- The chain selection only depends on the LoE tip, so there

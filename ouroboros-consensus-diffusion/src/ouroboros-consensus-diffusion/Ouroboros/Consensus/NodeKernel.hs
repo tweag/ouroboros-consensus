@@ -51,6 +51,7 @@ import Data.List.NonEmpty (NonEmpty)
 import qualified Data.List.NonEmpty as NE
 import Data.Maybe (isJust, mapMaybe)
 import Data.Proxy
+import Data.Set (Set)
 import qualified Data.Text as Text
 import Data.Void (Void)
 import Ouroboros.Consensus.Block hiding (blockMatchesHeader)
@@ -150,6 +151,7 @@ import qualified Ouroboros.Network.TxSubmission.Inbound as Inbound
 import Ouroboros.Network.TxSubmission.Mempool.Reader
   ( TxSubmissionMempoolReader
   )
+import Ouroboros.Network.Protocol.LocalStateQuery.Type(LeashID)
 import qualified Ouroboros.Network.TxSubmission.Mempool.Reader as MempoolReader
 import System.Random (StdGen)
 
@@ -218,7 +220,8 @@ data NodeKernelArgs m addrNTN addrNTC blk = NodeKernelArgs
       StrictSTM.StrictTVar m (PublicPeerSelectionState addrNTN)
   , genesisArgs :: GenesisNodeKernelArgs
   , getDiffusionPipeliningSupport :: DiffusionPipeliningSupport
-  , varGetLoEFragment       :: StrictTVar m (ChainDB.GetLoEFragment m blk)
+  , varGetLoEFragment :: StrictTVar m (ChainDB.GetLoEFragment m blk)
+  , crucialLsqClients :: Set LeashID
   }
 
 initNodeKernel ::
@@ -247,6 +250,7 @@ initNodeKernel
     , genesisArgs
     , getDiffusionPipeliningSupport
     , varGetLoEFragment
+    , crucialLsqClients
     } = do
     -- using a lazy 'TVar', 'BlockForging' does not have a 'NoThunks' instance.
     blockForgingVar :: LazySTM.TMVar m [MkBlockForging m blk] <- LazySTM.newTMVarIO []
@@ -329,15 +333,17 @@ initNodeKernel
     varLoEFragment <- newTVarIO $ AF.Empty AF.AnchorGenesis
 
     setGetLoEFragment
+      crucialLsqClients     
       (readTVar varLsqLeashingState)
       (readTVar varGsmState)
       (readTVar varGenesisLoEFragment)
       (readTVar varLoEFragment)
       varGetLoEFragment
 
-    void $ forkLinkedWatcher registry "NodeKernel.Leashing" $
+    void $ forkLinkedWatcher registry "NodeKernel.LsqLeashing" $
         lsqLeashingWatcher 
           (lsqLeashingTracer tracers)
+          crucialLsqClients
           chainDB
           (readTVar varLsqLeashingState)
           (readTVar varGenesisLoEFragment)

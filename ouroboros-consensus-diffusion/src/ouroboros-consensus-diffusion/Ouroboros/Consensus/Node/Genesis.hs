@@ -26,6 +26,8 @@ module Ouroboros.Consensus.Node.Genesis
 
 import Data.Maybe (fromMaybe)
 import Data.Functor ((<&>))
+import Data.Set (Set)
+import qualified Data.Set as Set
 import qualified Data.Map.Strict as Map
 import Data.Typeable (Typeable)
 import GHC.Generics (Generic)
@@ -39,6 +41,9 @@ import Ouroboros.Consensus.MiniProtocol.ChainSync.Client
   )
 import Ouroboros.Consensus.MiniProtocol.ChainSync.Client.HistoricityCheck
   ( HistoricityCutoff (..)
+  )
+import Ouroboros.Network.Protocol.LocalStateQuery.Type
+  ( LeashID
   )
 import qualified Ouroboros.Consensus.Node.GsmState as GSM
 import qualified Ouroboros.Consensus.Storage.ChainDB as ChainDB
@@ -217,7 +222,8 @@ mkGenesisNodeKernelArgs gcfg =
 -- | Set the actual logic for determining the current LoE fragment.
 setGetLoEFragment ::
      forall m blk. (IOLike m, GetHeader blk, Typeable blk)
-  => STM m (ChainDB.LsqLeashingState blk)
+  => Set LeashID
+  -> STM m (ChainDB.LsqLeashingState blk)
   -> STM m GSM.GsmState
   -> STM m (Maybe (AnchoredFragment (HeaderWithTime blk)))
      -- ^ The Genesis LoE fragment.
@@ -225,14 +231,14 @@ setGetLoEFragment ::
      -- ^ The LoE fragment.
   -> StrictTVar m (ChainDB.GetLoEFragment m blk)
   -> m ()
-setGetLoEFragment readLsqLeashingState readGsmState readGenesisLoEFragment readLoEFragment varGetLoEFragment =
+setGetLoEFragment crucialLsqClients readLsqLeashingState readGsmState readGenesisLoEFragment readLoEFragment varGetLoEFragment =
     atomically $ writeTVar varGetLoEFragment getLoEFragment
   where
     getLoEFragment :: ChainDB.GetLoEFragment m blk
     getLoEFragment = atomically $ do
       lsqLeashingState <- readLsqLeashingState
       -- lsq leashing is enabled, read the resulting LoE fragment 
-      if not $ Map.null lsqLeashingState then
+      if (not $ Set.null crucialLsqClients) || (not $ Map.null lsqLeashingState) then
         ChainDB.LoEEnabled <$> readLoEFragment
       else 
         -- lsq leashing is disabled, run old behavior

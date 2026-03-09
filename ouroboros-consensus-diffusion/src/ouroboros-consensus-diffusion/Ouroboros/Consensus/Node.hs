@@ -83,6 +83,7 @@ import Data.Hashable (Hashable)
 import Data.Kind (Type)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
+import Data.Set (Set)
 import Data.Maybe (fromMaybe, isNothing)
 import Data.Time (NominalDiffTime)
 import Data.Typeable (Typeable)
@@ -172,6 +173,7 @@ import Ouroboros.Network.PeerSelection.PeerSharing.Codec
   )
 import Ouroboros.Network.Protocol.ChainSync.Codec (timeLimitsChainSync)
 import Ouroboros.Network.RethrowPolicy
+import Ouroboros.Network.Protocol.LocalStateQuery.Type(LeashID)
 import qualified SafeWildCards
 import System.Exit (ExitCode (..))
 import System.FS.API (SomeHasFS (..))
@@ -234,6 +236,7 @@ data RunNodeArgs m addrNTN addrNTC blk = RunNodeArgs
   , rnGetUseBootstrapPeers :: STM m UseBootstrapPeers
   , rnGenesisConfig :: GenesisConfig
   , rnMempoolTimeoutConfig :: Maybe Mempool.MempoolTimeoutConfig
+  , rnCrucialLsqClients :: Set LeashID
   }
 
 -- | Arguments that usually only tests /directly/ specify.
@@ -321,6 +324,7 @@ data LowLevelRunNodeArgs m addrNTN addrNTC blk
   , llrnPublicPeerSelectionStateVar :: StrictSTM.StrictTVar m (PublicPeerSelectionState addrNTN)
   , llrnLdbFlavorArgs :: Complete LedgerDbFlavorArgs m
   -- ^ The flavor arguments
+  , llrnCrucialLsqClients :: Set LeashID
   }
 
 data NodeDatabasePaths
@@ -590,6 +594,7 @@ runWith RunNodeArgs{..} encAddrNtN decAddrNtN LowLevelRunNodeArgs{..} =
                   DiffusionPipeliningOn
                   rnMempoolTimeoutConfig
                   varGetLoEFragment
+                  llrnCrucialLsqClients
             nodeKernel <- initNodeKernel nodeKernelArgs
             rnNodeKernelHook registry nodeKernel
             churnModeVar <- StrictSTM.newTVarIO ChurnModeNormal
@@ -867,6 +872,7 @@ mkNodeKernelArgs ::
   DiffusionPipeliningSupport ->
   Maybe Mempool.MempoolTimeoutConfig ->
   StrictTVar m (ChainDB.GetLoEFragment m blk) ->
+  Set LeashID ->
   m (NodeKernelArgs m addrNTN (ConnectionId addrNTC) blk)
 mkNodeKernelArgs
   registry
@@ -887,7 +893,8 @@ mkNodeKernelArgs
   genesisArgs
   getDiffusionPipeliningSupport
   mempoolTimeoutConfig
-  varGetLoEFragment =
+  varGetLoEFragment
+  crucialLsqClients =
     do
       let (kaRng, psRng) = split rng
       return
@@ -919,6 +926,7 @@ mkNodeKernelArgs
           , genesisArgs
           , getDiffusionPipeliningSupport
           , varGetLoEFragment
+          , crucialLsqClients
           }
 
 -- | We allow the user running the node to customise the 'NodeKernelArgs'
@@ -1065,6 +1073,7 @@ stdLowLevelRunNodeArgsIO
             Diffusion.dcPublicPeerSelectionVar srnDiffusionConfiguration
         , llrnLdbFlavorArgs =
             srnLdbFlavorArgs
+        , llrnCrucialLsqClients = mempty
         }
    where
     networkMagic :: NetworkMagic
