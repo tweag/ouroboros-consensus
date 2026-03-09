@@ -72,19 +72,15 @@ localStateQueryServer cfg lsqLeashingStateVar getCurrentChain getView =
           traceM $ "My leash id " <> show leashId 
           atomically $ do
             lsqLeashingState <- readTVar lsqLeashingStateVar
-            case Map.lookup leashId lsqLeashingState of
-              Nothing -> do
-                currentChain <- getCurrentChain 
-                let
-                  leashingFragment = case mpt of
-                      ImmutableTip -> AF.Empty $ AF.anchor currentChain
-                      SpecificPoint p -> AF.takeWhileOldest (\(HeaderWithTime h _) -> headerPoint h <= p) currentChain
-                      VolatileTip -> currentChain
-                let newState = Map.insert leashId leashingFragment lsqLeashingState 
-                writeTVar lsqLeashingStateVar newState
-                pure $ SendMsgAcquired $ acquired mLeashId forker
-              -- If we stick with AcquireFailurePointStateIsBusy, then we'd ideally short-circuit to that before calling getView.
-              Just _ -> pure $ SendMsgFailure AcquireFailurePointStateIsBusy idle
+            currentChain <- getCurrentChain 
+            let
+              leashingFragment = case mpt of
+                  ImmutableTip -> AF.Empty $ AF.anchor currentChain
+                  SpecificPoint p -> AF.takeWhileOldest (\(HeaderWithTime h _) -> headerPoint h <= p) currentChain
+                  VolatileTip -> currentChain
+            let newState = Map.insert leashId leashingFragment lsqLeashingState 
+            writeTVar lsqLeashingStateVar newState
+            pure $ SendMsgAcquired $ acquired mLeashId forker
       Right forker -> pure $ SendMsgAcquired $ acquired Nothing forker
       Left PointTooOld{} -> pure $ SendMsgFailure AcquireFailurePointTooOld idle
       Left PointNotOnChain -> pure $ SendMsgFailure AcquireFailurePointNotOnChain idle
