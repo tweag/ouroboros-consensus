@@ -55,7 +55,6 @@ import Ouroboros.Consensus.MiniProtocol.ChainSync.Client.State
   , DisengagedInitState (..)
   )
 import qualified Ouroboros.Consensus.Node.GSM as GSM
-import Ouroboros.Consensus.Node.Genesis (setGetLoEFragment)
 import Ouroboros.Consensus.Node.GsmState
 import Ouroboros.Consensus.NodeId
 import qualified Ouroboros.Consensus.Storage.ChainDB as ChainDB
@@ -92,21 +91,15 @@ run :: forall m. (IOLike m, SI.MonadTimer m) => m Property
 run = withRegistry \registry -> do
   -- Setup
   varGsmState <- newTVarIO PreSyncing
-  varLeashingState <- newTVarIO mempty 
-  varGenesisLoEFragment <- newTVarIO Nothing
-  varLoEFragment <- newTVarIO $ AF.Empty AF.AnchorGenesis
+  varGenesisLoEFragment <- newTVarIO ChainDB.LoEDisabled
+  varLoE <- newTVarIO ChainDB.LoEDisabled
   varGetLoEFragment <-
     newTVarIO $
       pure $
         ChainDB.LoEEnabled $
           AF.Empty AF.AnchorGenesis
-  setGetLoEFragment
-    mempty
-    (readTVar varLeashingState)
-    (readTVar varGsmState)
-    (readTVar varGenesisLoEFragment)
-    (readTVar varLoEFragment)
-    varGetLoEFragment
+
+  atomically $ writeTVar varGetLoEFragment (readTVarIO varLoE) 
 
   chainDB <- openChainDB registry (join $ readTVarIO varGetLoEFragment)
   let addBlk = ChainDB.addBlock_ chainDB Punishment.noPunishment
@@ -317,9 +310,9 @@ forkGDD ::
   ChainSyncClientHandleCollection CoreNodeId m TestBlock ->
   ChainDB m TestBlock ->
   STM m GsmState ->
-  StrictTVar m (Maybe (AnchoredFragment (HeaderWithTime TestBlock))) ->
+  StrictTVar m (ChainDB.LoE (AnchoredFragment (HeaderWithTime TestBlock))) ->
   m ()
-forkGDD registry varChainSyncHandles chainDB getGsmState varLoEFrag =
+forkGDD registry varChainSyncHandles chainDB getGsmState varLoE =
   void $
     forkLinkedWatcher registry "GDD" $
       gddWatcher
@@ -329,4 +322,4 @@ forkGDD registry varChainSyncHandles chainDB getGsmState varLoEFrag =
         (0 :: DiffTime) -- no rate limiting
         getGsmState
         (cschcMap varChainSyncHandles)
-        varLoEFrag
+        varLoE

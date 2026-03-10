@@ -358,12 +358,12 @@ runScheduler tracer varHandles ps@PointSchedule{psMinEndTime} peers lifecycle@No
 mkLoEVar ::
   IOLike m =>
   SchedulerConfig ->
-  m (LoE (StrictTVar m (AnchoredFragment (HeaderWithTime TestBlock))))
+  m (StrictTVar m (LoE (AnchoredFragment (HeaderWithTime TestBlock))))
 mkLoEVar SchedulerConfig{scEnableLoE}
   | scEnableLoE =
-      LoEEnabled <$> newTVarIO (AF.Empty AF.AnchorGenesis)
+      newTVarIO (LoEEnabled $ AF.Empty AF.AnchorGenesis)
   | otherwise =
-      pure LoEDisabled
+      newTVarIO LoEDisabled
 
 mkStateTracer ::
   IOLike m =>
@@ -455,29 +455,28 @@ startNode schedulerConfig genesisTest interval = do
     fetchClientRegistry
     handles
 
-  varGenesisLoE <- newTVarIO Nothing
-  for_ lrLoEVar $ \var -> do
-    _ <- forkLinkedWatcher lrRegistry "LoE updater background" $
-      gddWatcher
-        lrConfig
-        (mkGDDTracerTestBlock lrTracer)
-        lnChainDb
-        0.0 -- The rate limit makes simpler the calculations of how long tests
-        -- should run and still should produce interesting interleavings.
-        -- It is similar to the setting of bfcDecisionLoopInterval in
-        -- Test.Consensus.PeerSimulator.BlockFetch
-        (pure GSM.Syncing) -- TODO actually run GSM
-        (cschcMap handles)
-        varGenesisLoE
+  varGenesisLoE <- newTVarIO LoEDisabled
+  _ <- forkLinkedWatcher lrRegistry "LoE updater background" $
+    gddWatcher
+      lrConfig
+      (mkGDDTracerTestBlock lrTracer)
+      lnChainDb
+      0.0 -- The rate limit makes simpler the calculations of how long tests
+      -- should run and still should produce interesting interleavings.
+      -- It is similar to the setting of bfcDecisionLoopInterval in
+      -- Test.Consensus.PeerSimulator.BlockFetch
+      (pure GSM.Syncing) -- TODO actually run GSM
+      (cschcMap handles)
+      varGenesisLoE
 
-    forkLinkedWatcher lrRegistry "LoE leashing updater background" $
-      LsqLeashing.lsqLeashingWatcher 
-        nullTracer
-        mempty
-        lnChainDb
-        (readTVar lrLsqLeashingStateVar)
-        (readTVar varGenesisLoE)
-        var
+  _ <- forkLinkedWatcher lrRegistry "LoE leashing updater background" $
+    LsqLeashing.lsqLeashingWatcher 
+      nullTracer
+      mempty
+      lnChainDb
+      (readTVar lrLsqLeashingStateVar)
+      (readTVar varGenesisLoE)
+      lrLoEVar 
 
   void $
     forkLinkedWatcher lrRegistry "CSJ invariants watcher" $

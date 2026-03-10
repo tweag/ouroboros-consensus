@@ -87,7 +87,6 @@ import Ouroboros.Consensus.Node.Genesis
   ( GenesisNodeKernelArgs (..)
   , GDDConfig (..)
   , GDDNodeKernelArgs (..)
-  , setGetLoEFragment
   )
 import Ouroboros.Consensus.Node.Run
 import Ouroboros.Consensus.Node.LsqLeashing (lsqLeashingWatcher)
@@ -96,6 +95,7 @@ import Ouroboros.Consensus.Protocol.Abstract
 import Ouroboros.Consensus.Storage.ChainDB.API
   ( AddBlockResult (..)
   , ChainDB
+  , LoE(..)
   )
 import qualified Ouroboros.Consensus.Storage.ChainDB.API as ChainDB
 import qualified Ouroboros.Consensus.Storage.ChainDB.API.Types.InvalidBlockPunishment as InvalidBlockPunishment
@@ -329,16 +329,10 @@ initNodeKernel
         ps_POLICY_PEER_SHARE_MAX_PEERS
 
     varLsqLeashingState <- newTVarIO $ mempty 
-    varGenesisLoEFragment <- newTVarIO Nothing 
-    varLoEFragment <- newTVarIO $ AF.Empty AF.AnchorGenesis
+    varGenesisLoEFragment <- newTVarIO LoEDisabled 
+    varLoEFragment <- newTVarIO LoEDisabled
 
-    setGetLoEFragment
-      crucialLsqClients     
-      (readTVar varLsqLeashingState)
-      (readTVar varGsmState)
-      (readTVar varGenesisLoEFragment)
-      (readTVar varLoEFragment)
-      varGetLoEFragment
+    atomically $ writeTVar varGetLoEFragment (readTVarIO varLoEFragment) 
 
     void $ forkLinkedWatcher registry "NodeKernel.LsqLeashing" $
         lsqLeashingWatcher 

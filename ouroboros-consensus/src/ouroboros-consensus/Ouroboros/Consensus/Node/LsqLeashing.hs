@@ -13,7 +13,7 @@ module Ouroboros.Consensus.Node.LsqLeashing (
   , lsqLeashingWatcher 
   ) where
 
-import           Control.Monad (void, when)
+import           Control.Monad (void)
 import           Control.Tracer (Tracer, traceWith)
 import qualified Data.Map.Strict as Map
 import           Data.Set (Set)
@@ -35,15 +35,15 @@ import Ouroboros.Network.Protocol.LocalStateQuery.Type (LeashID)
 -- `LocalStateQuery` servers that enabled leashing providing their fragment. 
 -- 2. The genesis LoE fragment was updated.
 type LsqLeashingFingerprint blk =
-  (Map.Map LeashID (ChainHash (HeaderWithTime blk)), Maybe (ChainHash (HeaderWithTime blk)))
+  (Map.Map LeashID (ChainHash (HeaderWithTime blk)), ChainDB.LoE (ChainHash (HeaderWithTime blk)))
 
 data LsqLeashingWatcherState blk = LsqLeashingWatcherState
   { lsqLeashingState :: LsqLeashingState blk
-  , genesisLoEFrag :: Maybe (AnchoredFragment (HeaderWithTime blk))
+  , genesisLoE :: ChainDB.LoE (AnchoredFragment (HeaderWithTime blk))
   , curChain :: AnchoredFragment (HeaderWithTime blk)
   }
 
--- | The watcher that watches lsqLeashingState and genesisLoEFrag,
+-- | The watcher that watches lsqLeashingState and genesisLoE,
 -- and calculates their intersection using `sharedCandidatePrefix`.
 lsqLeashingWatcher ::
      forall m blk.
@@ -55,9 +55,9 @@ lsqLeashingWatcher ::
   -> Set LeashID
   -> ChainDB m blk
   -> STM m (LsqLeashingState blk) 
-  -> STM m (Maybe (AnchoredFragment (HeaderWithTime blk)))
+  -> STM m (ChainDB.LoE (AnchoredFragment (HeaderWithTime blk)))
    -- ^ The Genesis LoE fragment.
-  -> StrictTVar m (AnchoredFragment (HeaderWithTime blk))
+  -> StrictTVar m (ChainDB.LoE (AnchoredFragment (HeaderWithTime blk)))
    -- ^ The resulting leashing LoE fragment. 
   -> Watcher m (LsqLeashingWatcherState blk) (LsqLeashingFingerprint blk)
 lsqLeashingWatcher tracer crucialLsqClients chainDb getLsqLeashingState getGenesisLoEFrag varLoEFrag =
@@ -70,32 +70,56 @@ lsqLeashingWatcher tracer crucialLsqClients chainDb getLsqLeashingState getGenes
   where
     wReader :: STM m (LsqLeashingWatcherState blk)
     wReader = do
-        lsqLeashingState  <- getLsqLeashingState
-        genesisLoEFrag <- getGenesisLoEFrag
-        curChain       <- ChainDB.getCurrentChainWithTime chainDb
+        lsqLeashingState <- getLsqLeashingState
+        genesisLoE <- getGenesisLoEFrag
+        curChain <- ChainDB.getCurrentChainWithTime chainDb
         pure LsqLeashingWatcherState {..}
 
     wFingerprint ::
          LsqLeashingWatcherState blk
       -> LsqLeashingFingerprint blk
-    wFingerprint LsqLeashingWatcherState{..} = (Map.map AF.headHash lsqLeashingState, AF.headHash <$> genesisLoEFrag)
+    wFingerprint LsqLeashingWatcherState{..} = (Map.map AF.headHash lsqLeashingState, AF.headHash <$> genesisLoE)
 
     wNotify :: (LsqLeashingWatcherState blk) -> m ()
     wNotify LsqLeashingWatcherState{..} = do
         let
           lsqLeashingCandidates = Map.toList lsqLeashingState
-          prefix = maybe curChain id genesisLoEFrag
+          prefix = case genesisLoE of
+              ChainDB.LoEEnabled frag -> frag
+              ChainDB.LoEDisabled -> curChain
+          lsqLeashingFrag = fst $ sharedCandidatePrefix prefix lsqLeashingCandidates
           crucialLsqClientsArePresent = crucialLsqClients == (Set.fromList $ map fst lsqLeashingCandidates)
-          loeFrag =
-            if Set.null crucialLsqClients || crucialLsqClientsArePresent
-            then fst $ sharedCandidatePrefix prefix lsqLeashingCandidates
-            else AF.Empty $ AF.castAnchor $ AF.anchor curChain
+          newLoE =
+            if Set.null crucialLsqClients
+            then
+              -- if there are no crucial lsq clients and leashing state is empty, return genesis LoE
+              if Map.null lsqLeashingState
+              then genesisLoE
+              else ChainDB.LoEEnabled lsqLeashingFrag
+            else
+              -- there are crucial lsq clients,
+              -- if they are present, we leash in usual way 
+              -- otherwise return the anchor of the current chain to leash the node at immutable tip
+              if crucialLsqClientsArePresent then ChainDB.LoEEnabled lsqLeashingFrag
+              else ChainDB.LoEEnabled $ AF.Empty $ AF.castAnchor $ AF.anchor curChain
 
-        oldLoEFrag <- atomically $ swapTVar varLoEFrag loeFrag 
+        oldLoE <- atomically $ swapTVar varLoEFrag newLoE
         -- The chain selection only depends on the LoE tip, so there
         -- is no point in retriggering it if the LoE tip hasn't changed.
-        when ((AF.headHash oldLoEFrag) /= (AF.headHash loeFrag)) $
-          void $ ChainDB.triggerChainSelectionAsync chainDb
+        case (oldLoE, newLoE) of
+          (ChainDB.LoEDisabled, ChainDB.LoEDisabled) ->
+            -- no changes
+            pure ()
+          (ChainDB.LoEEnabled oldLoEFrag, ChainDB.LoEEnabled newLoEFrag)
+            | (AF.headHash oldLoEFrag) /= (AF.headHash newLoEFrag) ->
+              -- LoE fragment was changed
+              void $ ChainDB.triggerChainSelectionAsync chainDb
+            | otherwise ->
+              -- no changes
+              pure () 
+          (_, _) ->
+            -- LoE either was enabled or disabled
+            void $ ChainDB.triggerChainSelectionAsync chainDb
 
         traceWith tracer $ TraceLsqLeashingDebug "updated"
 

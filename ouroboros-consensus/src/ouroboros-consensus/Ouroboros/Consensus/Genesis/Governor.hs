@@ -113,7 +113,7 @@ gddWatcher ::
   -- | The Genesis LoE fragment. It's optional because the Genesis can be disabled.
   -- Otherwise it starts at a (recent) immutable tip and ends at
   -- the common intersection of the candidate fragments.
-  StrictTVar m (Maybe (AnchoredFragment (HeaderWithTime blk))) ->
+  StrictTVar m (ChainDB.LoE (AnchoredFragment (HeaderWithTime blk))) ->
   Watcher
     m
     (GDDTrigger (GDDStateView m blk peer))
@@ -166,19 +166,22 @@ gddWatcher cfg tracer chainDb rateLimit getGsmState getHandles varGenesisLoEFrag
 
   wNotify :: GDDTrigger (GDDStateView m blk peer) -> m ()
   wNotify = \case
-    -- No need to run the GDD in PreSyncing as the LoE advancing doesn't
-    -- allow us to select more blocks here by design.
-    GDDPreSyncing -> pure ()
+    GDDPreSyncing -> 
+      -- When the Honest Availability Assumption cannot currently be
+      -- guaranteed, we should not select any blocks that would cause our
+      -- immutable tip to advance, so we return the most conservative LoE
+      -- fragment.
+      void $ atomically $ writeTVar varGenesisLoEFrag $ ChainDB.LoEEnabled $ AF.Empty AF.AnchorGenesis
     -- Make sure that any LoE-postponed blocks have a chance to be selected.
     GDDCaughtUp -> do
       -- Let lsqLeashingWatcher know that the genesis fragment is disabled
-      void $ atomically $ writeTVar varGenesisLoEFrag Nothing
+      void $ atomically $ writeTVar varGenesisLoEFrag ChainDB.LoEDisabled
       void $ ChainDB.triggerChainSelectionAsync chainDb
     -- Run the GDD on the candidate fragments.
     GDDSyncing stateView -> do
       t0 <- getMonotonicTime
       loeFrag <- evaluateGDD cfg tracer stateView
-      void $ atomically $ writeTVar varGenesisLoEFrag (Just loeFrag)
+      void $ atomically $ writeTVar varGenesisLoEFrag (ChainDB.LoEEnabled loeFrag)
       tf <- getMonotonicTime
       -- We limit the rate at which GDD is evaluated, otherwise it would
       -- be called every time a new header is validated.

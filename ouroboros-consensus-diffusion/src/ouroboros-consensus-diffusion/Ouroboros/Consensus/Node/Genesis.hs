@@ -21,18 +21,12 @@ module Ouroboros.Consensus.Node.Genesis
   , GenesisNodeKernelArgs (..)
   , GDDNodeKernelArgs (..)
   , mkGenesisNodeKernelArgs
-  , setGetLoEFragment
   ) where
 
 import Data.Maybe (fromMaybe)
 import Data.Functor ((<&>))
-import Data.Set (Set)
-import qualified Data.Set as Set
-import qualified Data.Map.Strict as Map
-import Data.Typeable (Typeable)
 import GHC.Generics (Generic)
 import Ouroboros.Consensus.Block
-import Ouroboros.Consensus.HeaderValidation (HeaderWithTime (..))
 import Ouroboros.Consensus.MiniProtocol.ChainSync.Client
   ( CSJConfig (..)
   , CSJEnabledConfig (..)
@@ -42,14 +36,7 @@ import Ouroboros.Consensus.MiniProtocol.ChainSync.Client
 import Ouroboros.Consensus.MiniProtocol.ChainSync.Client.HistoricityCheck
   ( HistoricityCutoff (..)
   )
-import Ouroboros.Network.Protocol.LocalStateQuery.Type
-  ( LeashID
-  )
-import qualified Ouroboros.Consensus.Node.GsmState as GSM
-import qualified Ouroboros.Consensus.Storage.ChainDB as ChainDB
 import Ouroboros.Consensus.Util.IOLike
-import Ouroboros.Network.AnchoredFragment (AnchoredFragment)
-import qualified Ouroboros.Network.AnchoredFragment as AF
 import Ouroboros.Network.BlockFetch
   ( GenesisBlockFetchConfiguration (..)
   )
@@ -218,44 +205,3 @@ mkGenesisNodeKernelArgs gcfg =
               { lgnkaGDDRateLimit = lgpGDDRateLimit p
               }
   in GenesisNodeKernelArgs{gnkaGDDArgs}
-
--- | Set the actual logic for determining the current LoE fragment.
-setGetLoEFragment ::
-     forall m blk. (IOLike m, GetHeader blk, Typeable blk)
-  => Set LeashID
-  -> STM m (ChainDB.LsqLeashingState blk)
-  -> STM m GSM.GsmState
-  -> STM m (Maybe (AnchoredFragment (HeaderWithTime blk)))
-     -- ^ The Genesis LoE fragment.
-  -> STM m (AnchoredFragment (HeaderWithTime blk))
-     -- ^ The LoE fragment.
-  -> StrictTVar m (ChainDB.GetLoEFragment m blk)
-  -> m ()
-setGetLoEFragment crucialLsqClients readLsqLeashingState readGsmState readGenesisLoEFragment readLoEFragment varGetLoEFragment =
-    atomically $ writeTVar varGetLoEFragment getLoEFragment
-  where
-    getLoEFragment :: ChainDB.GetLoEFragment m blk
-    getLoEFragment = atomically $ do
-      lsqLeashingState <- readLsqLeashingState
-      -- lsq leashing is enabled, read the resulting LoE fragment 
-      if (not $ Set.null crucialLsqClients) || (not $ Map.null lsqLeashingState) then
-        ChainDB.LoEEnabled <$> readLoEFragment
-      else 
-        -- lsq leashing is disabled, run old behavior
-        readGenesisLoEFragment >>= \case
-          Just glf -> do
-            readGsmState >>= \case
-              -- When the Honest Availability Assumption cannot currently be
-              -- guaranteed, we should not select any blocks that would cause our
-              -- immutable tip to advance, so we return the most conservative LoE
-              -- fragment.
-              GSM.PreSyncing ->
-                pure $ ChainDB.LoEEnabled $ AF.Empty AF.AnchorGenesis
-              -- When we are syncing, return the current LoE fragment.
-              GSM.Syncing    ->
-                pure $ ChainDB.LoEEnabled glf 
-              -- When we are caught up, the LoE is disabled.
-              GSM.CaughtUp   ->
-                pure ChainDB.LoEDisabled
-          Nothing -> 
-            pure ChainDB.LoEDisabled

@@ -1100,6 +1100,7 @@ runThreadNetwork
                     }
               , getDiffusionPipeliningSupport = DiffusionPipeliningOn
               , varGetLoEFragment
+              , crucialLsqClients = mempty
               }
 
       nodeKernel <- initNodeKernel nodeKernelArgs
