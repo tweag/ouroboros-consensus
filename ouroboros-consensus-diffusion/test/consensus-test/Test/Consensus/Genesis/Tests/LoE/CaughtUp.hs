@@ -56,6 +56,7 @@ import Ouroboros.Consensus.MiniProtocol.ChainSync.Client.State
   )
 import qualified Ouroboros.Consensus.Node.GSM as GSM
 import Ouroboros.Consensus.Node.GsmState
+import Ouroboros.Consensus.Node.LsqLeashing (lsqLeashingWatcher)
 import Ouroboros.Consensus.NodeId
 import qualified Ouroboros.Consensus.Storage.ChainDB as ChainDB
 import Ouroboros.Consensus.Storage.ChainDB.API (ChainDB)
@@ -91,7 +92,7 @@ run :: forall m. (IOLike m, SI.MonadTimer m) => m Property
 run = withRegistry \registry -> do
   -- Setup
   varGsmState <- newTVarIO PreSyncing
-  varGenesisLoEFragment <- newTVarIO ChainDB.LoEDisabled
+  varGenesisLoEFragment <- newTVarIO $ ChainDB.LoEEnabled $ AF.Empty AF.AnchorGenesis
   varLoE <- newTVarIO ChainDB.LoEDisabled
   varGetLoEFragment <-
     newTVarIO $
@@ -113,6 +114,13 @@ run = withRegistry \registry -> do
           chainSyncHandles
           chainDB
           (atomically . writeTVar varGsmState)
+
+  forkLsqLeashing
+    registry
+    chainDB
+    (pure mempty)
+    (readTVar varGenesisLoEFragment)
+    varLoE
 
   forkGDD
     registry
@@ -312,7 +320,7 @@ forkGDD ::
   STM m GsmState ->
   StrictTVar m (ChainDB.LoE (AnchoredFragment (HeaderWithTime TestBlock))) ->
   m ()
-forkGDD registry varChainSyncHandles chainDB getGsmState varLoE =
+forkGDD registry varChainSyncHandles chainDB getGsmState varGenesisLoE =
   void $
     forkLinkedWatcher registry "GDD" $
       gddWatcher
@@ -322,4 +330,24 @@ forkGDD registry varChainSyncHandles chainDB getGsmState varLoE =
         (0 :: DiffTime) -- no rate limiting
         getGsmState
         (cschcMap varChainSyncHandles)
+        varGenesisLoE
+
+forkLsqLeashing ::
+  forall m.
+  IOLike m =>
+  ResourceRegistry m ->
+  ChainDB m TestBlock ->
+  STM m (ChainDB.LsqLeashingState TestBlock) ->
+  STM m (ChainDB.LoE (AnchoredFragment (HeaderWithTime TestBlock))) ->
+  StrictTVar m (ChainDB.LoE (AnchoredFragment (HeaderWithTime TestBlock))) ->
+  m ()
+forkLsqLeashing registry chainDB getLsqLeashingState getGenesisLoE varLoE =
+  void $
+    forkLinkedWatcher registry "LsqLeashing" $
+      lsqLeashingWatcher 
+        nullTracer
+        mempty 
+        chainDB
+        getLsqLeashingState
+        getGenesisLoE
         varLoE

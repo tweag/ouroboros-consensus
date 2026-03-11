@@ -166,7 +166,7 @@ gddWatcher cfg tracer chainDb rateLimit getGsmState getHandles varGenesisLoEFrag
 
   wNotify :: GDDTrigger (GDDStateView m blk peer) -> m ()
   wNotify = \case
-    GDDPreSyncing -> 
+    GDDPreSyncing ->
       -- When the Honest Availability Assumption cannot currently be
       -- guaranteed, we should not select any blocks that would cause our
       -- immutable tip to advance, so we return the most conservative LoE
@@ -176,7 +176,6 @@ gddWatcher cfg tracer chainDb rateLimit getGsmState getHandles varGenesisLoEFrag
     GDDCaughtUp -> do
       -- Let lsqLeashingWatcher know that the genesis fragment is disabled
       void $ atomically $ writeTVar varGenesisLoEFrag ChainDB.LoEDisabled
-      void $ ChainDB.triggerChainSelectionAsync chainDb
     -- Run the GDD on the candidate fragments.
     GDDSyncing stateView -> do
       t0 <- getMonotonicTime

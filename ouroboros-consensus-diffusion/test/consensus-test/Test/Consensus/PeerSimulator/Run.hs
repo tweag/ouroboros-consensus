@@ -455,28 +455,29 @@ startNode schedulerConfig genesisTest interval = do
     fetchClientRegistry
     handles
 
-  varGenesisLoE <- newTVarIO LoEDisabled
-  _ <- forkLinkedWatcher lrRegistry "LoE updater background" $
-    gddWatcher
-      lrConfig
-      (mkGDDTracerTestBlock lrTracer)
-      lnChainDb
-      0.0 -- The rate limit makes simpler the calculations of how long tests
-      -- should run and still should produce interesting interleavings.
-      -- It is similar to the setting of bfcDecisionLoopInterval in
-      -- Test.Consensus.PeerSimulator.BlockFetch
-      (pure GSM.Syncing) -- TODO actually run GSM
-      (cschcMap handles)
-      varGenesisLoE
+  void $ when (scEnableLoE schedulerConfig) $ do
+    varGenesisLoE <- newTVarIO LoEDisabled
+    void $ forkLinkedWatcher lrRegistry "LoE updater background" $
+      gddWatcher
+        lrConfig
+        (mkGDDTracerTestBlock lrTracer)
+        lnChainDb
+        0.0 -- The rate limit makes simpler the calculations of how long tests
+        -- should run and still should produce interesting interleavings.
+        -- It is similar to the setting of bfcDecisionLoopInterval in
+        -- Test.Consensus.PeerSimulator.BlockFetch
+        (pure GSM.Syncing) -- TODO actually run GSM
+        (cschcMap handles)
+        varGenesisLoE
 
-  _ <- forkLinkedWatcher lrRegistry "LoE leashing updater background" $
-    LsqLeashing.lsqLeashingWatcher 
-      nullTracer
-      mempty
-      lnChainDb
-      (readTVar lrLsqLeashingStateVar)
-      (readTVar varGenesisLoE)
-      lrLoEVar 
+    void $ forkLinkedWatcher lrRegistry "LoE leashing updater background" $
+      LsqLeashing.lsqLeashingWatcher 
+        nullTracer
+        mempty
+        lnChainDb
+        (readTVar lrLsqLeashingStateVar)
+        (readTVar varGenesisLoE)
+        lrLoEVar 
 
   void $
     forkLinkedWatcher lrRegistry "CSJ invariants watcher" $
