@@ -88,7 +88,6 @@ import qualified Cardano.Ledger.Shelley.LedgerState as SL
 import Debug.Trace as Debug
 import Cardano.Ledger.Block (neededTxInsForBlock)
 import qualified Data.Set as Set
-import Ouroboros.Consensus.Ledger.Tables (stowLedgerTables)
 
 -- | Usable for each Shelley-based era
 instance
@@ -242,14 +241,11 @@ instance
                 . folded
                 . to (\txin -> Map.findWithDefault 0 txin utxo_scripts_summary)) Sum tx
 
-              -- populates the Utxo with the tables
-              ulsb = stowLedgerTables lsb
-
               utxo_summary =
-                view (to shelleyLedgerState . LState.utxoL . to LState.unUTxO . to (Map.map packedByteCount)) ulsb
+                view (to shelleyLedgerState . LState.utxoL . to LState.unUTxO . to (Map.map packedByteCount)) lsb
 
               utxo_scripts_summary =
-                view (to shelleyLedgerState . LState.utxoL . to LState.unUTxO . to (Map.filter (has eraFilterScriptTxOut)) . to (Map.map packedByteCount)) ulsb
+                view (to shelleyLedgerState . LState.utxoL . to LState.unUTxO . to (Map.filter (has eraFilterScriptTxOut)) . to (Map.map packedByteCount)) lsb
 
 
 class PerEraAnalysis era where

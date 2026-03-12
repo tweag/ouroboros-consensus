@@ -104,9 +104,6 @@ import Cardano.Ledger.BaseTypes (ProtVer(..), getVersion64)
 import Control.Exception
 import Cardano.Tools.DBAnalyser.HasAnalysis (HasAnalysis, TxFeatures (..))
 
-import qualified Data.Set as Set
-import Data.Coerce
-
 {-------------------------------------------------------------------------------
   Run the requested analysis
 -------------------------------------------------------------------------------}
@@ -1246,9 +1243,7 @@ processAllSt_ db registry blockComponent startFrom cfg limit callback =
     callback' (blk,b) = do
       oldLedger <- LedgerDB.withPrivateTipForker ledgerDB $ \frk -> do
         oldLedgerSt <- IOLike.atomically $ LedgerDB.forkerGetLedgerState frk
-        Debug.traceIO $ "getBlockKeySets: " ++ show (Set.size (coerce (getBlockKeySets @(ExtLedgerState blk) blk)))
         oldLedgerTbs <- LedgerDB.forkerReadTables frk (getBlockKeySets blk)
-        Debug.traceIO $ "oldLegerTbs: " ++ show (Map.size (getValuesMK (getLedgerTables oldLedgerTbs)))
         return $ oldLedgerSt `withLedgerTables` oldLedgerTbs
 
       let
