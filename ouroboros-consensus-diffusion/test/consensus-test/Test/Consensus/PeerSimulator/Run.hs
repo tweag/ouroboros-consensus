@@ -42,6 +42,7 @@ import Ouroboros.Consensus.MiniProtocol.ChainSync.Client
 import qualified Ouroboros.Consensus.MiniProtocol.ChainSync.Client as CSClient
 import qualified Ouroboros.Consensus.Node.GsmState as GSM
 import Ouroboros.Consensus.Storage.ChainDB.API
+import qualified Ouroboros.Consensus.Node.LsqLeashing as LsqLeashing 
 import qualified Ouroboros.Consensus.Storage.ChainDB.API as ChainDB
 import Ouroboros.Consensus.Util.Condense (Condense (..))
 import Ouroboros.Consensus.Util.IOLike
@@ -357,12 +358,12 @@ runScheduler tracer varHandles ps@PointSchedule{psMinEndTime} peers lifecycle@No
 mkLoEVar ::
   IOLike m =>
   SchedulerConfig ->
-  m (LoE (StrictTVar m (AnchoredFragment (HeaderWithTime TestBlock))))
+  m (StrictTVar m (LoE (AnchoredFragment (HeaderWithTime TestBlock))))
 mkLoEVar SchedulerConfig{scEnableLoE}
   | scEnableLoE =
-      LoEEnabled <$> newTVarIO (AF.Empty AF.AnchorGenesis)
+      newTVarIO (LoEEnabled $ AF.Empty AF.AnchorGenesis)
   | otherwise =
-      pure LoEDisabled
+      newTVarIO LoEDisabled
 
 mkStateTracer ::
   IOLike m =>
@@ -454,8 +455,9 @@ startNode schedulerConfig genesisTest interval = do
     fetchClientRegistry
     handles
 
-  for_ lrLoEVar $ \var -> do
-    forkLinkedWatcher lrRegistry "LoE updater background" $
+  void $ when (scEnableLoE schedulerConfig) $ do
+    varGenesisLoE <- newTVarIO LoEDisabled
+    void $ forkLinkedWatcher lrRegistry "LoE updater background" $
       gddWatcher
         lrConfig
         (mkGDDTracerTestBlock lrTracer)
@@ -466,13 +468,22 @@ startNode schedulerConfig genesisTest interval = do
         -- Test.Consensus.PeerSimulator.BlockFetch
         (pure GSM.Syncing) -- TODO actually run GSM
         (cschcMap handles)
-        var
+        varGenesisLoE
+
+    void $ forkLinkedWatcher lrRegistry "LoE leashing updater background" $
+      LsqLeashing.lsqLeashingWatcher 
+        nullTracer
+        mempty
+        lnChainDb
+        (readTVar lrLsqLeashingStateVar)
+        (readTVar varGenesisLoE)
+        lrLoEVar 
 
   void $
     forkLinkedWatcher lrRegistry "CSJ invariants watcher" $
       CSJInvariants.watcher (cschcMap handles)
  where
-  LiveResources{lrRegistry, lrTracer, lrConfig, lrPeerSim, lrLoEVar} = resources
+  LiveResources{lrRegistry, lrTracer, lrConfig, lrPeerSim, lrLoEVar, lrLsqLeashingStateVar} = resources
 
   LiveInterval
     { liResources = resources
@@ -530,6 +541,7 @@ nodeLifecycle ::
 nodeLifecycle schedulerConfig genesisTest lrTracer lrRegistry lrPeerSim = do
   lrCdb <- emptyNodeDBs
   lrLoEVar <- mkLoEVar schedulerConfig
+  lrLsqLeashingStateVar <- newTVarIO Map.empty 
   let
     resources =
       LiveResources
@@ -540,6 +552,7 @@ nodeLifecycle schedulerConfig genesisTest lrTracer lrRegistry lrPeerSim = do
         , lrPeerSim
         , lrCdb
         , lrLoEVar
+        , lrLsqLeashingStateVar
         }
   pure
     NodeLifecycle

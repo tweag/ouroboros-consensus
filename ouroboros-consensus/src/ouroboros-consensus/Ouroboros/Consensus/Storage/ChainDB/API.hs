@@ -70,11 +70,13 @@ module Ouroboros.Consensus.Storage.ChainDB.API
     -- * Genesis
   , GetLoEFragment
   , LoE (..)
+  , LsqLeashingState
   ) where
 
 import Control.Monad (void)
 import Control.ResourceRegistry
 import Data.Typeable (Typeable)
+import Data.Map.Strict (Map)
 import GHC.Generics (Generic)
 import Ouroboros.Consensus.Block
 import Ouroboros.Consensus.HeaderStateHistory
@@ -910,3 +912,5 @@ data LoE a
 -- details. This fragment must be anchored in a (recent) point on the immutable
 -- chain, just like candidate fragments.
 type GetLoEFragment m blk = m (LoE (AnchoredFragment (HeaderWithTime blk)))
+
+type LsqLeashingState blk = Map LeashId (AnchoredFragment (HeaderWithTime blk))

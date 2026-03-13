@@ -71,7 +71,7 @@ import qualified Codec.CBOR.Encoding as CBOR
 import Codec.Serialise (DeserialiseFailure)
 import qualified Control.Concurrent.Class.MonadSTM.Strict as StrictSTM
 import Control.DeepSeq (NFData)
-import Control.Monad (forM_, when)
+import Control.Monad (forM_, when, join)
 import Control.Monad.Class.MonadTime.SI (MonadTime)
 import Control.Monad.Class.MonadTimer.SI (MonadTimer)
 import Control.ResourceRegistry
@@ -83,6 +83,7 @@ import Data.Hashable (Hashable)
 import Data.Kind (Type)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
+import Data.Set (Set)
 import Data.Maybe (fromMaybe, isNothing)
 import Data.Time (NominalDiffTime)
 import Data.Typeable (Typeable)
@@ -172,6 +173,7 @@ import Ouroboros.Network.PeerSelection.PeerSharing.Codec
   )
 import Ouroboros.Network.Protocol.ChainSync.Codec (timeLimitsChainSync)
 import Ouroboros.Network.RethrowPolicy
+import Ouroboros.Network.Protocol.LocalStateQuery.Type(LeashId)
 import qualified SafeWildCards
 import System.Exit (ExitCode (..))
 import System.FS.API (SomeHasFS (..))
@@ -234,6 +236,7 @@ data RunNodeArgs m addrNTN addrNTC blk = RunNodeArgs
   , rnGetUseBootstrapPeers :: STM m UseBootstrapPeers
   , rnGenesisConfig :: GenesisConfig
   , rnMempoolTimeoutConfig :: Maybe Mempool.MempoolTimeoutConfig
+  , rnCrucialLsqClients :: Set LeashId
   }
 
 -- | Arguments that usually only tests /directly/ specify.
@@ -321,6 +324,7 @@ data LowLevelRunNodeArgs m addrNTN addrNTC blk
   , llrnPublicPeerSelectionStateVar :: StrictSTM.StrictTVar m (PublicPeerSelectionState addrNTN)
   , llrnLdbFlavorArgs :: Complete LedgerDbFlavorArgs m
   -- ^ The flavor arguments
+  , llrnCrucialLsqClients :: Set LeashId
   }
 
 data NodeDatabasePaths
@@ -504,8 +508,12 @@ runWith RunNodeArgs{..} encAddrNtN decAddrNtN LowLevelRunNodeArgs{..} =
                   systemStart
                   (blockchainTimeTracer rnTraceConsensus)
 
-          (genesisArgs, setLoEinChainDbArgs) <-
-            mkGenesisNodeKernelArgs llrnGenesisConfig
+          let genesisArgs = mkGenesisNodeKernelArgs llrnGenesisConfig
+          varGetLoEFragment <- newTVarIO $ pure ChainDB.LoEDisabled
+          let setLoEinChainDbArgs argsCfg = argsCfg
+                    { ChainDB.cdbsArgs =
+                      (ChainDB.cdbsArgs argsCfg) { ChainDB.cdbsLoE = join $ readTVarIO varGetLoEFragment }
+                    } 
 
           let maybeValidateAll
                 | lastShutDownWasClean =
@@ -585,6 +593,8 @@ runWith RunNodeArgs{..} encAddrNtN decAddrNtN LowLevelRunNodeArgs{..} =
                   genesisArgs
                   DiffusionPipeliningOn
                   rnMempoolTimeoutConfig
+                  varGetLoEFragment
+                  llrnCrucialLsqClients
             nodeKernel <- initNodeKernel nodeKernelArgs
             rnNodeKernelHook registry nodeKernel
             churnModeVar <- StrictSTM.newTVarIO ChurnModeNormal
@@ -858,9 +868,11 @@ mkNodeKernelArgs ::
   GSM.MarkerFileView m ->
   STM m UseBootstrapPeers ->
   StrictSTM.StrictTVar m (PublicPeerSelectionState addrNTN) ->
-  GenesisNodeKernelArgs m blk ->
+  GenesisNodeKernelArgs ->
   DiffusionPipeliningSupport ->
   Maybe Mempool.MempoolTimeoutConfig ->
+  StrictTVar m (ChainDB.GetLoEFragment m blk) ->
+  Set LeashId ->
   m (NodeKernelArgs m addrNTN (ConnectionId addrNTC) blk)
 mkNodeKernelArgs
   registry
@@ -880,7 +892,9 @@ mkNodeKernelArgs
   publicPeerSelectionStateVar
   genesisArgs
   getDiffusionPipeliningSupport
-  mempoolTimeoutConfig =
+  mempoolTimeoutConfig
+  varGetLoEFragment
+  crucialLsqClients =
     do
       let (kaRng, psRng) = split rng
       return
@@ -911,6 +925,8 @@ mkNodeKernelArgs
           , publicPeerSelectionStateVar
           , genesisArgs
           , getDiffusionPipeliningSupport
+          , varGetLoEFragment
+          , crucialLsqClients
           }
 
 -- | We allow the user running the node to customise the 'NodeKernelArgs'
@@ -1057,6 +1073,7 @@ stdLowLevelRunNodeArgsIO
             Diffusion.dcPublicPeerSelectionVar srnDiffusionConfiguration
         , llrnLdbFlavorArgs =
             srnLdbFlavorArgs
+        , llrnCrucialLsqClients = mempty
         }
    where
     networkMagic :: NetworkMagic

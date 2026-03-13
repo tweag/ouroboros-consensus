@@ -51,6 +51,7 @@ import Data.List.NonEmpty (NonEmpty)
 import qualified Data.List.NonEmpty as NE
 import Data.Maybe (isJust, mapMaybe)
 import Data.Proxy
+import Data.Set (Set)
 import qualified Data.Text as Text
 import Data.Void (Void)
 import Ouroboros.Consensus.Block hiding (blockMatchesHeader)
@@ -84,16 +85,17 @@ import Ouroboros.Consensus.Node.GSM (GsmNodeKernelArgs (..))
 import qualified Ouroboros.Consensus.Node.GSM as GSM
 import Ouroboros.Consensus.Node.Genesis
   ( GenesisNodeKernelArgs (..)
-  , LoEAndGDDConfig (..)
-  , LoEAndGDDNodeKernelArgs (..)
-  , setGetLoEFragment
+  , GDDConfig (..)
+  , GDDNodeKernelArgs (..)
   )
 import Ouroboros.Consensus.Node.Run
+import Ouroboros.Consensus.Node.LsqLeashing (lsqLeashingWatcher)
 import Ouroboros.Consensus.Node.Tracers
 import Ouroboros.Consensus.Protocol.Abstract
 import Ouroboros.Consensus.Storage.ChainDB.API
   ( AddBlockResult (..)
   , ChainDB
+  , LoE(..)
   )
 import qualified Ouroboros.Consensus.Storage.ChainDB.API as ChainDB
 import qualified Ouroboros.Consensus.Storage.ChainDB.API.Types.InvalidBlockPunishment as InvalidBlockPunishment
@@ -149,6 +151,7 @@ import qualified Ouroboros.Network.TxSubmission.Inbound as Inbound
 import Ouroboros.Network.TxSubmission.Mempool.Reader
   ( TxSubmissionMempoolReader
   )
+import Ouroboros.Network.Protocol.LocalStateQuery.Type(LeashId)
 import qualified Ouroboros.Network.TxSubmission.Mempool.Reader as MempoolReader
 import System.Random (StdGen)
 
@@ -188,6 +191,7 @@ data NodeKernel m addrNTN addrNTC blk = NodeKernel
   , getDiffusionPipeliningSupport ::
       DiffusionPipeliningSupport
   , getBlockchainTime :: BlockchainTime m
+  , getLsqLeashingStateVar :: StrictTVar m (ChainDB.LsqLeashingState blk)
   }
 
 -- | Arguments required when initializing a node
@@ -214,8 +218,10 @@ data NodeKernelArgs m addrNTN addrNTC blk = NodeKernelArgs
   , peerSharingRng :: StdGen
   , publicPeerSelectionStateVar ::
       StrictSTM.StrictTVar m (PublicPeerSelectionState addrNTN)
-  , genesisArgs :: GenesisNodeKernelArgs m blk
+  , genesisArgs :: GenesisNodeKernelArgs
   , getDiffusionPipeliningSupport :: DiffusionPipeliningSupport
+  , varGetLoEFragment :: StrictTVar m (ChainDB.GetLoEFragment m blk)
+  , crucialLsqClients :: Set LeashId
   }
 
 initNodeKernel ::
@@ -243,6 +249,8 @@ initNodeKernel
     , publicPeerSelectionStateVar
     , genesisArgs
     , getDiffusionPipeliningSupport
+    , varGetLoEFragment
+    , crucialLsqClients
     } = do
     -- using a lazy 'TVar', 'BlockForging' does not have a 'NoThunks' instance.
     blockForgingVar :: LazySTM.TMVar m [MkBlockForging m blk] <- LazySTM.newTMVarIO []
@@ -320,25 +328,33 @@ initNodeKernel
         ps_POLICY_PEER_SHARE_STICKY_TIME
         ps_POLICY_PEER_SHARE_MAX_PEERS
 
-    case gnkaLoEAndGDDArgs genesisArgs of
-      LoEAndGDDDisabled -> pure ()
-      LoEAndGDDEnabled lgArgs -> do
-        varLoEFragment <- newTVarIO $ AF.Empty AF.AnchorGenesis
-        setGetLoEFragment
-          (readTVar varGsmState)
-          (readTVar varLoEFragment)
-          (lgnkaLoEFragmentTVar lgArgs)
+    varLsqLeashingState <- newTVarIO $ mempty 
+    varGenesisLoEFragment <- newTVarIO LoEDisabled 
+    varLoEFragment <- newTVarIO LoEDisabled
 
-        void $
-          forkLinkedWatcher registry "NodeKernel.GDD" $
-            gddWatcher
-              cfg
-              (gddTracer tracers)
-              chainDB
-              (lgnkaGDDRateLimit lgArgs)
-              (readTVar varGsmState)
-              (cschcMap varChainSyncHandles)
-              varLoEFragment
+    atomically $ writeTVar varGetLoEFragment (readTVarIO varLoEFragment) 
+
+    void $ forkLinkedWatcher registry "NodeKernel.LsqLeashing" $
+        lsqLeashingWatcher 
+          (lsqLeashingTracer tracers)
+          crucialLsqClients
+          chainDB
+          (readTVar varLsqLeashingState)
+          (readTVar varGenesisLoEFragment)
+          varLoEFragment
+
+    case gnkaGDDArgs genesisArgs of
+      GDDDisabled       -> pure ()
+      GDDEnabled lgArgs -> do
+        void $ forkLinkedWatcher registry "NodeKernel.GDD" $
+          gddWatcher
+            cfg
+            (gddTracer tracers)
+            chainDB
+            (lgnkaGDDRateLimit lgArgs)
+            (readTVar varGsmState)
+            (cschcMap varChainSyncHandles)
+            varGenesisLoEFragment 
 
     void $
       forkLinkedThread registry "NodeKernel.blockForging" $
@@ -372,6 +388,7 @@ initNodeKernel
             varOutboundConnectionsState
         , getDiffusionPipeliningSupport
         , getBlockchainTime = btime
+        , getLsqLeashingStateVar = varLsqLeashingState
         }
    where
     blockForgingController ::
@@ -467,7 +484,7 @@ initInternalState
 
     let readFetchMode =
           BlockFetchClientInterface.readFetchModeDefault
-            (toConsensusMode $ gnkaLoEAndGDDArgs genesisArgs)
+            (toConsensusMode $ gnkaGDDArgs genesisArgs)
             btime
             (ChainDB.getCurrentChain chainDB)
             getUseBootstrapPeers
@@ -488,10 +505,10 @@ initInternalState
 
     return IS{..}
 
-toConsensusMode :: forall a. LoEAndGDDConfig a -> ConsensusMode
+toConsensusMode :: forall a. GDDConfig a -> ConsensusMode
 toConsensusMode = \case
-  LoEAndGDDDisabled -> PraosMode
-  LoEAndGDDEnabled _ -> GenesisMode
+  GDDDisabled -> PraosMode
+  GDDEnabled _ -> GenesisMode
 
 forkBlockForging ::
   forall m addrNTN addrNTC blk.

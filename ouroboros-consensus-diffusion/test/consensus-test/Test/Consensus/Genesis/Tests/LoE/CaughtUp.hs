@@ -55,8 +55,8 @@ import Ouroboros.Consensus.MiniProtocol.ChainSync.Client.State
   , DisengagedInitState (..)
   )
 import qualified Ouroboros.Consensus.Node.GSM as GSM
-import Ouroboros.Consensus.Node.Genesis (setGetLoEFragment)
 import Ouroboros.Consensus.Node.GsmState
+import Ouroboros.Consensus.Node.LsqLeashing (lsqLeashingWatcher)
 import Ouroboros.Consensus.NodeId
 import qualified Ouroboros.Consensus.Storage.ChainDB as ChainDB
 import Ouroboros.Consensus.Storage.ChainDB.API (ChainDB)
@@ -92,16 +92,15 @@ run :: forall m. (IOLike m, SI.MonadTimer m) => m Property
 run = withRegistry \registry -> do
   -- Setup
   varGsmState <- newTVarIO PreSyncing
-  varLoEFragment <- newTVarIO $ AF.Empty AF.AnchorGenesis
+  varGenesisLoEFragment <- newTVarIO $ ChainDB.LoEEnabled $ AF.Empty AF.AnchorGenesis
+  varLoE <- newTVarIO ChainDB.LoEDisabled
   varGetLoEFragment <-
     newTVarIO $
       pure $
         ChainDB.LoEEnabled $
           AF.Empty AF.AnchorGenesis
-  setGetLoEFragment
-    (readTVar varGsmState)
-    (readTVar varLoEFragment)
-    varGetLoEFragment
+
+  atomically $ writeTVar varGetLoEFragment (readTVarIO varLoE) 
 
   chainDB <- openChainDB registry (join $ readTVarIO varGetLoEFragment)
   let addBlk = ChainDB.addBlock_ chainDB Punishment.noPunishment
@@ -116,12 +115,19 @@ run = withRegistry \registry -> do
           chainDB
           (atomically . writeTVar varGsmState)
 
+  forkLsqLeashing
+    registry
+    chainDB
+    (pure mempty)
+    (readTVar varGenesisLoEFragment)
+    varLoE
+
   forkGDD
     registry
     chainSyncHandles
     chainDB
     (readTVar varGsmState)
-    varLoEFragment
+    varGenesisLoEFragment 
 
   -- Make sure that the ChainDB background thread, the GSM and the GDD are
   -- running (any positive amount should do).
@@ -312,9 +318,9 @@ forkGDD ::
   ChainSyncClientHandleCollection CoreNodeId m TestBlock ->
   ChainDB m TestBlock ->
   STM m GsmState ->
-  StrictTVar m (AnchoredFragment (HeaderWithTime TestBlock)) ->
+  StrictTVar m (ChainDB.LoE (AnchoredFragment (HeaderWithTime TestBlock))) ->
   m ()
-forkGDD registry varChainSyncHandles chainDB getGsmState varLoEFrag =
+forkGDD registry varChainSyncHandles chainDB getGsmState varGenesisLoE =
   void $
     forkLinkedWatcher registry "GDD" $
       gddWatcher
@@ -324,4 +330,24 @@ forkGDD registry varChainSyncHandles chainDB getGsmState varLoEFrag =
         (0 :: DiffTime) -- no rate limiting
         getGsmState
         (cschcMap varChainSyncHandles)
-        varLoEFrag
+        varGenesisLoE
+
+forkLsqLeashing ::
+  forall m.
+  IOLike m =>
+  ResourceRegistry m ->
+  ChainDB m TestBlock ->
+  STM m (ChainDB.LsqLeashingState TestBlock) ->
+  STM m (ChainDB.LoE (AnchoredFragment (HeaderWithTime TestBlock))) ->
+  StrictTVar m (ChainDB.LoE (AnchoredFragment (HeaderWithTime TestBlock))) ->
+  m ()
+forkLsqLeashing registry chainDB getLsqLeashingState getGenesisLoE varLoE =
+  void $
+    forkLinkedWatcher registry "LsqLeashing" $
+      lsqLeashingWatcher 
+        nullTracer
+        mempty 
+        chainDB
+        getLsqLeashingState
+        getGenesisLoE
+        varLoE

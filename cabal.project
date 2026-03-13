@@ -49,3 +49,11 @@ if impl (ghc >= 9.12)
   allow-newer:
     -- https://github.com/kapralVV/Unique/issues/11
     , Unique:hashable
+
+source-repository-package
+    type: git
+    location: https://github.com/tweag/ouroboros-network
+    tag: 91b89164480a748b425d7d2f5172e80cf3dfbe8f
+    --sha256: sha256-IFnufFhOdD4kXBE3NIA4QILrERMyeBGHINZSSeXcmCw=
+    subdir:
+      ouroboros-network-protocols

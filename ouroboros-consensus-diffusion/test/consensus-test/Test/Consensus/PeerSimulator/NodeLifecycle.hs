@@ -1,5 +1,6 @@
 {-# LANGUAGE DisambiguateRecordFields #-}
 {-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module Test.Consensus.PeerSimulator.NodeLifecycle
@@ -89,8 +90,9 @@ data LiveResources blk m = LiveResources
   -- After 'lnCopyToImmDb' was executed, the latter will contain the final
   -- state of an interval.
   -- The rest is reset when the chain DB is recreated.
-  , lrLoEVar :: LoE (StrictTVar m (AnchoredFragment (HeaderWithTime blk)))
+  , lrLoEVar :: StrictTVar m (LoE (AnchoredFragment (HeaderWithTime blk)))
   -- ^ The LoE fragment must be reset for each live interval.
+  , lrLsqLeashingStateVar :: StrictTVar m (LsqLeashingState blk)
   }
 
 data LiveInterval blk m = LiveInterval
@@ -142,7 +144,7 @@ mkChainDb resources = do
       args
         { ChainDB.cdbsArgs =
             (ChainDB.cdbsArgs args)
-              { cdbsLoE = traverse readTVarIO lrLoEVar
+              { cdbsLoE = readTVarIO lrLoEVar
               }
         }
   (_, (chainDB, internal)) <-
@@ -215,9 +217,9 @@ lifecycleStop resources LiveNode{lnStateViewTracers, lnCopyToImmDb, lnPeers} = d
   -- Reset the resources in TVars that were allocated by the simulator
   atomically $ do
     cschcRemoveAllHandles psrHandles
-    case lrLoEVar of
-      LoEEnabled var -> modifyTVar var (const (AF.Empty AF.AnchorGenesis))
-      LoEDisabled -> pure ()
+    modifyTVar lrLoEVar $ \case
+      LoEEnabled _ -> LoEEnabled $ AF.Empty AF.AnchorGenesis
+      LoEDisabled -> LoEDisabled
   trace (TraceSchedulerEvent TraceNodeShutdownComplete)
   pure LiveIntervalResult{lirActive, lirPeerResults}
  where
