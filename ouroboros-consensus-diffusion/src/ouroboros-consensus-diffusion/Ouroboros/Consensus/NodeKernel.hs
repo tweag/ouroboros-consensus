@@ -151,7 +151,7 @@ import qualified Ouroboros.Network.TxSubmission.Inbound as Inbound
 import Ouroboros.Network.TxSubmission.Mempool.Reader
   ( TxSubmissionMempoolReader
   )
-import Ouroboros.Network.Protocol.LocalStateQuery.Type(LeashID)
+import Ouroboros.Network.Protocol.LocalStateQuery.Type(LeashId)
 import qualified Ouroboros.Network.TxSubmission.Mempool.Reader as MempoolReader
 import System.Random (StdGen)
 
@@ -221,7 +221,7 @@ data NodeKernelArgs m addrNTN addrNTC blk = NodeKernelArgs
   , genesisArgs :: GenesisNodeKernelArgs
   , getDiffusionPipeliningSupport :: DiffusionPipeliningSupport
   , varGetLoEFragment :: StrictTVar m (ChainDB.GetLoEFragment m blk)
-  , crucialLsqClients :: Set LeashID
+  , crucialLsqClients :: Set LeashId
   }
 
 initNodeKernel ::

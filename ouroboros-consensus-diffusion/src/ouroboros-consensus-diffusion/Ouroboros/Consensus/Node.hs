@@ -173,7 +173,7 @@ import Ouroboros.Network.PeerSelection.PeerSharing.Codec
   )
 import Ouroboros.Network.Protocol.ChainSync.Codec (timeLimitsChainSync)
 import Ouroboros.Network.RethrowPolicy
-import Ouroboros.Network.Protocol.LocalStateQuery.Type(LeashID)
+import Ouroboros.Network.Protocol.LocalStateQuery.Type(LeashId)
 import qualified SafeWildCards
 import System.Exit (ExitCode (..))
 import System.FS.API (SomeHasFS (..))
@@ -236,7 +236,7 @@ data RunNodeArgs m addrNTN addrNTC blk = RunNodeArgs
   , rnGetUseBootstrapPeers :: STM m UseBootstrapPeers
   , rnGenesisConfig :: GenesisConfig
   , rnMempoolTimeoutConfig :: Maybe Mempool.MempoolTimeoutConfig
-  , rnCrucialLsqClients :: Set LeashID
+  , rnCrucialLsqClients :: Set LeashId
   }
 
 -- | Arguments that usually only tests /directly/ specify.
@@ -324,7 +324,7 @@ data LowLevelRunNodeArgs m addrNTN addrNTC blk
   , llrnPublicPeerSelectionStateVar :: StrictSTM.StrictTVar m (PublicPeerSelectionState addrNTN)
   , llrnLdbFlavorArgs :: Complete LedgerDbFlavorArgs m
   -- ^ The flavor arguments
-  , llrnCrucialLsqClients :: Set LeashID
+  , llrnCrucialLsqClients :: Set LeashId
   }
 
 data NodeDatabasePaths
@@ -872,7 +872,7 @@ mkNodeKernelArgs ::
   DiffusionPipeliningSupport ->
   Maybe Mempool.MempoolTimeoutConfig ->
   StrictTVar m (ChainDB.GetLoEFragment m blk) ->
-  Set LeashID ->
+  Set LeashId ->
   m (NodeKernelArgs m addrNTN (ConnectionId addrNTC) blk)
 mkNodeKernelArgs
   registry

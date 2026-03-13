@@ -4,6 +4,7 @@
 module Ouroboros.Consensus.MiniProtocol.LocalStateQuery.Server (localStateQueryServer) where
 
 import Debug.Trace (traceM)
+import Control.Monad (void)
 import qualified Data.Map.Strict as Map
 import Ouroboros.Consensus.HeaderValidation (HeaderWithTime (..))
 import Ouroboros.Network.AnchoredFragment (AnchoredFragment)
@@ -25,7 +26,7 @@ import Ouroboros.Network.Protocol.LocalStateQuery.Server
 import Ouroboros.Network.Protocol.LocalStateQuery.Type
   ( AcquireFailure (..)
   , Target (..)
-  , LeashID
+  , LeashId
   )
 
 localStateQueryServer ::
@@ -51,11 +52,12 @@ localStateQueryServer cfg lsqLeashingStateVar getCurrentChain getView =
       { recvMsgAcquire = \tgt leashId -> do
           traceM $ "idle: handle acquire" 
           handleAcquire tgt leashId
-      , recvMsgDone = return ()
+      , recvMsgDone = \mLeashId -> 
+          void $ traverse releaseLeash mLeashId
       }
 
   handleAcquire :: Target (Point blk)
-                -> Maybe LeashID
+                -> Maybe LeashId
                 -> m (ServerStAcquiring blk (Point blk) (Query blk) m ())
   handleAcquire mpt mLeashId = do
     traceM $ "handleAcquire: start " <> show mLeashId 
@@ -85,7 +87,7 @@ localStateQueryServer cfg lsqLeashingStateVar getCurrentChain getView =
       Left PointTooOld{} -> pure $ SendMsgFailure AcquireFailurePointTooOld idle
       Left PointNotOnChain -> pure $ SendMsgFailure AcquireFailurePointNotOnChain idle
 
-  acquired :: Maybe LeashID
+  acquired :: Maybe LeashId
            -> ReadOnlyForker' m blk
            -> ServerStAcquired blk (Point blk) (Query blk) m ()
   acquired clientLeashId forker = ServerStAcquired {
@@ -96,17 +98,17 @@ localStateQueryServer cfg lsqLeashingStateVar getCurrentChain getView =
           traceM $ "acquired: re acquire, leash " <> show clientLeashId
           close
           handleAcquire mp clientLeashId
-      , recvMsgRelease   = \msgLeashId -> do
-          traceM $ "acquired: release, leash " <> show msgLeashId
+      , recvMsgRelease   = do
+          traceM $ "acquired: release, leash " <> show clientLeashId 
           close
-          _ <- traverse releaseLeash msgLeashId
+          void $ traverse releaseLeash clientLeashId 
           return idle
       }
     where
       close = roforkerClose forker
 
   handleQuery ::
-    Maybe LeashID ->
+    Maybe LeashId ->
     ReadOnlyForker' m blk ->
     Query blk result ->
     m (ServerStQuerying blk (Point blk) (Query blk) m () result)
@@ -114,7 +116,7 @@ localStateQueryServer cfg lsqLeashingStateVar getCurrentChain getView =
     result <- Query.answerQuery cfg forker query
     return $ SendMsgResult result (acquired leashId forker)
 
-  releaseLeash :: LeashID -> m ()
+  releaseLeash :: LeashId -> m ()
   releaseLeash leashId = atomically $ do
     lsqLeashingState <- readTVar lsqLeashingStateVar
     let newState = Map.delete leashId lsqLeashingState 

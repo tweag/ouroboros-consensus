@@ -58,7 +58,7 @@ import Ouroboros.Network.Protocol.LocalStateQuery.Type
   ( AcquireFailure (..)
   , State (..)
   , Target (..)
-  , LeashID
+  , LeashId
   )
 import System.FS.API (SomeHasFS (..))
 import qualified System.FS.Sim.MockFS as MockFS
@@ -110,7 +110,7 @@ prop_localStateQueryServer k bt p (Positive (Small n)) = checkOutcome k chain ac
       replicate n VolatileTip
         ++ (SpecificPoint . blockPoint <$> treeToBlocks bt)
 
-  actualOutcome :: [(Target (Point TestBlock), Maybe LeashID, Either AcquireFailure (Point TestBlock))]
+  actualOutcome :: [(Target (Point TestBlock), Maybe LeashId, Either AcquireFailure (Point TestBlock))]
   actualOutcome = runSimOrThrow $ withRegistry $ \rr -> do
     let client = mkClient points
     server <- mkServer rr k chain
@@ -137,7 +137,7 @@ prop_localStateQueryServer k bt p (Positive (Small n)) = checkOutcome k chain ac
 checkOutcome ::
   SecurityParam ->
   Chain TestBlock ->
-  [(Target (Point TestBlock), Maybe LeashID, Either AcquireFailure (Point TestBlock))] ->
+  [(Target (Point TestBlock), Maybe LeashId, Either AcquireFailure (Point TestBlock))] ->
   Property
 checkOutcome k chain = conjoin . map (\(tgt, leashId, er) -> (uncurry checkResult) ((tgt, leashId), er))
  where
@@ -147,7 +147,7 @@ checkOutcome k chain = conjoin . map (\(tgt, leashId, er) -> (uncurry checkResul
       Chain.drop (fromIntegral $ unNonZero (maxRollbacks k)) chain
 
   checkResult ::
-    (Target (Point TestBlock), Maybe LeashID) ->
+    (Target (Point TestBlock), Maybe LeashId) ->
     Either AcquireFailure (Point TestBlock) ->
     Property
   checkResult (SpecificPoint pt, mLeashId) = \case
@@ -197,7 +197,7 @@ mkClient ::
     (Point TestBlock)
     (Query TestBlock)
     m
-    [(Target (Point TestBlock), Maybe LeashID, Either AcquireFailure (Point TestBlock))]
+    [(Target (Point TestBlock), Maybe LeashId, Either AcquireFailure (Point TestBlock))]
 mkClient points = localStateQueryClient [(pt, Nothing, BlockQuery QueryLedgerTip) | pt <- points]
 
 mkServer ::

@@ -913,4 +913,4 @@ data LoE a
 -- chain, just like candidate fragments.
 type GetLoEFragment m blk = m (LoE (AnchoredFragment (HeaderWithTime blk)))
 
-type LsqLeashingState blk = Map LeashID (AnchoredFragment (HeaderWithTime blk))
+type LsqLeashingState blk = Map LeashId (AnchoredFragment (HeaderWithTime blk))

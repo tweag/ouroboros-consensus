@@ -28,14 +28,14 @@ import           Ouroboros.Consensus.Util.IOLike
 import           Ouroboros.Consensus.Util.STM (Watcher (..))
 import           Ouroboros.Network.AnchoredFragment (AnchoredFragment)
 import qualified Ouroboros.Network.AnchoredFragment as AF
-import Ouroboros.Network.Protocol.LocalStateQuery.Type (LeashID)
+import Ouroboros.Network.Protocol.LocalStateQuery.Type (LeashId)
 
 -- | We want to know if either
 -- 1. Any lsqLeashing fragment was updated. The map contains information about active
 -- `LocalStateQuery` servers that enabled leashing providing their fragment. 
 -- 2. The genesis LoE fragment was updated.
 type LsqLeashingFingerprint blk =
-  (Map.Map LeashID (ChainHash (HeaderWithTime blk)), ChainDB.LoE (ChainHash (HeaderWithTime blk)))
+  (Map.Map LeashId (ChainHash (HeaderWithTime blk)), ChainDB.LoE (ChainHash (HeaderWithTime blk)))
 
 data LsqLeashingWatcherState blk = LsqLeashingWatcherState
   { lsqLeashingState :: LsqLeashingState blk
@@ -52,7 +52,7 @@ lsqLeashingWatcher ::
      , GetHeader blk
      )
   => Tracer m (TraceLsqLeashingEvent blk)
-  -> Set LeashID
+  -> Set LeashId
   -> ChainDB m blk
   -> STM m (LsqLeashingState blk) 
   -> STM m (ChainDB.LoE (AnchoredFragment (HeaderWithTime blk)))
