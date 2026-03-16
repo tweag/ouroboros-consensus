@@ -4,7 +4,7 @@
 module Ouroboros.Consensus.MiniProtocol.LocalStateQuery.Server (localStateQueryServer) where
 
 import Debug.Trace (traceM)
-import Control.Monad (void)
+import Control.Monad (void, when)
 import qualified Data.Map.Strict as Map
 import Ouroboros.Consensus.HeaderValidation (HeaderWithTime (..))
 import Ouroboros.Network.AnchoredFragment (AnchoredFragment)
@@ -98,10 +98,10 @@ localStateQueryServer cfg lsqLeashingStateVar getCurrentChain getView =
           traceM $ "acquired: re acquire, leash " <> show clientLeashId
           close
           handleAcquire mp clientLeashId
-      , recvMsgRelease   = do
+      , recvMsgRelease   = \unleash -> do
           traceM $ "acquired: release, leash " <> show clientLeashId 
           close
-          void $ traverse releaseLeash clientLeashId 
+          when unleash $ void $ traverse releaseLeash clientLeashId 
           return idle
       }
     where
