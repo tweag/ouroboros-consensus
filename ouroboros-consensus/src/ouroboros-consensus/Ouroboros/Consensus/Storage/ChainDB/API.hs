@@ -921,5 +921,17 @@ data LsqLeashingState blk = LsqLeashingState
   -- ^ All currently active client IDs
   } deriving (Generic)
 
-deriving instance (Ord (HeaderHash blk), Typeable (HeaderHash blk), Show (HeaderHash blk), NoThunks (HeaderHash blk), Show (Header blk)) => Show (LsqLeashingState blk)
-deriving instance (Ord (HeaderHash blk), Typeable (HeaderHash blk), Show (HeaderHash blk), NoThunks (HeaderHash blk), NoThunks (Header blk)) => NoThunks (LsqLeashingState blk)
+deriving instance
+  (Ord (HeaderHash blk)
+  , Typeable (HeaderHash blk)
+  , Show (HeaderHash blk)
+  , NoThunks (HeaderHash blk)
+  , Show (Header blk)
+  ) => Show (LsqLeashingState blk)
+deriving instance
+  (Ord (HeaderHash blk)
+  , Typeable (HeaderHash blk)
+  , Show (HeaderHash blk)
+  , NoThunks (HeaderHash blk)
+  , NoThunks (Header blk)
+  ) => NoThunks (LsqLeashingState blk)
