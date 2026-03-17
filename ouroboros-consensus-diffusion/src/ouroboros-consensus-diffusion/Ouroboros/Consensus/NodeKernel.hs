@@ -48,6 +48,8 @@ import Data.Function (on)
 import Data.Functor ((<&>))
 import Data.Hashable (Hashable)
 import Data.List.NonEmpty (NonEmpty)
+import qualified Data.Map.Strict as Map
+import qualified Data.Set as Set
 import qualified Data.List.NonEmpty as NE
 import Data.Maybe (isJust, mapMaybe)
 import Data.Proxy
@@ -328,14 +330,14 @@ initNodeKernel
         ps_POLICY_PEER_SHARE_STICKY_TIME
         ps_POLICY_PEER_SHARE_MAX_PEERS
 
-    varLsqLeashingState <- newTVarIO $ mempty 
-    varGenesisLoEFragment <- newTVarIO LoEDisabled 
+    varLsqLeashingState <- newTVarIO $ ChainDB.LsqLeashingState Map.empty Set.empty
+    varGenesisLoEFragment <- newTVarIO LoEDisabled
     varLoEFragment <- newTVarIO LoEDisabled
 
-    atomically $ writeTVar varGetLoEFragment (readTVarIO varLoEFragment) 
+    atomically $ writeTVar varGetLoEFragment (readTVarIO varLoEFragment)
 
     void $ forkLinkedWatcher registry "NodeKernel.LsqLeashing" $
-        lsqLeashingWatcher 
+        lsqLeashingWatcher
           (lsqLeashingTracer tracers)
           crucialLsqClients
           chainDB
@@ -354,7 +356,7 @@ initNodeKernel
             (lgnkaGDDRateLimit lgArgs)
             (readTVar varGsmState)
             (cschcMap varChainSyncHandles)
-            varGenesisLoEFragment 
+            varGenesisLoEFragment
 
     void $
       forkLinkedThread registry "NodeKernel.blockForging" $

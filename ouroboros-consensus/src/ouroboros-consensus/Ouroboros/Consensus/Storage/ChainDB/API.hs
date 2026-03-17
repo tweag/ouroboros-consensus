@@ -70,13 +70,14 @@ module Ouroboros.Consensus.Storage.ChainDB.API
     -- * Genesis
   , GetLoEFragment
   , LoE (..)
-  , LsqLeashingState
+  , LsqLeashingState(..)
   ) where
 
 import Control.Monad (void)
 import Control.ResourceRegistry
 import Data.Typeable (Typeable)
 import Data.Map.Strict (Map)
+import Data.Set (Set)
 import GHC.Generics (Generic)
 import Ouroboros.Consensus.Block
 import Ouroboros.Consensus.HeaderStateHistory
@@ -913,4 +914,12 @@ data LoE a
 -- chain, just like candidate fragments.
 type GetLoEFragment m blk = m (LoE (AnchoredFragment (HeaderWithTime blk)))
 
-type LsqLeashingState blk = Map LeashId (AnchoredFragment (HeaderWithTime blk))
+data LsqLeashingState blk = LsqLeashingState
+  { lsqLeashes :: Map LeashId (AnchoredFragment (HeaderWithTime blk))
+  -- ^ All known leashes
+  , lsqActiveClients :: Set LeashId
+  -- ^ All currently active client IDs
+  } deriving (Generic)
+
+deriving instance (Ord (HeaderHash blk), Typeable (HeaderHash blk), Show (HeaderHash blk), NoThunks (HeaderHash blk), Show (Header blk)) => Show (LsqLeashingState blk)
+deriving instance (Ord (HeaderHash blk), Typeable (HeaderHash blk), Show (HeaderHash blk), NoThunks (HeaderHash blk), NoThunks (Header blk)) => NoThunks (LsqLeashingState blk)

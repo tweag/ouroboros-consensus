@@ -25,6 +25,7 @@ import Control.Monad.IOSim (runSimOrThrow)
 import Control.ResourceRegistry
 import Control.Tracer
 import qualified Data.Map.Strict as Map
+import qualified Data.Set as Set
 import Data.Maybe (fromMaybe)
 import Network.TypedProtocol.Stateful.Proofs (connect)
 import Ouroboros.Consensus.Block
@@ -39,6 +40,7 @@ import Ouroboros.Consensus.Node.ProtocolInfo (NumCoreNodes (..))
 import Ouroboros.Consensus.NodeId
 import Ouroboros.Consensus.Protocol.BFT
 import qualified Ouroboros.Consensus.Storage.ChainDB.Impl.BlockCache as BlockCache
+import qualified Ouroboros.Consensus.Storage.ChainDB.API as ChainDB
 import Ouroboros.Consensus.Storage.ImmutableDB.Stream hiding
   ( streamAPI
   )
@@ -208,7 +210,7 @@ mkServer ::
   m (LocalStateQueryServer TestBlock (Point TestBlock) (Query TestBlock) m ())
 mkServer rr k chain = do
   lgrDB <- initLedgerDB k chain
-  leashingStateVar <- newTVarIO Map.empty 
+  leashingStateVar <- newTVarIO $ ChainDB.LsqLeashingState Map.empty Set.empty
   return $
     localStateQueryServer
       cfg leashingStateVar (pure $ attachSlotTimeToFragment (testCfg k) $ Chain.toAnchoredFragment $ getHeader <$> chain)

@@ -100,7 +100,7 @@ run = withRegistry \registry -> do
         ChainDB.LoEEnabled $
           AF.Empty AF.AnchorGenesis
 
-  atomically $ writeTVar varGetLoEFragment (readTVarIO varLoE) 
+  atomically $ writeTVar varGetLoEFragment (readTVarIO varLoE)
 
   chainDB <- openChainDB registry (join $ readTVarIO varGetLoEFragment)
   let addBlk = ChainDB.addBlock_ chainDB Punishment.noPunishment
@@ -118,7 +118,7 @@ run = withRegistry \registry -> do
   forkLsqLeashing
     registry
     chainDB
-    (pure mempty)
+    (pure $ ChainDB.LsqLeashingState mempty mempty)
     (readTVar varGenesisLoEFragment)
     varLoE
 
@@ -127,7 +127,7 @@ run = withRegistry \registry -> do
     chainSyncHandles
     chainDB
     (readTVar varGsmState)
-    varGenesisLoEFragment 
+    varGenesisLoEFragment
 
   -- Make sure that the ChainDB background thread, the GSM and the GDD are
   -- running (any positive amount should do).
@@ -344,9 +344,9 @@ forkLsqLeashing ::
 forkLsqLeashing registry chainDB getLsqLeashingState getGenesisLoE varLoE =
   void $
     forkLinkedWatcher registry "LsqLeashing" $
-      lsqLeashingWatcher 
+      lsqLeashingWatcher
         nullTracer
-        mempty 
+        mempty
         chainDB
         getLsqLeashingState
         getGenesisLoE
