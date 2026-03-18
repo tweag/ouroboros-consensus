@@ -148,7 +148,6 @@ mkHandlers NodeKernelArgs{cfg, tracers} NodeKernel{getLsqLeashingStateVar, getCh
         localStateQueryServer
           (ExtLedgerCfg cfg)
           getLsqLeashingStateVar
-          (ChainDB.getCurrentChainWithTime getChainDB)
           (ChainDB.getReadOnlyForkerAtPoint getChainDB $ rr) 
     , hTxMonitorServer =
         localTxMonitorServer

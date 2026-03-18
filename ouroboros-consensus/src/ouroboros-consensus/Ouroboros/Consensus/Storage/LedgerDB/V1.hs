@@ -64,6 +64,7 @@ import qualified Ouroboros.Consensus.Storage.LedgerDB.V1.DbChangelog as DbCh
 import Ouroboros.Consensus.Storage.LedgerDB.V1.Forker
 import Ouroboros.Consensus.Storage.LedgerDB.V1.Lock
 import Ouroboros.Consensus.Storage.LedgerDB.V1.Snapshots
+import Ouroboros.Network.AnchoredFragment (AnchoredFragment)
 import Ouroboros.Consensus.Util
 import Ouroboros.Consensus.Util.Args
 import Ouroboros.Consensus.Util.CallStack
@@ -273,6 +274,7 @@ implValidate ::
   , LedgerSupportsProtocol blk
   , HasCallStack
   , l ~ ExtLedgerState blk
+  , HasHardForkHistory blk
   ) =>
   LedgerDBHandle m l blk ->
   LedgerDBEnv m l blk ->
@@ -721,6 +723,8 @@ newForkerAtTarget ::
   , StandardHash l
   , HasLedgerTables l
   , LedgerSupportsProtocol blk
+  , l ~ ExtLedgerState blk
+  , HasHardForkHistory blk
   ) =>
   LedgerDBHandle m l blk ->
   ResourceRegistry m ->
@@ -735,6 +739,8 @@ newForkerByRollback ::
   , StandardHash l
   , HasLedgerTables l
   , LedgerSupportsProtocol blk
+  , l ~ ExtLedgerState blk
+  , HasHardForkHistory blk
   ) =>
   LedgerDBHandle m l blk ->
   ResourceRegistry m ->
@@ -752,6 +758,8 @@ withTransferrableReadAccess ::
   , StandardHash l
   , HasLedgerTables l
   , LedgerSupportsProtocol blk
+  , l ~ ExtLedgerState blk
+  , HasHardForkHistory blk
   ) =>
   LedgerDBHandle m l blk ->
   ResourceRegistry m ->
@@ -781,8 +789,8 @@ withTransferrableReadAccess h rr f = getEnv h $ \ldbEnv -> do
           Left err -> do
             ReadLocked $ void $ release rk
             pure (Left err)
-          Right chlog -> do
-            Right <$> newForker h ldbEnv (rk, tv) rr chlog
+          Right chlogs -> do
+            Right <$> newForker h ldbEnv (rk, tv) rr chlogs
     )
 
 -- | Acquire both a value handle and a db changelog at the tip. Holds a read lock
@@ -798,7 +806,7 @@ acquireAtTarget ::
   ) =>
   LedgerDBEnv m l blk ->
   Either Word64 (Target (Point blk)) ->
-  ReadLocked m (Either GetForkerError (DbChangelog l))
+  ReadLocked m (Either GetForkerError (DbChangelog l, DbChangelog l))
 acquireAtTarget ldbEnv target = readLocked $ runExceptT $ do
   dblog <- lift $ readTVarIO (ldbChangelog ldbEnv)
   volSuffix <- lift $ atomically $ getVolatileSuffix $ ldbGetVolatileSuffix ldbEnv
@@ -816,10 +824,10 @@ acquireAtTarget ldbEnv target = readLocked $ runExceptT $ do
         | pointSlot pt < pointSlot immTip = throwError $ PointTooOld Nothing
         | otherwise = case rollback pt dblog of
             Nothing -> throwError PointNotOnChain
-            Just dblog' -> pure dblog'
+            Just dblog' -> pure (dblog, dblog')
   -- Get the prefix of the dblog ending in the specified target.
   case target of
-    Right VolatileTip -> pure dblog
+    Right VolatileTip -> pure (dblog, dblog)
     Right ImmutableTip -> rollbackTo immTip
     Right (SpecificPoint pt) -> rollbackTo pt
     Left n -> do
@@ -833,7 +841,7 @@ acquireAtTarget ldbEnv target = readLocked $ runExceptT $ do
                 }
       case rollbackN n dblog of
         Nothing -> error "unreachable"
-        Just dblog' -> pure dblog'
+        Just dblog' -> pure (dblog, dblog')
 
 {-------------------------------------------------------------------------------
   Make forkers from consistent views
@@ -843,18 +851,20 @@ newForker ::
   forall m l blk.
   ( IOLike m
   , HasLedgerTables l
+  , HasHardForkHistory blk
   , LedgerSupportsProtocol blk
   , NoThunks (l EmptyMK)
   , GetTip l
+  , l ~ ExtLedgerState blk
   , StandardHash l
   ) =>
   LedgerDBHandle m l blk ->
   LedgerDBEnv m l blk ->
   (ResourceKey m, StrictTVar m (m ())) ->
   ResourceRegistry m ->
-  DbChangelog l ->
+  (DbChangelog l, DbChangelog l) ->
   ReadLocked m (Forker m l blk)
-newForker h ldbEnv (rk, releaseVar) rr dblog =
+newForker h ldbEnv (rk, releaseVar) rr (currentDbLog, dblog) =
   readLocked $ do
     (rk', frk) <-
       allocate
@@ -882,7 +892,22 @@ newForker h ldbEnv (rk, releaseVar) rr dblog =
               writeTVar releaseVar (pure ())
             void $ release rk
             traceWith (foeTracer forkerEnv) ForkerOpen
-            pure $ (mkForker h (ldbQueryBatchSize ldbEnv) forkerKey forkerEnv)
+
+            let
+                anseq = changelogStates currentDbLog 
+                resolveBlockHeaderWithTime lst =
+                  let mkRealPoint = pointToWithOriginRealPoint . castPoint . getTip
+                  in case mkRealPoint lst of
+                    Origin -> error "Unreachable, Block MUST be in ChainDB"
+                    NotOrigin pt -> do
+                      b <- ldbResolveBlock ldbEnv $ pt
+                      let lcfg = configLedger $ getExtLedgerCfg $ ledgerDbCfg $ ldbCfg ldbEnv
+                      pure $ mkHeaderWithTime lcfg (ledgerState lst) $ getHeader b
+            currentChain <- do
+              anchorHeader <- resolveBlockHeaderWithTime (AS.anchor anseq)
+              restHeaders <- traverse resolveBlockHeaderWithTime (AS.toOldestFirst anseq)
+              pure $ AS.fromOldestFirst (AS.asAnchor anchorHeader) restHeaders
+            pure $ (mkForker h (ldbQueryBatchSize ldbEnv) forkerKey forkerEnv currentChain)
         )
         forkerClose
     pure $ frk{forkerClose = void $ release rk'}
@@ -898,13 +923,15 @@ mkForker ::
   QueryBatchSize ->
   ForkerKey ->
   ForkerEnv m l blk ->
+  AnchoredFragment (HeaderWithTime blk) ->
   Forker m l blk
-mkForker h qbs forkerKey forkerEnv =
+mkForker h qbs forkerKey forkerEnv currentChain =
   Forker
     { forkerClose = implForkerClose h forkerKey forkerEnv
     , forkerReadTables = getForkerEnv1 h forkerKey implForkerReadTables
     , forkerRangeReadTables = getForkerEnv1 h forkerKey (implForkerRangeReadTables qbs)
     , forkerGetLedgerState = getForkerEnvSTM h forkerKey implForkerGetLedgerState
+    , forkerGetCurrentChain = currentChain
     , forkerReadStatistics = getForkerEnv h forkerKey implForkerReadStatistics
     , forkerPush = getForkerEnv1 h forkerKey implForkerPush
     , forkerCommit = getForkerEnvSTM h forkerKey implForkerCommit
@@ -934,3 +961,4 @@ implForkerClose (LDBHandle varState) forkerKey env = do
     Nothing -> pure ()
     Just e -> traceWith (foeTracer e) DanglingForkerClosed
   closeForkerEnv env
+

@@ -80,6 +80,8 @@ import Ouroboros.Consensus.Ledger.Extended
 import Ouroboros.Consensus.Ledger.SupportsProtocol
 import Ouroboros.Consensus.Storage.ChainDB.Impl.BlockCache
 import qualified Ouroboros.Consensus.Storage.ChainDB.Impl.BlockCache as BlockCache
+import Ouroboros.Network.AnchoredFragment (AnchoredFragment)
+import Ouroboros.Consensus.HeaderValidation (HeaderWithTime)
 import Ouroboros.Consensus.Util.CallStack
 import Ouroboros.Consensus.Util.IOLike
 
@@ -125,6 +127,7 @@ data Forker m l blk = Forker
   --
   -- If an empty ledger state is all you need, use 'getVolatileTip',
   -- 'getImmutableTip', or 'getPastLedgerState' instead of using a 'Forker'.
+  , forkerGetCurrentChain :: !(AnchoredFragment (HeaderWithTime blk))
   , forkerReadStatistics :: !(m (Maybe Statistics))
   -- ^ Get statistics about the current state of the handle if possible.
   --
@@ -219,6 +222,7 @@ ledgerStateReadOnlyForker frk =
     , roforkerRangeReadTables =
         fmap (first castLedgerTables) . roforkerRangeReadTables . castRangeQueryPrevious
     , roforkerGetLedgerState = ledgerState <$> roforkerGetLedgerState
+    , roforkerGetCurrentChain
     , roforkerReadStatistics = roforkerReadStatistics
     }
  where
@@ -227,6 +231,7 @@ ledgerStateReadOnlyForker frk =
     , roforkerReadTables
     , roforkerRangeReadTables
     , roforkerGetLedgerState
+    , roforkerGetCurrentChain
     , roforkerReadStatistics
     } = frk
 
@@ -254,6 +259,8 @@ data ReadOnlyForker m l blk = ReadOnlyForker
   -- ^ See 'forkerRangeReadTables'.
   , roforkerGetLedgerState :: !(STM m (l EmptyMK))
   -- ^ See 'forkerGetLedgerState'
+  , roforkerGetCurrentChain :: !(AnchoredFragment (HeaderWithTime blk))
+  -- ^ See 'forkerGetCurrentChain'
   , roforkerReadStatistics :: !(m (Maybe Statistics))
   -- ^ See 'forkerReadStatistics'
   }
@@ -274,6 +281,7 @@ readOnlyForker forker =
     , roforkerReadTables = forkerReadTables forker
     , roforkerRangeReadTables = forkerRangeReadTables forker
     , roforkerGetLedgerState = forkerGetLedgerState forker
+    , roforkerGetCurrentChain = forkerGetCurrentChain forker
     , roforkerReadStatistics = forkerReadStatistics forker
     }
 

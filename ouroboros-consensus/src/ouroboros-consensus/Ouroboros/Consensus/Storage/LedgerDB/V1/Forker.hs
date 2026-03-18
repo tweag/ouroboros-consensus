@@ -367,3 +367,4 @@ implForkerCommit env = do
       if DS.minSlot prunedSeq == DS.minSlot extendedSeq
         then extendedSeq
         else snd $ DS.splitAtSlot s extendedSeq
+
