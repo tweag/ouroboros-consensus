@@ -66,12 +66,12 @@ localStateQueryServer cfg lsqLeashingStateVar getView =
           traceM $ "My leash id " <> show leashId 
           atomically $ do
             lsqLeashingState <- readTVar lsqLeashingStateVar
-            let currentChain = roforkerGetCurrentChain forker 
             let
+              forkerInitialChain = roforkerGetInitialChain forker 
               leashingFragment = case mpt of
-                  ImmutableTip -> AF.Empty $ AF.anchor currentChain
-                  SpecificPoint p -> AF.takeWhileOldest (\(HeaderWithTime h _) -> headerPoint h <= p) currentChain
-                  VolatileTip -> currentChain
+                  ImmutableTip -> AF.Empty $ AF.anchor forkerInitialChain
+                  SpecificPoint p -> AF.takeWhileOldest (\(HeaderWithTime h _) -> headerPoint h <= p) forkerInitialChain
+                  VolatileTip -> forkerInitialChain
             let newState = Map.insert leashId leashingFragment lsqLeashingState 
             writeTVar lsqLeashingStateVar newState
             pure $ SendMsgAcquired $ acquired mLeashId forker

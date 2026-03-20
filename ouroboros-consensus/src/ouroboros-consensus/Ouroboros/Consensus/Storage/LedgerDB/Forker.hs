@@ -16,6 +16,7 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# OPTIONS_GHC -Wno-orphans #-}
 
 module Ouroboros.Consensus.Storage.LedgerDB.Forker
   ( -- * Forker API
@@ -30,6 +31,7 @@ module Ouroboros.Consensus.Storage.LedgerDB.Forker
   , forkerCurrentPoint
   , castRangeQueryPrevious
   , ledgerStateReadOnlyForker
+  , resolveInitialChainWithTime
 
     -- ** Read only
   , ReadOnlyForker (..)
@@ -75,15 +77,17 @@ import GHC.Generics
 import NoThunks.Class
 import Ouroboros.Consensus.Block
 import Ouroboros.Consensus.Config
+import Ouroboros.Consensus.HardFork.Abstract
 import Ouroboros.Consensus.Ledger.Abstract
 import Ouroboros.Consensus.Ledger.Extended
 import Ouroboros.Consensus.Ledger.SupportsProtocol
 import Ouroboros.Consensus.Storage.ChainDB.Impl.BlockCache
 import qualified Ouroboros.Consensus.Storage.ChainDB.Impl.BlockCache as BlockCache
-import Ouroboros.Network.AnchoredFragment (AnchoredFragment)
-import Ouroboros.Consensus.HeaderValidation (HeaderWithTime)
+import Ouroboros.Consensus.HeaderValidation (HeaderWithTime, mkHeaderWithTime)
 import Ouroboros.Consensus.Util.CallStack
 import Ouroboros.Consensus.Util.IOLike
+import Ouroboros.Network.AnchoredFragment (AnchoredFragment, Anchor(AnchorGenesis))
+import qualified Ouroboros.Network.AnchoredSeq as AS
 
 {-------------------------------------------------------------------------------
   Forker
@@ -127,7 +131,8 @@ data Forker m l blk = Forker
   --
   -- If an empty ledger state is all you need, use 'getVolatileTip',
   -- 'getImmutableTip', or 'getPastLedgerState' instead of using a 'Forker'.
-  , forkerGetCurrentChain :: !(AnchoredFragment (HeaderWithTime blk))
+  , forkerGetInitialChain :: !(AnchoredFragment (HeaderWithTime blk))
+  -- ^ Get the ChainDB's chain at the moment of forker's creation.
   , forkerReadStatistics :: !(m (Maybe Statistics))
   -- ^ Get statistics about the current state of the handle if possible.
   --
@@ -222,7 +227,7 @@ ledgerStateReadOnlyForker frk =
     , roforkerRangeReadTables =
         fmap (first castLedgerTables) . roforkerRangeReadTables . castRangeQueryPrevious
     , roforkerGetLedgerState = ledgerState <$> roforkerGetLedgerState
-    , roforkerGetCurrentChain
+    , roforkerGetInitialChain
     , roforkerReadStatistics = roforkerReadStatistics
     }
  where
@@ -231,7 +236,7 @@ ledgerStateReadOnlyForker frk =
     , roforkerReadTables
     , roforkerRangeReadTables
     , roforkerGetLedgerState
-    , roforkerGetCurrentChain
+    , roforkerGetInitialChain
     , roforkerReadStatistics
     } = frk
 
@@ -259,8 +264,8 @@ data ReadOnlyForker m l blk = ReadOnlyForker
   -- ^ See 'forkerRangeReadTables'.
   , roforkerGetLedgerState :: !(STM m (l EmptyMK))
   -- ^ See 'forkerGetLedgerState'
-  , roforkerGetCurrentChain :: !(AnchoredFragment (HeaderWithTime blk))
-  -- ^ See 'forkerGetCurrentChain'
+  , roforkerGetInitialChain :: !(AnchoredFragment (HeaderWithTime blk))
+  -- ^ See 'forkerGetInitialChain'
   , roforkerReadStatistics :: !(m (Maybe Statistics))
   -- ^ See 'forkerReadStatistics'
   }
@@ -281,7 +286,7 @@ readOnlyForker forker =
     , roforkerReadTables = forkerReadTables forker
     , roforkerRangeReadTables = forkerRangeReadTables forker
     , roforkerGetLedgerState = forkerGetLedgerState forker
-    , roforkerGetCurrentChain = forkerGetCurrentChain forker
+    , roforkerGetInitialChain = forkerGetInitialChain forker
     , roforkerReadStatistics = forkerReadStatistics forker
     }
 
@@ -606,6 +611,40 @@ instance
   ResolvesBlocks (ExceptT e (ReaderT (ResolveBlock m blk) m)) blk
   where
   doResolveBlock = lift . doResolveBlock
+
+instance GetTip l => AS.Anchorable (WithOrigin SlotNo) (l EmptyMK) (l EmptyMK) where
+  asAnchor = id
+  getAnchorMeasure _ = getTipSlot
+
+resolveInitialChainWithTime ::
+  ( IOLike m
+  , HasHardForkHistory blk
+  , LedgerSupportsProtocol blk
+  , GetTip l
+  , StandardHash l
+  , l ~ ExtLedgerState blk
+  ) =>
+  ResolveBlock m blk ->
+  LedgerConfig blk ->
+  AS.AnchoredSeq (WithOrigin SlotNo) (l EmptyMK) (l EmptyMK) ->
+  m (AnchoredFragment (HeaderWithTime blk))
+resolveInitialChainWithTime resolveBlock ledgerConfig ledgerStates = do
+  let
+      resolveBlockHeaderWithTime lst =
+        let mkRealPoint = pointToWithOriginRealPoint . castPoint . getTip
+        in case mkRealPoint lst of
+          Origin -> pure Nothing
+          NotOrigin pt -> do
+            b <- resolveBlock pt
+            pure $ Just $ mkHeaderWithTime ledgerConfig (ledgerState lst) $ getHeader b
+  anchorHeader <- resolveBlockHeaderWithTime (AS.anchor ledgerStates)
+  case anchorHeader of
+    Nothing -> pure (AS.Empty AnchorGenesis) 
+    Just ah -> do
+      restHeaders <- traverse resolveBlockHeaderWithTime (AS.toOldestFirst ledgerStates)
+      case AS.fromOldestFirst (AS.asAnchor ah) <$> (sequence restHeaders) of
+        Nothing -> pure $ AS.Empty (AS.asAnchor ah)
+        Just af -> pure af
 
 {-------------------------------------------------------------------------------
   Validation

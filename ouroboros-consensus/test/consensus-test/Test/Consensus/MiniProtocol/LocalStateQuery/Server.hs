@@ -68,7 +68,6 @@ import Test.QuickCheck hiding (Result)
 import Test.Tasty
 import Test.Tasty.QuickCheck
 import Test.Util.Orphans.IOLike ()
-import Test.Util.Header (attachSlotTimeToFragment)
 import Test.Util.TestBlock
 
 {-------------------------------------------------------------------------------
@@ -210,9 +209,7 @@ mkServer rr k chain = do
   lgrDB <- initLedgerDB k chain
   leashingStateVar <- newTVarIO Map.empty 
   return $
-    localStateQueryServer
-      cfg leashingStateVar (pure $ attachSlotTimeToFragment (testCfg k) $ Chain.toAnchoredFragment $ getHeader <$> chain)
-      (LedgerDB.getReadOnlyForker lgrDB rr)
+    localStateQueryServer cfg leashingStateVar (LedgerDB.getReadOnlyForker lgrDB rr)
  where
   cfg = ExtLedgerCfg $ testCfg k
 

@@ -558,6 +558,7 @@ library unstable-mempool-test-utils
     io-classes:strict-stm,
     ouroboros-consensus,
     resource-registry,
+    ouroboros-network-api,
 
 library unstable-tutorials
   import: common-lib

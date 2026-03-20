@@ -63,6 +63,7 @@ import Ouroboros.Consensus.Storage.LedgerDB.Forker
 import Ouroboros.Consensus.Util
 import Ouroboros.Consensus.Util.Condense (condense)
 import Ouroboros.Consensus.Util.IOLike hiding (bracket)
+import qualified Ouroboros.Network.AnchoredFragment as AF
 import Ouroboros.Network.Block (genesisPoint)
 import Test.Cardano.Ledger.TreeDiff ()
 import Test.Consensus.Mempool.Util
@@ -546,6 +547,7 @@ newLedgerInterface initialLedger = do
                         , roforkerReadTables = pure . (projectLedgerTables st `restrictValues'`)
                         , roforkerRangeReadTables = const $ pure (emptyLedgerTables, Nothing)
                         , roforkerGetLedgerState = pure $ forgetLedgerTables st
+                        , roforkerGetInitialChain = AF.Empty AF.AnchorGenesis
                         }
                 )
         }

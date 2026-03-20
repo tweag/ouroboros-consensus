@@ -301,10 +301,6 @@ deriving instance
 
 type DbChangelog' blk = DbChangelog (ExtLedgerState blk)
 
-instance GetTip l => AS.Anchorable (WithOrigin SlotNo) (l EmptyMK) (l EmptyMK) where
-  asAnchor = id
-  getAnchorMeasure _ = getTipSlot
-
 instance IsLedger l => GetTip (K (DbChangelog l)) where
   getTip =
     castPoint

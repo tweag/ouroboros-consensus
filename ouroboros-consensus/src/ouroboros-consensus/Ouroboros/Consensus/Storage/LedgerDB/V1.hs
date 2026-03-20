@@ -864,7 +864,7 @@ newForker ::
   ResourceRegistry m ->
   (DbChangelog l, DbChangelog l) ->
   ReadLocked m (Forker m l blk)
-newForker h ldbEnv (rk, releaseVar) rr (currentDbLog, dblog) =
+newForker h ldbEnv (rk, releaseVar) rr (initialDbLog, dblog) =
   readLocked $ do
     (rk', frk) <-
       allocate
@@ -893,21 +893,9 @@ newForker h ldbEnv (rk, releaseVar) rr (currentDbLog, dblog) =
             void $ release rk
             traceWith (foeTracer forkerEnv) ForkerOpen
 
-            let
-                anseq = changelogStates currentDbLog 
-                resolveBlockHeaderWithTime lst =
-                  let mkRealPoint = pointToWithOriginRealPoint . castPoint . getTip
-                  in case mkRealPoint lst of
-                    Origin -> error "Unreachable, Block MUST be in ChainDB"
-                    NotOrigin pt -> do
-                      b <- ldbResolveBlock ldbEnv $ pt
-                      let lcfg = configLedger $ getExtLedgerCfg $ ledgerDbCfg $ ldbCfg ldbEnv
-                      pure $ mkHeaderWithTime lcfg (ledgerState lst) $ getHeader b
-            currentChain <- do
-              anchorHeader <- resolveBlockHeaderWithTime (AS.anchor anseq)
-              restHeaders <- traverse resolveBlockHeaderWithTime (AS.toOldestFirst anseq)
-              pure $ AS.fromOldestFirst (AS.asAnchor anchorHeader) restHeaders
-            pure $ (mkForker h (ldbQueryBatchSize ldbEnv) forkerKey forkerEnv currentChain)
+            let lcfg = configLedger $ getExtLedgerCfg $ ledgerDbCfg $ ldbCfg ldbEnv
+            initialChain <- resolveInitialChainWithTime (ldbResolveBlock ldbEnv) lcfg (changelogStates initialDbLog)
+            pure $ (mkForker h (ldbQueryBatchSize ldbEnv) forkerKey forkerEnv initialChain)
         )
         forkerClose
     pure $ frk{forkerClose = void $ release rk'}
@@ -925,13 +913,13 @@ mkForker ::
   ForkerEnv m l blk ->
   AnchoredFragment (HeaderWithTime blk) ->
   Forker m l blk
-mkForker h qbs forkerKey forkerEnv currentChain =
+mkForker h qbs forkerKey forkerEnv initialChain =
   Forker
     { forkerClose = implForkerClose h forkerKey forkerEnv
     , forkerReadTables = getForkerEnv1 h forkerKey implForkerReadTables
     , forkerRangeReadTables = getForkerEnv1 h forkerKey (implForkerRangeReadTables qbs)
     , forkerGetLedgerState = getForkerEnvSTM h forkerKey implForkerGetLedgerState
-    , forkerGetCurrentChain = currentChain
+    , forkerGetInitialChain = initialChain
     , forkerReadStatistics = getForkerEnv h forkerKey implForkerReadStatistics
     , forkerPush = getForkerEnv1 h forkerKey implForkerPush
     , forkerCommit = getForkerEnvSTM h forkerKey implForkerCommit

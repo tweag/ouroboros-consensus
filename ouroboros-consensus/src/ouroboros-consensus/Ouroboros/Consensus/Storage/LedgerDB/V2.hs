@@ -774,7 +774,7 @@ newForker ::
   ResourceRegistry m ->
   (LedgerSeq m l, StateRef m l, ResourceKey m) ->
   m (Forker m l blk)
-newForker h ldbEnv rr (ledSeq, st, rk) = do
+newForker h ldbEnv rr (initialLedSeq, st, rk) = do
   forkerKey <- atomically $ stateTVar (ldbNextForkerKey ldbEnv) $ \r -> (r, r + 1)
   let tr = LedgerDBForkerEvent . TraceForkerEventWithKey forkerKey >$< ldbTracer ldbEnv
   traceWith tr ForkerOpen
@@ -792,20 +792,8 @@ newForker h ldbEnv rr (ledSeq, st, rk) = do
           , foeTracer = tr
           , foeResourcesToRelease = (ldbOpenHandlesLock ldbEnv, k, toRelease)
           }
-      anseq = getLedgerSeq ledSeq
-      resolveBlockHeaderWithTime lst' =
-        let lst = state lst'
-            mkRealPoint = pointToWithOriginRealPoint . castPoint . getTip
-        in case mkRealPoint lst of
-          Origin -> error "Unreachable, Block MUST be in ChainDB"
-          NotOrigin pt -> do
-            b <- ldbResolveBlock ldbEnv $ pt
-            let lcfg = configLedger $ getExtLedgerCfg $ ledgerDbCfg $ ldbCfg ldbEnv
-            pure $ mkHeaderWithTime lcfg (ledgerState lst) $ getHeader b
-  currentChain <- do
-    anchorHeader <- resolveBlockHeaderWithTime (AS.anchor anseq)
-    restHeaders <- traverse resolveBlockHeaderWithTime (AS.toOldestFirst anseq)
-    pure $ AS.fromOldestFirst (AS.asAnchor anchorHeader) restHeaders
+      lcfg = configLedger $ getExtLedgerCfg $ ledgerDbCfg $ ldbCfg ldbEnv
+  initialChain <- resolveInitialChainWithTime (ldbResolveBlock ldbEnv) lcfg (volatileStatesBimap id id initialLedSeq)
   atomically $ modifyTVar (ldbForkers ldbEnv) $ Map.insert forkerKey forkerEnv
   pure $
     Forker
@@ -813,7 +801,7 @@ newForker h ldbEnv rr (ledSeq, st, rk) = do
       , forkerRangeReadTables =
           getForkerEnv1 h forkerKey (implForkerRangeReadTables (ldbQueryBatchSize ldbEnv))
       , forkerGetLedgerState = getForkerEnvSTM h forkerKey implForkerGetLedgerState
-      , forkerGetCurrentChain = currentChain 
+      , forkerGetInitialChain = initialChain 
       , forkerReadStatistics = getForkerEnv h forkerKey implForkerReadStatistics
       , forkerPush = getForkerEnv1 h forkerKey implForkerPush
       , forkerCommit = getForkerEnvSTM h forkerKey implForkerCommit

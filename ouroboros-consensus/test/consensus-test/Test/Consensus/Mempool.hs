@@ -63,6 +63,7 @@ import Ouroboros.Consensus.Storage.LedgerDB.Forker
 import Ouroboros.Consensus.Util (repeatedly, repeatedlyM)
 import Ouroboros.Consensus.Util.Condense (condense)
 import Ouroboros.Consensus.Util.IOLike
+import qualified Ouroboros.Network.AnchoredFragment as AF
 import Test.Consensus.Mempool.Util
 import Test.Crypto.Hash ()
 import Test.QuickCheck
@@ -751,6 +752,7 @@ withTestMempoolWithTimeoutConfig timeoutConfig setup@TestSetup{..} prop =
                             , roforkerRangeReadTables = const $ pure (emptyLedgerTables, Nothing)
                             , roforkerGetLedgerState = pure $ forgetLedgerTables st
                             , roforkerReadStatistics = pure Nothing
+                            , roforkerGetInitialChain = AF.Empty AF.AnchorGenesis
                             }
                     )
             }

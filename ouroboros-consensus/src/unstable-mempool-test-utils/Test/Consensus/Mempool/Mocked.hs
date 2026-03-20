@@ -45,6 +45,7 @@ import Ouroboros.Consensus.Mempool.API
   )
 import Ouroboros.Consensus.Mempool.Impl.Common (MempoolLedgerDBView (MempoolLedgerDBView))
 import Ouroboros.Consensus.Storage.LedgerDB.Forker
+import qualified Ouroboros.Network.AnchoredFragment as AF
 
 data MockedMempool m blk = MockedMempool
   { getLedgerInterface :: !(Mempool.LedgerInterface m blk)
@@ -80,7 +81,8 @@ openMockedMempool ::
   InitialMempoolAndModelParams blk ->
   IO (MockedMempool IO blk)
 openMockedMempool capacityOverride tracer initialParams = do
-  currentLedgerStateTVar <- newTVarIO (immpInitialState initialParams)
+  let initialLedgerState = immpInitialState initialParams
+  currentLedgerStateTVar <- newTVarIO initialLedgerState
   reg <- unsafeNewRegistry
   let ledgerItf =
         Mempool.LedgerInterface
@@ -94,6 +96,7 @@ openMockedMempool capacityOverride tracer initialParams = do
                         ReadOnlyForker
                           { roforkerClose = pure ()
                           , roforkerGetLedgerState = pure (forgetLedgerTables st)
+                          , roforkerGetInitialChain = AF.Empty AF.AnchorGenesis
                           , roforkerReadTables = \keys ->
                               pure $ projectLedgerTables st `restrictValues'` keys
                           , roforkerReadStatistics = pure Nothing

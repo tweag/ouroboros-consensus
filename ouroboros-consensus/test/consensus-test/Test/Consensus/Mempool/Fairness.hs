@@ -36,6 +36,7 @@ import qualified Ouroboros.Consensus.Mempool.Capacity as Mempool
 import Ouroboros.Consensus.Mempool.Impl.Common (MempoolLedgerDBView (..))
 import Ouroboros.Consensus.Storage.LedgerDB.Forker
 import Ouroboros.Consensus.Util.IOLike (STM, atomically, retry)
+import qualified Ouroboros.Network.AnchoredFragment as AF
 import System.Random (randomIO)
 import Test.Consensus.Mempool.Fairness.TestBlock
 import Test.Tasty (TestTree, testGroup)
@@ -107,6 +108,7 @@ testTxSizeFairness TestParams{mempoolMaxCapacity, smallTxSize, largeTxSize, nrOf
                       ReadOnlyForker
                         { roforkerClose = pure ()
                         , roforkerReadTables = const $ pure emptyLedgerTables
+                        , roforkerGetInitialChain = AF.Empty AF.AnchorGenesis
                         , roforkerRangeReadTables = const $ pure (emptyLedgerTables, Nothing)
                         , roforkerGetLedgerState = pure $ testInitLedgerWithState NoPayLoadDependentState
                         , roforkerReadStatistics = pure Nothing
