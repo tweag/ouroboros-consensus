@@ -211,8 +211,8 @@ mkServer rr k chain = do
   leashingStateVar <- newTVarIO Map.empty 
   return $
     localStateQueryServer
-      cfg leashingStateVar (pure $ attachSlotTimeToFragment (testCfg k) $ Chain.toAnchoredFragment $ getHeader <$> chain)
-      (LedgerDB.getReadOnlyForker lgrDB rr)
+      cfg leashingStateVar 
+      (\pt -> LedgerDB.getReadOnlyForkerWithAction lgrDB rr pt (pure $ attachSlotTimeToFragment (testCfg k) $ Chain.toAnchoredFragment $ getHeader <$> chain))
  where
   cfg = ExtLedgerCfg $ testCfg k
 

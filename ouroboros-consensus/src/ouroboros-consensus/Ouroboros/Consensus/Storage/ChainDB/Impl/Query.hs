@@ -19,6 +19,7 @@ module Ouroboros.Consensus.Storage.ChainDB.Impl.Query
   , getMaxSlotNo
   , getPastLedger
   , getReadOnlyForkerAtPoint
+  , getReadOnlyForkerAtPointWithAction
   , getStatistics
   , getTipBlock
   , getTipHeader
@@ -257,7 +258,16 @@ getReadOnlyForkerAtPoint ::
   ResourceRegistry m ->
   Target (Point blk) ->
   m (Either LedgerDB.GetForkerError (LedgerDB.ReadOnlyForker' m blk))
-getReadOnlyForkerAtPoint CDB{..} = LedgerDB.getReadOnlyForker cdbLedgerDB
+getReadOnlyForkerAtPoint CDB{..} rr t = fmap fst <$> LedgerDB.getReadOnlyForkerWithAction cdbLedgerDB rr t (pure ())
+
+getReadOnlyForkerAtPointWithAction ::
+  IOLike m =>
+  ChainDbEnv m blk ->
+  ResourceRegistry m ->
+  Target (Point blk) ->
+  STM m r ->
+  m (Either LedgerDB.GetForkerError (LedgerDB.ReadOnlyForker' m blk, r))
+getReadOnlyForkerAtPointWithAction CDB{..} = LedgerDB.getReadOnlyForkerWithAction cdbLedgerDB
 
 getStatistics :: IOLike m => ChainDbEnv m blk -> m (Maybe LedgerDB.Statistics)
 getStatistics CDB{..} = LedgerDB.getTipStatistics cdbLedgerDB

@@ -38,12 +38,11 @@ localStateQueryServer ::
   ) =>
   ExtLedgerCfg blk ->
   ( StrictTVar m (LsqLeashingState blk)) ->
-  ( STM m (AnchoredFragment (HeaderWithTime blk)) ) ->
   ( Target (Point blk) ->
-    m (Either GetForkerError (ReadOnlyForker' m blk))
+    m (Either GetForkerError (ReadOnlyForker' m blk, AnchoredFragment (HeaderWithTime blk)))
   ) ->
   LocalStateQueryServer blk (Point blk) (Query blk) m ()
-localStateQueryServer cfg lsqLeashingStateVar getCurrentChain getView =
+localStateQueryServer cfg lsqLeashingStateVar getView =
   LocalStateQueryServer $ return idle
  where
   idle :: ServerStIdle blk (Point blk) (Query blk) m ()
@@ -61,20 +60,13 @@ localStateQueryServer cfg lsqLeashingStateVar getCurrentChain getView =
                 -> m (ServerStAcquiring blk (Point blk) (Query blk) m ())
   handleAcquire mpt mLeashId = do
     traceM $ "handleAcquire: start " <> show mLeashId 
-
-    -- by @nfrisby:
-    -- TODO: There's a race condition here; the selection might change between thegetViewcall and this getCurrentChain call.
-    -- Might just have to add the "chain that was the current chain at the time of the call" to the range of ChainDB.getReadOnlyForkerAtPoint.
-    -- TODO: or maybe a Forker's API already lets you determine what chain fragment it matches? I'm still not super-familiar with the UTxO HD api, which is where Forker comes from
-
     getView mpt >>= \case 
       -- case if we want to leash and there is a lsq leashing state var
-      Right forker
+      Right (forker, currentChain)
         | Just leashId <- mLeashId -> do
           traceM $ "My leash id " <> show leashId 
           atomically $ do
             lsqLeashingState <- readTVar lsqLeashingStateVar
-            currentChain <- getCurrentChain 
             let
               leashingFragment = case mpt of
                   ImmutableTip -> AF.Empty $ AF.anchor currentChain
@@ -83,7 +75,7 @@ localStateQueryServer cfg lsqLeashingStateVar getCurrentChain getView =
             let newState = Map.insert leashId leashingFragment lsqLeashingState 
             writeTVar lsqLeashingStateVar newState
             pure $ SendMsgAcquired $ acquired mLeashId forker
-      Right forker -> pure $ SendMsgAcquired $ acquired Nothing forker
+      Right (forker, _) -> pure $ SendMsgAcquired $ acquired Nothing forker
       Left PointTooOld{} -> pure $ SendMsgFailure AcquireFailurePointTooOld idle
       Left PointNotOnChain -> pure $ SendMsgFailure AcquireFailurePointNotOnChain idle
 
