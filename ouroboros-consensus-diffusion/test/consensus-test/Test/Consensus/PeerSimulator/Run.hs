@@ -22,6 +22,7 @@ import Data.List (sort)
 import qualified Data.List.NonEmpty as NonEmpty
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
+import qualified Data.Set as Set
 import Ouroboros.Consensus.Block
 import Ouroboros.Consensus.Config (TopLevelConfig (..))
 import Ouroboros.Consensus.Genesis.Governor (gddWatcher)
@@ -42,7 +43,7 @@ import Ouroboros.Consensus.MiniProtocol.ChainSync.Client
 import qualified Ouroboros.Consensus.MiniProtocol.ChainSync.Client as CSClient
 import qualified Ouroboros.Consensus.Node.GsmState as GSM
 import Ouroboros.Consensus.Storage.ChainDB.API
-import qualified Ouroboros.Consensus.Node.LsqLeashing as LsqLeashing 
+import qualified Ouroboros.Consensus.Node.LsqLeashing as LsqLeashing
 import qualified Ouroboros.Consensus.Storage.ChainDB.API as ChainDB
 import Ouroboros.Consensus.Util.Condense (Condense (..))
 import Ouroboros.Consensus.Util.IOLike
@@ -471,13 +472,13 @@ startNode schedulerConfig genesisTest interval = do
         varGenesisLoE
 
     void $ forkLinkedWatcher lrRegistry "LoE leashing updater background" $
-      LsqLeashing.lsqLeashingWatcher 
+      LsqLeashing.lsqLeashingWatcher
         nullTracer
         mempty
         lnChainDb
         (readTVar lrLsqLeashingStateVar)
         (readTVar varGenesisLoE)
-        lrLoEVar 
+        lrLoEVar
 
   void $
     forkLinkedWatcher lrRegistry "CSJ invariants watcher" $
@@ -541,7 +542,7 @@ nodeLifecycle ::
 nodeLifecycle schedulerConfig genesisTest lrTracer lrRegistry lrPeerSim = do
   lrCdb <- emptyNodeDBs
   lrLoEVar <- mkLoEVar schedulerConfig
-  lrLsqLeashingStateVar <- newTVarIO Map.empty 
+  lrLsqLeashingStateVar <- newTVarIO $ ChainDB.LsqLeashingState Map.empty Set.empty
   let
     resources =
       LiveResources
