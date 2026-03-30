@@ -172,7 +172,7 @@ implMkLedgerDb h snapManager =
       , getImmutableTip = getEnvSTM h implGetImmutableTip
       , getPastLedgerState = \s -> getEnvSTM h (flip implGetPastLedgerState s)
       , getHeaderStateHistory = getEnvSTM h implGetHeaderStateHistory
-      , getForkerAtTarget = newForkerAtTarget h
+      , getForkerAtTargetWithAction = newForkerAtTargetWithAction h
       , validateFork = getEnv5 h (implValidate h)
       , getPrevApplied = getEnvSTM h implGetPrevApplied
       , garbageCollect = \s -> getEnv h (flip implGarbageCollect s)
@@ -207,17 +207,17 @@ mkInternals h snapManager =
     , wipeLedgerDB = destroySnapshots snapManager
     , truncateSnapshots = getEnv h $ implIntTruncateSnapshots snapManager . ldbHasFS
     , push = \st -> withRegistry $ \reg -> do
-        eFrk <- newForkerAtTarget h reg VolatileTip
+        eFrk <- newForkerAtTargetWithAction h reg VolatileTip (pure ())
         case eFrk of
           Left{} -> error "Unreachable, Volatile tip MUST be in LedgerDB"
-          Right frk -> do
+          Right (frk, ()) -> do
             forkerPush frk st >> atomically (forkerCommit frk) >> forkerClose frk
             getEnv h pruneLedgerSeq
     , reapplyThenPushNOW = \blk -> getEnv h $ \env -> withRegistry $ \reg -> do
-        eFrk <- newForkerAtTarget h reg VolatileTip
+        eFrk <- newForkerAtTargetWithAction h reg VolatileTip (pure ())
         case eFrk of
           Left{} -> error "Unreachable, Volatile tip MUST be in LedgerDB"
-          Right frk -> do
+          Right (frk, ()) -> do
             st <- atomically $ forkerGetLedgerState frk
             tables <- forkerReadTables frk (getBlockKeySets blk)
             let st' =
@@ -586,14 +586,18 @@ getStateRef ::
   (IOLike m, Traversable t, GetTip l) =>
   LedgerDBEnv m l blk ->
   ResourceRegistry m ->
+  STM m r ->
   (LedgerSeq m l -> t (StateRef m l)) ->
-  m (t (StateRef m l, ResourceKey m))
-getStateRef ldbEnv reg project =
+  m (t (StateRef m l, ResourceKey m, r))
+getStateRef ldbEnv reg action project =
   RAWLock.withReadAccess (ldbOpenHandlesLock ldbEnv) $ \() -> do
-    tst <- project <$> atomically (getVolatileLedgerSeq ldbEnv)
+    (tst, actionResult) <- atomically $ do
+      ledgerSeq <- getVolatileLedgerSeq ldbEnv
+      actionResult <- action
+      return $ (project ledgerSeq, actionResult)
     for tst $ \st -> do
       (resKey, tables') <- allocate reg (\_ -> duplicate $ tables st) close
-      pure (st{tables = tables'}, resKey)
+      pure (st{tables = tables'}, resKey, actionResult)
 
 -- | Like 'StateRef', but takes care of closing the handle when the given action
 -- returns or errors.
@@ -604,7 +608,7 @@ withStateRef ::
   (t (StateRef m l, ResourceKey m) -> m a) ->
   m a
 withStateRef ldbEnv project f =
-  withRegistry $ \reg -> getStateRef ldbEnv reg project >>= f
+  withRegistry $ \reg -> getStateRef ldbEnv reg (pure ()) project >>= \items -> f (fmap (\(st, rk, _) -> (st, rk)) items)
 
 acquireAtTarget ::
   ( HeaderHash l ~ HeaderHash blk
@@ -616,9 +620,10 @@ acquireAtTarget ::
   LedgerDBEnv m l blk ->
   Either Word64 (Target (Point blk)) ->
   ResourceRegistry m ->
-  m (Either GetForkerError (StateRef m l, ResourceKey m))
-acquireAtTarget ldbEnv target reg =
-  getStateRef ldbEnv reg $ \l -> case target of
+  STM m r ->
+  m (Either GetForkerError (StateRef m l, ResourceKey m, r))
+acquireAtTarget ldbEnv target reg action =
+  getStateRef ldbEnv reg action $ \l -> case target of
     Right VolatileTip -> pure $ currentHandle l
     Right ImmutableTip -> pure $ anchorHandle l
     Right (SpecificPoint pt) -> do
@@ -639,7 +644,7 @@ acquireAtTarget ldbEnv target reg =
                 }
       Just l' -> pure $ currentHandle l'
 
-newForkerAtTarget ::
+newForkerAtTargetWithAction ::
   ( HeaderHash l ~ HeaderHash blk
   , IOLike m
   , IsLedger l
@@ -650,9 +655,10 @@ newForkerAtTarget ::
   LedgerDBHandle m l blk ->
   ResourceRegistry m ->
   Target (Point blk) ->
-  m (Either GetForkerError (Forker m l blk))
-newForkerAtTarget h rr pt = getEnv h $ \ldbEnv ->
-  acquireAtTarget ldbEnv (Right pt) rr >>= traverse (newForker h ldbEnv rr)
+  STM m r ->
+  m (Either GetForkerError (Forker m l blk, r))
+newForkerAtTargetWithAction h rr pt action = getEnv h $ \ldbEnv ->
+  acquireAtTarget ldbEnv (Right pt) rr action >>= traverse (newForker h ldbEnv rr)
 
 newForkerByRollback ::
   ( HeaderHash l ~ HeaderHash blk
@@ -667,7 +673,7 @@ newForkerByRollback ::
   Word64 ->
   m (Either GetForkerError (Forker m l blk))
 newForkerByRollback h rr n = getEnv h $ \ldbEnv ->
-  acquireAtTarget ldbEnv (Left n) rr >>= traverse (newForker h ldbEnv rr)
+  acquireAtTarget ldbEnv (Left n) rr (pure ()) >>= traverse (fmap fst . newForker h ldbEnv rr)
 
 closeForkerEnv ::
   IOLike m => ForkerEnv m l blk -> m ()
@@ -764,9 +770,9 @@ newForker ::
   LedgerDBHandle m l blk ->
   LedgerDBEnv m l blk ->
   ResourceRegistry m ->
-  (StateRef m l, ResourceKey m) ->
-  m (Forker m l blk)
-newForker h ldbEnv rr (st, rk) = do
+  (StateRef m l, ResourceKey m, r) ->
+  m (Forker m l blk, r)
+newForker h ldbEnv rr (st, rk, actionResult) = do
   forkerKey <- atomically $ stateTVar (ldbNextForkerKey ldbEnv) $ \r -> (r, r + 1)
   let tr = LedgerDBForkerEvent . TraceForkerEventWithKey forkerKey >$< ldbTracer ldbEnv
   traceWith tr ForkerOpen
@@ -785,14 +791,15 @@ newForker h ldbEnv rr (st, rk) = do
           , foeResourcesToRelease = (ldbOpenHandlesLock ldbEnv, k, toRelease)
           }
   atomically $ modifyTVar (ldbForkers ldbEnv) $ Map.insert forkerKey forkerEnv
-  pure $
-    Forker
-      { forkerReadTables = getForkerEnv1 h forkerKey implForkerReadTables
-      , forkerRangeReadTables =
-          getForkerEnv1 h forkerKey (implForkerRangeReadTables (ldbQueryBatchSize ldbEnv))
-      , forkerGetLedgerState = getForkerEnvSTM h forkerKey implForkerGetLedgerState
-      , forkerReadStatistics = getForkerEnv h forkerKey implForkerReadStatistics
-      , forkerPush = getForkerEnv1 h forkerKey implForkerPush
-      , forkerCommit = getForkerEnvSTM h forkerKey implForkerCommit
-      , forkerClose = implForkerClose h forkerKey forkerEnv
-      }
+  let forker =
+        Forker
+          { forkerReadTables = getForkerEnv1 h forkerKey implForkerReadTables
+          , forkerRangeReadTables =
+              getForkerEnv1 h forkerKey (implForkerRangeReadTables (ldbQueryBatchSize ldbEnv))
+          , forkerGetLedgerState = getForkerEnvSTM h forkerKey implForkerGetLedgerState
+          , forkerReadStatistics = getForkerEnv h forkerKey implForkerReadStatistics
+          , forkerPush = getForkerEnv1 h forkerKey implForkerPush
+          , forkerCommit = getForkerEnvSTM h forkerKey implForkerCommit
+          , forkerClose = implForkerClose h forkerKey forkerEnv
+          }
+  pure (forker, actionResult)

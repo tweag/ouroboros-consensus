@@ -38,7 +38,6 @@ import Ouroboros.Consensus.Config.SecurityParam
 import Ouroboros.Consensus.Genesis.Governor
   ( DensityBounds
   , densityDisconnect
-  , sharedCandidatePrefix
   )
 import Ouroboros.Consensus.HeaderValidation (HeaderWithTime (..))
 import Ouroboros.Consensus.MiniProtocol.ChainSync.Client
@@ -47,6 +46,7 @@ import Ouroboros.Consensus.MiniProtocol.ChainSync.Client
   )
 import Ouroboros.Consensus.Util.Condense (condense)
 import Ouroboros.Network.AnchoredFragment (AnchoredFragment)
+import Ouroboros.Consensus.Util.AnchoredFragment (sharedCandidatePrefix)
 import qualified Ouroboros.Network.AnchoredFragment as AF
 import Ouroboros.Network.Block
   ( HasHeader

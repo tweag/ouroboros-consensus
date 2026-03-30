@@ -9,6 +9,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE StandaloneKindSignatures #-}
+{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
@@ -189,7 +190,7 @@ implMkLedgerDb h snapManager =
       , getImmutableTip = getEnvSTM h implGetImmutableTip
       , getPastLedgerState = getEnvSTM1 h implGetPastLedgerState
       , getHeaderStateHistory = getEnvSTM h implGetHeaderStateHistory
-      , getForkerAtTarget = newForkerAtTarget h
+      , getForkerAtTargetWithAction = newForkerAtTargetWithAction h
       , validateFork = getEnv5 h (implValidate h)
       , getPrevApplied = getEnvSTM h implGetPrevApplied
       , garbageCollect = getEnv1 h implGarbageCollect
@@ -714,7 +715,7 @@ getForkerEnvSTM (LDBHandle varState) forkerKey f =
             )
 
 -- | Will call 'error' if the point is not on the LedgerDB
-newForkerAtTarget ::
+newForkerAtTargetWithAction ::
   ( HeaderHash l ~ HeaderHash blk
   , IOLike m
   , IsLedger l
@@ -725,8 +726,9 @@ newForkerAtTarget ::
   LedgerDBHandle m l blk ->
   ResourceRegistry m ->
   Target (Point blk) ->
-  m (Either GetForkerError (Forker m l blk))
-newForkerAtTarget h rr pt = withTransferrableReadAccess h rr (Right pt)
+  STM m r ->
+  m (Either GetForkerError (Forker m l blk, r))
+newForkerAtTargetWithAction h rr pt action = withTransferrableReadAccess h rr (Right pt) action
 
 newForkerByRollback ::
   ( HeaderHash l ~ HeaderHash blk
@@ -741,7 +743,7 @@ newForkerByRollback ::
   -- | How many blocks to rollback from the tip
   Word64 ->
   m (Either GetForkerError (Forker m l blk))
-newForkerByRollback h rr n = withTransferrableReadAccess h rr (Left n)
+newForkerByRollback h rr n = fmap fst <$> withTransferrableReadAccess h rr (Left n) (pure ())
 
 -- | Acquire read access and then allocate a forker, acquiring it at the given
 -- point or rollback.
@@ -756,8 +758,9 @@ withTransferrableReadAccess ::
   LedgerDBHandle m l blk ->
   ResourceRegistry m ->
   Either Word64 (Target (Point blk)) ->
-  m (Either GetForkerError (Forker m l blk))
-withTransferrableReadAccess h rr f = getEnv h $ \ldbEnv -> do
+  STM m r ->
+  m (Either GetForkerError (Forker m l blk, r))
+withTransferrableReadAccess h rr f action = getEnv h $ \ldbEnv -> do
   -- This TVar will be used to maybe release the read lock by the resource
   -- registry. Once the forker was opened it will be emptied.
   tv <- newTVarIO (pure ())
@@ -776,19 +779,19 @@ withTransferrableReadAccess h rr f = getEnv h $ \ldbEnv -> do
           join $ readTVarIO tv
       )
   unsafeRunReadLocked
-    ( acquireAtTarget ldbEnv f
+    ( acquireAtTarget ldbEnv f action
         >>= \case
           Left err -> do
             ReadLocked $ void $ release rk
             pure (Left err)
-          Right chlog -> do
-            Right <$> newForker h ldbEnv (rk, tv) rr chlog
+          Right (chlog, actionResult) -> do
+            Right . (,actionResult) <$> newForker h ldbEnv (rk, tv) rr chlog
     )
 
 -- | Acquire both a value handle and a db changelog at the tip. Holds a read lock
 -- while doing so.
 acquireAtTarget ::
-  forall m l blk.
+  forall m l blk r.
   ( HeaderHash l ~ HeaderHash blk
   , IOLike m
   , IsLedger l
@@ -798,10 +801,15 @@ acquireAtTarget ::
   ) =>
   LedgerDBEnv m l blk ->
   Either Word64 (Target (Point blk)) ->
-  ReadLocked m (Either GetForkerError (DbChangelog l))
-acquireAtTarget ldbEnv target = readLocked $ runExceptT $ do
+  STM m r ->
+  ReadLocked m (Either GetForkerError (DbChangelog l, r))
+acquireAtTarget ldbEnv target action = readLocked $ runExceptT $ do
   dblog <- lift $ readTVarIO (ldbChangelog ldbEnv)
-  volSuffix <- lift $ atomically $ getVolatileSuffix $ ldbGetVolatileSuffix ldbEnv
+  (volSuffix, actionResult) <- lift $ atomically $ do
+    actionResult <- action
+    suffix <- getVolatileSuffix $ ldbGetVolatileSuffix ldbEnv
+    return (suffix, actionResult)
+     
   -- The DbChangelog might contain more than k states if they have not yet
   -- been garbage-collected.
   let volStates = volSuffix $ changelogStates dblog
@@ -816,10 +824,10 @@ acquireAtTarget ldbEnv target = readLocked $ runExceptT $ do
         | pointSlot pt < pointSlot immTip = throwError $ PointTooOld Nothing
         | otherwise = case rollback pt dblog of
             Nothing -> throwError PointNotOnChain
-            Just dblog' -> pure dblog'
+            Just dblog' -> pure (dblog', actionResult)
   -- Get the prefix of the dblog ending in the specified target.
   case target of
-    Right VolatileTip -> pure dblog
+    Right VolatileTip -> pure (dblog, actionResult)
     Right ImmutableTip -> rollbackTo immTip
     Right (SpecificPoint pt) -> rollbackTo pt
     Left n -> do
@@ -833,7 +841,7 @@ acquireAtTarget ldbEnv target = readLocked $ runExceptT $ do
                 }
       case rollbackN n dblog of
         Nothing -> error "unreachable"
-        Just dblog' -> pure dblog'
+        Just dblog' -> pure (dblog', actionResult)
 
 {-------------------------------------------------------------------------------
   Make forkers from consistent views

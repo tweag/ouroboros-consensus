@@ -17,6 +17,7 @@ module Ouroboros.Consensus.Storage.ChainDB.API
     ChainDB (..)
   , getCurrentTip
   , getTipBlockNo
+  , getReadOnlyForkerAtPoint
 
     -- * Adding a block
   , AddBlockPromise (..)
@@ -70,11 +71,13 @@ module Ouroboros.Consensus.Storage.ChainDB.API
     -- * Genesis
   , GetLoEFragment
   , LoE (..)
+  , LsqLeashingState
   ) where
 
 import Control.Monad (void)
 import Control.ResourceRegistry
 import Data.Typeable (Typeable)
+import Data.Map.Strict (Map)
 import GHC.Generics (Generic)
 import Ouroboros.Consensus.Block
 import Ouroboros.Consensus.HeaderStateHistory
@@ -208,12 +211,14 @@ data ChainDB m blk = ChainDB
   , getHeaderStateHistory :: STM m (HeaderStateHistory blk)
   -- ^ Get a 'HeaderStateHistory' populated with the 'HeaderState's of the
   -- last @k@ blocks of the current chain.
-  , getReadOnlyForkerAtPoint ::
+  , getReadOnlyForkerAtPointWithAction ::
+      forall r .
       ResourceRegistry m ->
       Target (Point blk) ->
-      m (Either GetForkerError (ReadOnlyForker' m blk))
+      STM m r ->
+      m (Either GetForkerError (ReadOnlyForker' m blk, r))
   -- ^ Acquire a read-only forker at a specific point if that point exists
-  -- on the db.
+  -- on the db, executing an extra STM action.
   --
   -- Note that the forker should be closed by the caller of this function.
   --
@@ -407,6 +412,14 @@ getTipBlockNo ::
   (Monad (STM m), HasHeader (Header blk)) =>
   ChainDB m blk -> STM m (WithOrigin BlockNo)
 getTipBlockNo = fmap Network.getTipBlockNo . getCurrentTip
+
+getReadOnlyForkerAtPoint ::
+  (Monad (STM m), Functor m) =>
+  ChainDB m blk ->
+  ResourceRegistry m ->
+  Target (Point blk) ->
+  m (Either GetForkerError (ReadOnlyForker' m blk))
+getReadOnlyForkerAtPoint cdb rr pt = fmap fst <$> getReadOnlyForkerAtPointWithAction cdb rr pt (pure ())
 
 {-------------------------------------------------------------------------------
   Adding a block
@@ -910,3 +923,5 @@ data LoE a
 -- details. This fragment must be anchored in a (recent) point on the immutable
 -- chain, just like candidate fragments.
 type GetLoEFragment m blk = m (LoE (AnchoredFragment (HeaderWithTime blk)))
+
+type LsqLeashingState blk = Map LeashId (AnchoredFragment (HeaderWithTime blk))

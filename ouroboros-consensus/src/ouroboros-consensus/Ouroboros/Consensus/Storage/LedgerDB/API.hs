@@ -146,7 +146,9 @@ module Ouroboros.Consensus.Storage.LedgerDB.API
   , LedgerDbError (..)
 
     -- * Forker
+  , getForkerAtTarget
   , getReadOnlyForker
+  , getReadOnlyForkerWithAction
   , getTipStatistics
   , withPrivateTipForker
   , withTipForker
@@ -170,6 +172,7 @@ import Data.Functor.Contravariant ((>$<))
 import Data.Kind
 import qualified Data.Map.Strict as Map
 import Data.MemPack
+import Data.Bifunctor (bimap)
 import Data.Set (Set)
 import Data.Void (absurd)
 import Data.Word
@@ -231,10 +234,12 @@ data LedgerDB m l blk = LedgerDB
       l ~ ExtLedgerState blk =>
       STM m (HeaderStateHistory blk)
   -- ^ Get the header state history for all ledger states in the LedgerDB.
-  , getForkerAtTarget ::
+  , getForkerAtTargetWithAction ::
+      forall r .
       ResourceRegistry m ->
       Target (Point blk) ->
-      m (Either GetForkerError (Forker m l blk))
+      STM m r ->
+      m (Either GetForkerError (Forker m l blk, r))
   -- ^ Acquire a 'Forker' at the requested point. If a ledger state associated
   -- with the requested point does not exist in the LedgerDB, it will return a
   -- 'GetForkerError'.
@@ -419,7 +424,24 @@ getReadOnlyForker ::
   ResourceRegistry m ->
   Target (Point blk) ->
   m (Either GetForkerError (ReadOnlyForker m l blk))
-getReadOnlyForker ldb rr pt = fmap readOnlyForker <$> getForkerAtTarget ldb rr pt
+getReadOnlyForker ldb rr pt = fmap fst <$> getReadOnlyForkerWithAction ldb rr pt (pure ())
+
+getReadOnlyForkerWithAction ::
+  MonadSTM m =>
+  LedgerDB m l blk ->
+  ResourceRegistry m ->
+  Target (Point blk) ->
+  STM m r ->
+  m (Either GetForkerError (ReadOnlyForker m l blk, r))
+getReadOnlyForkerWithAction ldb rr pt action = fmap (bimap readOnlyForker id) <$> getForkerAtTargetWithAction ldb rr pt action
+
+getForkerAtTarget ::
+  MonadSTM m =>
+  LedgerDB m l blk ->
+  ResourceRegistry m ->
+  Target (Point blk) ->
+  m (Either GetForkerError (Forker m l blk))
+getForkerAtTarget ldb rr pt = fmap fst <$> getForkerAtTargetWithAction ldb rr pt (pure ()) 
 
 {-------------------------------------------------------------------------------
   Snapshots

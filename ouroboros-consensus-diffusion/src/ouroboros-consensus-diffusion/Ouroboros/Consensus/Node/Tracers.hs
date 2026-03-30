@@ -44,6 +44,7 @@ import Ouroboros.Consensus.MiniProtocol.LocalTxSubmission.Server
   ( TraceLocalTxSubmissionServerEvent (..)
   )
 import Ouroboros.Consensus.Node.GSM (TraceGsmEvent)
+import Ouroboros.Consensus.Node.LsqLeashing (TraceLsqLeashingEvent)
 import Ouroboros.Consensus.Protocol.Praos.AgentClient
   ( KESAgentClientTrace (..)
   )
@@ -88,6 +89,7 @@ data Tracers' remotePeer localPeer blk f = Tracers
   , consensusErrorTracer :: f SomeException
   , gsmTracer :: f (TraceGsmEvent (Tip blk))
   , gddTracer :: f (TraceGDDEvent remotePeer blk)
+  , lsqLeashingTracer :: f (TraceLsqLeashingEvent blk)
   , csjTracer ::
       f (TraceLabelPeer remotePeer (CSJumping.TraceEventCsj remotePeer blk))
   , dbfTracer :: f (CSJumping.TraceEventDbf remotePeer)
@@ -118,6 +120,7 @@ instance
       , consensusErrorTracer = f consensusErrorTracer
       , gsmTracer = f gsmTracer
       , gddTracer = f gddTracer
+      , lsqLeashingTracer = f lsqLeashingTracer
       , csjTracer = f csjTracer
       , dbfTracer = f dbfTracer
       , kesAgentTracer = f kesAgentTracer
@@ -155,6 +158,7 @@ nullTracers =
     , consensusErrorTracer = nullTracer
     , gsmTracer = nullTracer
     , gddTracer = nullTracer
+    , lsqLeashingTracer = nullTracer
     , csjTracer = nullTracer
     , dbfTracer = nullTracer
     , kesAgentTracer = nullTracer
@@ -195,6 +199,7 @@ showTracers tr =
     , consensusErrorTracer = showTracing tr
     , gsmTracer = showTracing tr
     , gddTracer = showTracing tr
+    , lsqLeashingTracer = showTracing tr
     , csjTracer = showTracing tr
     , dbfTracer = showTracing tr
     , kesAgentTracer = showTracing tr
