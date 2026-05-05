@@ -65,6 +65,7 @@ import Ouroboros.Consensus.BlockchainTime
 import Ouroboros.Consensus.Config
 import Ouroboros.Consensus.Config.SupportsNode
 import Ouroboros.Consensus.Forecast
+import Ouroboros.Consensus.HardFork.Abstract (HasHardForkHistory (..))
 import Ouroboros.Consensus.HardFork.Combinator
 import Ouroboros.Consensus.HardFork.Combinator.Condense
 import Ouroboros.Consensus.HardFork.Combinator.Serialisation.Common
@@ -87,6 +88,18 @@ import Ouroboros.Consensus.Node.InitStorage
 import Ouroboros.Consensus.Node.NetworkProtocolVersion
 import Ouroboros.Consensus.Node.Run
 import Ouroboros.Consensus.Node.Serialisation
+import Ouroboros.Consensus.Peras.Cert.Mock (MockPerasCert)
+import Ouroboros.Consensus.Peras.Context
+  ( StateSupportsPerasEpochContext (..)
+  , mkBoundedPerasEpochContextWith
+  )
+import Ouroboros.Consensus.Peras.Crypto.Mock
+  ( MockPerasCrypto
+  , MockPerasVotingCommitteeScheme
+  )
+import Ouroboros.Consensus.Peras.Error.Mock (MockPerasError)
+import Ouroboros.Consensus.Peras.Vote.Mock (MockPerasVote)
+import Ouroboros.Consensus.Peras.Voting.Mock (mkMockPerasVotingCommitteeInput)
 import Ouroboros.Consensus.Protocol.Abstract
 import Ouroboros.Consensus.Storage.ImmutableDB (simpleChunkInfo)
 import Ouroboros.Consensus.Storage.Serialisation
@@ -311,6 +324,13 @@ instance LedgerStateSupportsPeras (LedgerState BlockA)
 
 instance LedgerStateSupportsPeras (Ticked LedgerState BlockA)
 
+instance BlockSupportsPeras BlockA where
+  type PerasCrypto BlockA = MockPerasCrypto BlockA
+  type PerasVotingCommitteeScheme BlockA = MockPerasVotingCommitteeScheme BlockA
+  type PerasVote BlockA = MockPerasVote BlockA
+  type PerasCert BlockA = MockPerasCert BlockA
+  type PerasError BlockA = MockPerasError BlockA
+
 instance HasPartialConsensusConfig ProtocolA
 
 instance HasPartialLedgerConfig BlockA where
@@ -358,7 +378,7 @@ blockForgingA =
     , canBeLeader = ()
     , updateForgeState = \_ _ _ -> return $ ForgeStateUpdated ()
     , checkCanForge = \_ _ _ _ _ -> return ()
-    , forgeBlock = \cfg bno slot st txs proof ->
+    , forgeBlock = \cfg bno slot _mbPerasCert st txs proof ->
         return $
           forgeBlockA cfg bno slot st (fmap txForgetValidated txs) proof
     , finalize = return ()
@@ -623,6 +643,16 @@ instance SerialiseNodeToClient BlockA PartialLedgerConfigA
 instance SerialiseNodeToClient BlockA (EpochInfo Identity, PartialLedgerConfigA) where
   encodeNodeToClient = error "BlockA being used as a SingleEraBlock"
   decodeNodeToClient = error "BlockA being used as a SingleEraBlock"
+
+-- NOTE: BlockA is only ever used wrapped in the
+-- hard fork combinator (which implements 'hardForkSummary' directly and never
+-- delegates to the underlying era), so this method is never actually called.
+instance HasHardForkHistory BlockA where
+  type HardForkIndices BlockA = '[BlockA]
+  hardForkSummary = error "BlockA being used as a SingleEraBlock"
+
+instance StateSupportsPerasEpochContext BlockA where
+  mkBoundedPerasEpochContext = mkBoundedPerasEpochContextWith mkMockPerasVotingCommitteeInput
 
 instance SerialiseConstraintsHFC BlockA
 instance SerialiseDiskConstraints BlockA
