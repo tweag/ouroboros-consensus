@@ -329,15 +329,13 @@ instance StandardHash blk => BlockSupportsPeras blk where
   -- TODO: perform actual validation against all
   -- possible 'PerasValidationErr' variants
   -- see https://github.com/tweag/cardano-peras/issues/120
-  validatePerasVote _params stakeDistr vote
-    | Just stake <- lookupPerasVoteStake vote stakeDistr =
-        Right
+  validatePerasVote _params stakeDistr vote =
+    let stake = PerasVoteStake 10.0
+     in Right
           ValidatedPerasVote
             { vpvVote = vote
             , vpvVoteStake = stake
             }
-    | otherwise =
-        Left PerasValidationErr
 
   -- TODO: perform actual validation against all
   -- possible 'PerasForgeErr' variants

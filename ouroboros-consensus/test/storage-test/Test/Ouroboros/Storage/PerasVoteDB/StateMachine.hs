@@ -14,6 +14,7 @@ module Test.Ouroboros.Storage.PerasVoteDB.StateMachine
     -- * Reusable generators
   , genVoterId
   , genVoteStake
+  , genValidatedVoteWithArrivalTime
   ) where
 
 import qualified Cardano.Crypto.DSIGN.Class as SL
@@ -177,24 +178,7 @@ instance StateModel Model where
     genCreateDB = do
       pure CreateDB
 
-    genAddVote = do
-      roundNo <- genRoundNo
-      point <- genPoint
-      voterId <- genVoterId
-      stake <- genVoteStake
-      now <- genRelativeTime
-      let voteWithTime =
-            WithArrivalTime now $
-              ValidatedPerasVote
-                { vpvVote =
-                    PerasVote
-                      { pvVoteRound = roundNo
-                      , pvVoteBlock = point
-                      , pvVoteVoterId = voterId
-                      }
-                , vpvVoteStake = stake
-                }
-      return (AddVote voteWithTime)
+    genAddVote = AddVote <$> genValidatedVoteWithArrivalTime
 
     genGetVoteIds = do
       pure GetVoteIds
@@ -375,6 +359,33 @@ genVoteStake :: Gen PerasVoteStake
 genVoteStake = do
   stake <- (1 %) <$> choose (2, 10) -- stake between 1/2 and 1/10
   pure (PerasVoteStake stake)
+
+
+genVote :: Gen PerasVote
+genVote = do
+  roundNo <- genRoundNo
+  point <- genPoint
+  voterId <- genVoterId
+  pure $ PerasVote
+    { pvVoteRound = roundNo
+    , pvVoteBlock = point
+    , pvVoteVoterId = voterId
+    }
+
+genValidatedVote :: Gen ValidatedPerasVote
+genValidatedVote = do
+  vote <- genVote
+  stake <- genVoteStake
+  pure $ ValidatedPerasVote
+    { vpvVote = vote
+    , vpvVoteStake = stake
+    }
+
+genValidatedVoteWithArrivalTime :: Gen (WithArrivalTime (ValidatedPerasVote a)
+genValidatedVoteWithArrivalTime = do
+  vote <- genValidatedVote
+  now <- genRelativeTime
+  pure $ WithArrivalTime now vote
 
 -- * Helpers
 

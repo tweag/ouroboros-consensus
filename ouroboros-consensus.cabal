@@ -96,6 +96,8 @@ common common-exe
 library
   import: common-lib
   hs-source-dirs: ouroboros-consensus/src/ouroboros-consensus
+                , ouroboros-consensus/test/storage-test
+  other-modules: Test.Ouroboros.Storage.PerasVoteDB.StateMachine
   exposed-modules:
     Ouroboros.Consensus.Block
     Ouroboros.Consensus.Block.Abstract
@@ -345,6 +347,9 @@ library
 
   build-depends:
     aeson,
+    QuickCheck,
+    quickcheck-dynamic,
+    tree-diff,
     array,
     base >=4.14 && <4.23,
     base-deriving-via,
