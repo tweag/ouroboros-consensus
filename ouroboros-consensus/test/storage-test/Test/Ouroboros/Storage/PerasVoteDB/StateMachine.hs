@@ -8,7 +8,14 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 
-module Test.Ouroboros.Storage.PerasVoteDB.StateMachine (tests) where
+module Test.Ouroboros.Storage.PerasVoteDB.StateMachine
+  ( tests
+
+    -- * Reusable generators
+  , genVoterId
+  , genVoteStake
+  , genValidatedVoteWithArrivalTime
+  ) where
 
 import qualified Cardano.Crypto.DSIGN.Class as SL
 import qualified Cardano.Crypto.Seed as SL
@@ -171,24 +178,7 @@ instance StateModel Model where
     genCreateDB = do
       pure CreateDB
 
-    genAddVote = do
-      roundNo <- genRoundNo
-      point <- genPoint
-      voterId <- genVoterId
-      stake <- genVoteStake
-      now <- genRelativeTime
-      let voteWithTime =
-            WithArrivalTime now $
-              ValidatedPerasVote
-                { vpvVote =
-                    PerasVote
-                      { pvVoteRound = roundNo
-                      , pvVoteBlock = point
-                      , pvVoteVoterId = voterId
-                      }
-                , vpvVoteStake = stake
-                }
-      return (AddVote voteWithTime)
+    genAddVote = AddVote <$> genValidatedVoteWithArrivalTime
 
     genGetVoteIds = do
       pure GetVoteIds
@@ -361,6 +351,59 @@ instance RunModel Model (StateT (PerasVoteDB IO TestBlock) IO) where
     tabulate "GetForgedCertForRound" [tag]
   monitoring _ _ _ _ =
     id
+
+-- * Reusable generators
+
+-- | Generate a random 'PerasVoterId'.
+--
+-- We want to force collisions when adding votes, so we need to restrict
+-- the key space a lot here. Otherwise we might never hit the case where
+-- the same voter casts two votes for the same round/block.
+genVoterId :: Gen PerasVoterId
+genVoterId = do
+  let mkVoterKey = fromString . replicate 32
+  bytes <- mkVoterKey <$> elements [chr c | c <- [0 .. 99]]
+  let signKey = SL.genKeyDSIGN (SL.mkSeedFromBytes bytes)
+  let verKey = SL.deriveVerKeyDSIGN signKey
+  let keyHash = SL.hashKey (SL.VKey verKey)
+  pure (PerasVoterId keyHash)
+
+-- | Generate a random 'PerasVoteStake'.
+--
+-- Make it so that we always require multiple votes to reach a quorum.
+-- This is assuming a quorum threshold strictly larger than 50%, which is
+-- a very conservative assumption for Peras.
+genVoteStake :: Gen PerasVoteStake
+genVoteStake = do
+  stake <- (1 %) <$> choose (2, 10) -- stake between 1/2 and 1/10
+  pure (PerasVoteStake stake)
+
+
+genVote :: Gen PerasVote
+genVote = do
+  roundNo <- genRoundNo
+  point <- genPoint
+  voterId <- genVoterId
+  pure $ PerasVote
+    { pvVoteRound = roundNo
+    , pvVoteBlock = point
+    , pvVoteVoterId = voterId
+    }
+
+genValidatedVote :: Gen ValidatedPerasVote
+genValidatedVote = do
+  vote <- genVote
+  stake <- genVoteStake
+  pure $ ValidatedPerasVote
+    { vpvVote = vote
+    , vpvVoteStake = stake
+    }
+
+genValidatedVoteWithArrivalTime :: Gen (WithArrivalTime (ValidatedPerasVote a)
+genValidatedVoteWithArrivalTime = do
+  vote <- genValidatedVote
+  now <- genRelativeTime
+  pure $ WithArrivalTime now vote
 
 -- * Helpers
 

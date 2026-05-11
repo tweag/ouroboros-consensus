@@ -27,7 +27,7 @@ module Ouroboros.Consensus.Storage.PerasVoteDB.Impl
   , PerasVoteDbError (..)
   ) where
 
-import Control.Monad (when)
+import Control.Monad (when, void)
 import Control.Monad.Except (throwError)
 import Control.Tracer (Tracer, nullTracer, traceWith)
 import Data.Data (Typeable)
@@ -47,6 +47,9 @@ import Ouroboros.Consensus.Storage.PerasVoteDB.API
 import Ouroboros.Consensus.Util.Args
 import Ouroboros.Consensus.Util.IOLike
 import Ouroboros.Consensus.Util.STM
+
+import Test.Ouroboros.Storage.PerasVoteDB.StateMachine (genValidatedVoteWithArrivalTime)
+import Test.QuickCheck (generate)
 
 {-------------------------------------------------------------------------------
   Database state
@@ -185,6 +188,8 @@ createDB args@PerasVoteDbArgs{pvdbaPerasCfg} = do
           { pvdeTracer
           , pvdeState
           }
+  vote <- generate genValidatedVoteWithArrivalTime
+  void . atomically . implAddVote pvdbaPerasCfg env vote
   pure
     PerasVoteDB
       { addVote = implAddVote pvdbaPerasCfg env
