@@ -22,7 +22,7 @@ module Ouroboros.Consensus.Storage.PerasVoteDB.Impl
   , TraceEvent (..)
   ) where
 
-import Control.Monad (when)
+import Control.Monad (when, void)
 import Control.Monad.Except (throwError)
 import Control.Tracer (Tracer, nullTracer, traceWith)
 import Data.Data (Typeable)
@@ -36,12 +36,18 @@ import Data.Set qualified as Set
 import GHC.Generics (Generic)
 import NoThunks.Class
 import Ouroboros.Consensus.Block
-import Ouroboros.Consensus.BlockchainTime (WithArrivalTime (..))
+import Ouroboros.Consensus.BlockchainTime (WithArrivalTime (..), RelativeTime (..))
 import Ouroboros.Consensus.Peras.Vote.Aggregation
 import Ouroboros.Consensus.Storage.PerasVoteDB.API
 import Ouroboros.Consensus.Util.Args
 import Ouroboros.Consensus.Util.IOLike
 import Ouroboros.Consensus.Util.STM
+
+import Data.String (IsString (..))
+import qualified Cardano.Crypto.DSIGN.Class as SL
+import qualified Cardano.Crypto.Seed as SL
+import qualified Cardano.Ledger.Keys as SL
+import Data.Char (chr)
 
 {-------------------------------------------------------------------------------
   Database state
@@ -156,6 +162,28 @@ createDB args@PerasVoteDbArgs{pvdbaPerasCfg} = do
           { pvdeTracer
           , pvdeState
           }
+
+  let voterKey = fromString $ chr <$> replicate 32 5
+      signKey = SL.genKeyDSIGN (SL.mkSeedFromBytes voterKey)
+      verKey = SL.deriveVerKeyDSIGN signKey
+      keyHash = SL.hashKey (SL.VKey verKey)
+      voterId = PerasVoterId keyHash
+      vote =
+        PerasVote
+          { pvVoteRound = PerasRoundNo 1
+          , pvVoteBlock = GenesisPoint
+          , pvVoteVoterId = voterId
+          }
+      validatedVote =
+        ValidatedPerasVote
+          { vpvVote = vote
+          , vpvVoteStake = 10
+          }
+      validatedVoteWithArrivalTime =
+          WithArrivalTime
+            (RelativeTime 0)
+            validatedVote
+  void . atomically $ implAddVote pvdbaPerasCfg env validatedVoteWithArrivalTime
   pure
     PerasVoteDB
       { addVote = implAddVote pvdbaPerasCfg env
