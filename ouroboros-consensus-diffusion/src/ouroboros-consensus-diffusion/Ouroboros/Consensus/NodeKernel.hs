@@ -164,6 +164,16 @@ import Ouroboros.Network.TxSubmission.Mempool.Reader
 import qualified Ouroboros.Network.TxSubmission.Mempool.Reader as MempoolReader
 import System.Random (StdGen)
 
+import Ouroboros.Consensus.Storage.ChainDB.API
+  (addPerasVoteSync, getTipPoint, getLatestPerasCertOnChainRound)
+-- import Ouroboros.Consensus.Storage.ChainDB.API (addPerasCertSync)
+import qualified Ouroboros.Consensus.Storage.PerasVoteDB.Impl as PerasVoteDB
+-- import qualified Cardano.Ledger.Keys as SL
+import Data.Char (chr)
+import Data.Monoid (Last (..))
+import Data.List (isInfixOf)
+import Data.Maybe (fromMaybe)
+
 {-------------------------------------------------------------------------------
   Relay node
 -------------------------------------------------------------------------------}
@@ -257,6 +267,7 @@ initNodeKernel
   args@NodeKernelArgs
     { registry
     , cfg
+    , systemTime
     , tracers
     , chainDB
     , initChainDB
@@ -269,6 +280,7 @@ initNodeKernel
     , genesisArgs
     , getDiffusionPipeliningSupport
     , miniProtocolParameters
+    , nodeSocketPath
     } = do
     -- using a lazy 'TVar', 'BlockForging' does not have a 'NoThunks' instance.
     blockForgingVar :: LazySTM.TMVar m [MkBlockForging m blk] <- LazySTM.newTMVarIO []
@@ -375,6 +387,10 @@ initNodeKernel
               (cschcMap varChainSyncHandles)
               varLoEFragment
 
+    -- void $ forkLinkedThread registry "NodeKernel.certCreation" $ certCreationController
+    when ("node1" `isInfixOf` fromMaybe "" (getLast nodeSocketPath)) $ void $
+      forkLinkedThread registry "NodeKernel.voteCreation" $ voteCreationController
+
     void $
       forkLinkedThread registry "NodeKernel.blockForging" $
         blockForgingController st (LazySTM.takeTMVar blockForgingVar)
@@ -421,6 +437,35 @@ initNodeKernel
         , getTxMempoolSem = txMempoolSem
         }
    where
+
+{-
+    -- TODO: Add tracing here to check for source of cert
+    _certCreationController = do
+      let perasParams = mkPerasParams
+      let go i = do
+            SI.threadDelay 10000000
+            _tip <- atomically $ getTipPoint chainDB
+            let nextRound = PerasRoundNo i
+            let cert = PerasCert nextRound GenesisPoint
+                vCert = ValidatedPerasCert cert (perasWeight perasParams)
+            t <- systemTimeCurrent systemTime
+            let arrivalCert = WithArrivalTime t vCert
+            addPerasCertSync chainDB arrivalCert
+            go (i + 1)
+      go 1
+-}
+    voteCreationController = do
+      let dummyVoteIds = fmap chr . replicate 32 <$> [0..100]
+      flip mapM_ dummyVoteIds $ \voteId -> do
+        SI.threadDelay 10
+        tip <- atomically $ getTipPoint chainDB
+        mLatestRound <- atomically $ getLatestPerasCertOnChainRound chainDB
+        let nextRound = case mLatestRound of
+              Nothing -> PerasRoundNo 1
+              Just r  -> r + 1
+        t <- systemTimeCurrent systemTime
+        addPerasVoteSync chainDB (PerasVoteDB.dummyVote t nextRound tip voteId)
+
     blockForgingController ::
       InternalState m remotePeer localPeer blk ->
       STM m [MkBlockForging m blk] ->

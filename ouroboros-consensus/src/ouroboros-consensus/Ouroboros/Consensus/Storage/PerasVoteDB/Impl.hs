@@ -17,12 +17,13 @@ module Ouroboros.Consensus.Storage.PerasVoteDB.Impl
     PerasVoteDbArgs (..)
   , defaultArgs
   , createDB
+  , dummyVote
 
     -- * Trace types
   , TraceEvent (..)
   ) where
 
-import Control.Monad (when, void)
+import Control.Monad (when)
 import Control.Monad.Except (throwError)
 import Control.Tracer (Tracer, nullTracer, traceWith)
 import Data.Data (Typeable)
@@ -47,7 +48,7 @@ import Data.String (IsString (..))
 import qualified Cardano.Crypto.DSIGN.Class as SL
 import qualified Cardano.Crypto.Seed as SL
 import qualified Cardano.Ledger.Keys as SL
-import Data.Char (chr)
+-- import Data.Char (chr)
 
 {-------------------------------------------------------------------------------
   Database state
@@ -144,6 +145,35 @@ defaultArgs =
     , pvdbaPerasCfg = noDefault
     }
 
+dummyVote ::
+  RelativeTime ->
+  PerasRoundNo ->
+  Point blk ->
+  String ->
+  WithArrivalTime (ValidatedPerasVote blk)
+dummyVote time roundNum voteBlock voterKey = validatedVoteWithArrivalTime
+  where
+    -- voterKey = fromString $ chr <$> replicate 32 5
+    signKey = SL.genKeyDSIGN (SL.mkSeedFromBytes (fromString voterKey))
+    verKey = SL.deriveVerKeyDSIGN signKey
+    keyHash = SL.hashKey (SL.VKey verKey)
+    voterId = PerasVoterId keyHash
+    vote =
+      PerasVote
+        { pvVoteRound = roundNum
+        , pvVoteBlock = voteBlock
+        , pvVoteVoterId = voterId
+        }
+    validatedVote =
+      ValidatedPerasVote
+        { vpvVote = vote
+        , vpvVoteStake = 10
+        }
+    validatedVoteWithArrivalTime =
+        WithArrivalTime
+          time
+          validatedVote
+
 createDB ::
   forall m blk.
   ( IOLike m
@@ -162,28 +192,7 @@ createDB args@PerasVoteDbArgs{pvdbaPerasCfg} = do
           { pvdeTracer
           , pvdeState
           }
-
-  let voterKey = fromString $ chr <$> replicate 32 5
-      signKey = SL.genKeyDSIGN (SL.mkSeedFromBytes voterKey)
-      verKey = SL.deriveVerKeyDSIGN signKey
-      keyHash = SL.hashKey (SL.VKey verKey)
-      voterId = PerasVoterId keyHash
-      vote =
-        PerasVote
-          { pvVoteRound = PerasRoundNo 1
-          , pvVoteBlock = GenesisPoint
-          , pvVoteVoterId = voterId
-          }
-      validatedVote =
-        ValidatedPerasVote
-          { vpvVote = vote
-          , vpvVoteStake = 10
-          }
-      validatedVoteWithArrivalTime =
-          WithArrivalTime
-            (RelativeTime 0)
-            validatedVote
-  void . atomically $ implAddVote pvdbaPerasCfg env validatedVoteWithArrivalTime
+  -- void . atomically $ implAddVote pvdbaPerasCfg env dummyVote
   pure
     PerasVoteDB
       { addVote = implAddVote pvdbaPerasCfg env
