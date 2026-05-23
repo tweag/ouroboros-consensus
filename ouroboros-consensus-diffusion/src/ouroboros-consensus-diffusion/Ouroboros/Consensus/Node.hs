@@ -189,6 +189,7 @@ import System.FS.API.Types (MountPoint (..))
 import System.FS.IO (ioHasFS)
 import System.FilePath ((</>))
 import System.Random (StdGen, newStdGen, randomIO, splitGen)
+import Data.Monoid (Last (..))
 
 {-------------------------------------------------------------------------------
   The arguments to the Consensus Layer node functionality
@@ -251,6 +252,7 @@ data RunNodeArgs m addrNTN addrNTC blk = RunNodeArgs
   -- See the networking specs' section on tx-submission
   -- https://ouroboros-network.cardano.intersectmbo.org/pdfs/network-spec/network-spec.pdf.
   , rnTxSubmissionInitDelay :: TxSubmissionInitDelay
+  , rnNodeSocketPath :: Last String
   }
 
 -- | Arguments that usually only tests /directly/ specify.
@@ -580,8 +582,10 @@ runWith RunNodeArgs{..} encAddrNtN decAddrNtN LowLevelRunNodeArgs{..} =
                       Nothing -> HistoricityCheck.noCheck
                       Just historicityCutoff ->
                         HistoricityCheck.mkCheck systemTime getGsmState historicityCutoff
+                  nodeSocketPath = rnNodeSocketPath
               fmap (nodeKernelArgsEnforceInvariants . llrnCustomiseNodeKernelArgs) $
                 mkNodeKernelArgs
+                  nodeSocketPath
                   registry
                   llrnBfcSalt
                   gsmAntiThunderingHerd
@@ -879,6 +883,7 @@ openChainDB registry cfg initLedger fsImm fsVol delayRng flavorArgs defArgs cust
 mkNodeKernelArgs ::
   forall m addrNTN addrNTC blk.
   (RunNode blk, IOLike m) =>
+  Last String ->
   ResourceRegistry m ->
   Int ->
   StdGen ->
@@ -902,6 +907,7 @@ mkNodeKernelArgs ::
   TxSubmissionInitDelay ->
   m (NodeKernelArgs m addrNTN (ConnectionId addrNTC) blk)
 mkNodeKernelArgs
+  nodeSocketPath
   registry
   bfcSalt
   gsmAntiThunderingHerd
@@ -928,7 +934,8 @@ mkNodeKernelArgs
           (psRng, txRng) = splitGen rng'
       return
         NodeKernelArgs
-          { tracers
+          { nodeSocketPath
+          , tracers
           , registry
           , cfg
           , featureFlags
