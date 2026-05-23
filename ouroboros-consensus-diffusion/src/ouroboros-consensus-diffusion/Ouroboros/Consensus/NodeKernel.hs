@@ -165,7 +165,7 @@ import qualified Ouroboros.Network.TxSubmission.Mempool.Reader as MempoolReader
 import System.Random (StdGen)
 
 import Ouroboros.Consensus.Storage.ChainDB.API
-  (addPerasVoteSync, getTipPoint, getLatestPerasCertOnChainRound)
+  (addPerasVoteSync, getLatestPerasCertOnChainRound)
 -- import Ouroboros.Consensus.Storage.ChainDB.API (addPerasCertSync)
 import qualified Ouroboros.Consensus.Storage.PerasVoteDB.Impl as PerasVoteDB
 -- import qualified Cardano.Ledger.Keys as SL
@@ -458,13 +458,14 @@ initNodeKernel
       let dummyVoteIds = fmap chr . replicate 32 <$> [0..100]
       flip mapM_ dummyVoteIds $ \voteId -> do
         SI.threadDelay 10
-        tip <- atomically $ getTipPoint chainDB
+        -- NOTE: This is blocking for some reason in the second iteration
+        -- tip <- atomically $ getTipPoint chainDB
         mLatestRound <- atomically $ getLatestPerasCertOnChainRound chainDB
         let nextRound = case mLatestRound of
               Nothing -> PerasRoundNo 1
               Just r  -> r + 1
         t <- systemTimeCurrent systemTime
-        addPerasVoteSync chainDB (PerasVoteDB.dummyVote t nextRound tip voteId)
+        addPerasVoteSync chainDB (PerasVoteDB.dummyVote t nextRound GenesisPoint voteId)
 
     blockForgingController ::
       InternalState m remotePeer localPeer blk ->
