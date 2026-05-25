@@ -465,7 +465,7 @@ initNodeKernel
               Nothing -> PerasRoundNo 1
               Just r  -> r + 1
         t <- systemTimeCurrent systemTime
-        addPerasVoteSync chainDB (PerasVoteDB.dummyVote t nextRound GenesisPoint voteId)
+        addPerasVoteSync chainDB (PerasVoteDB.dummyVote t nextRound GenesisPoint voteId 0.4)
 
     blockForgingController ::
       InternalState m remotePeer localPeer blk ->

@@ -150,8 +150,9 @@ dummyVote ::
   PerasRoundNo ->
   Point blk ->
   String ->
+  PerasVoteStake ->
   WithArrivalTime (ValidatedPerasVote blk)
-dummyVote time roundNum voteBlock voterKey = validatedVoteWithArrivalTime
+dummyVote time roundNum voteBlock voterKey stake = validatedVoteWithArrivalTime
   where
     -- voterKey = fromString $ chr <$> replicate 32 5
     signKey = SL.genKeyDSIGN (SL.mkSeedFromBytes (fromString voterKey))
@@ -167,7 +168,7 @@ dummyVote time roundNum voteBlock voterKey = validatedVoteWithArrivalTime
     validatedVote =
       ValidatedPerasVote
         { vpvVote = vote
-        , vpvVoteStake = 10
+        , vpvVoteStake = stake
         }
     validatedVoteWithArrivalTime =
         WithArrivalTime

@@ -330,7 +330,7 @@ instance StandardHash blk => BlockSupportsPeras blk where
   -- possible 'PerasValidationErr' variants
   -- see https://github.com/tweag/cardano-peras/issues/120
   validatePerasVote _params _stakeDistr vote =
-    let stake = PerasVoteStake 10.0
+    let stake = PerasVoteStake 0.4
      in Right
           ValidatedPerasVote
             { vpvVote = vote
