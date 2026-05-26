@@ -154,24 +154,24 @@ mkPerasParams =
   PerasParams
     { -- ceil(T_heal + T_cq) / perasRoundLength) as per the design document
       perasIgnoranceRounds =
-        PerasIgnoranceRounds 487
+        PerasIgnoranceRounds 10
     , -- ceil(T_heal + T_cq + T_cp) / perasRoundLength) + 1 as per the design document
       perasCooldownRounds =
-        PerasCooldownRounds 1928
+        PerasCooldownRounds 25
     , -- must be between 30 and 900 as per the design document
       perasBlockMinSlots =
-        PerasBlockMinSlots 90
+        PerasBlockMinSlots 30
     , -- equal to perasIgnoranceRounds as per the design document
       perasCertMaxRounds =
-        PerasCertMaxRounds 487
+        PerasCertMaxRounds 10
     , perasCertArrivalThreshold =
-        PerasCertArrivalThreshold 30
+        PerasCertArrivalThreshold 10
     , perasRoundLength =
-        PerasRoundLength 90
+        PerasRoundLength 60
     , perasWeight =
         PerasWeight 15
     , perasQuorumStakeThreshold =
         PerasQuorumStakeThreshold (3 / 4)
     , perasQuorumStakeThresholdSafetyMargin =
-        PerasQuorumStakeThresholdSafetyMargin (2 / 100)
+        PerasQuorumStakeThresholdSafetyMargin 0
     }
