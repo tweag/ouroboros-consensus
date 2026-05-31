@@ -177,6 +177,7 @@ import Data.Maybe (fromMaybe)
 import qualified Data.ByteString.Base16 as Base16
 import qualified Data.ByteString.Char8 as BSC
 import qualified Data.ByteString as BS
+import qualified Data.ByteString.Lazy as BSL
 
 import qualified System.Random as R
 import Control.Monad.IO.Class (MonadIO (..))
@@ -187,6 +188,9 @@ import qualified Streamly.Internal.Network.Inet.TCP as TCP
 import Data.Function ((&))
 import qualified Streamly.Data.Stream as Stream
 import qualified Streamly.Data.Fold as Fold
+import qualified Network.HTTP.Client as Http
+import Text.Read (readMaybe)
+import Data.Char (isDigit)
 
 {-------------------------------------------------------------------------------
   Relay node
@@ -289,17 +293,36 @@ mkBlockPoint' s =
 genDummyVoteIdIO :: IO String
 genDummyVoteIdIO = map chr <$> replicateM 32 (R.randomRIO (0, 0x10FFFF))
 
-readBlockIO :: ConvertRawHash blk => IO (Maybe (Point blk))
-readBlockIO =
-  TCP.read (127,0,0,1) 9000
-    & Stream.fold (Fold.takeEndBy_ (== 10) parsePointFold)
-  where
-    parsePointFold = parsePointStr . BSC.unpack . BS.pack <$> Fold.toList
-    parsePointStr val =
-      case readEither val of
-        Right (Just (slotNo, bHash)) -> Just $ mkBlockPoint' slotNo bHash
-        Right Nothing -> Nothing
-        Left err -> error $ "readBlockIO: " ++ err
+parseNodeIdFromSocketPath :: Last String -> Int
+parseNodeIdFromSocketPath path =
+  case getLast path of
+    Nothing -> error "parseNodeIdFromSocketPath: socket path empty"
+    Just p ->
+      case readMaybe . takeWhile isDigit . drop 13 $ p of
+        Nothing -> error $ "parseNodeIdFromSocketPath: parse failed for " ++ p
+        Just i -> i
+
+readBlockIO :: ConvertRawHash blk => Int -> IO (Maybe (Point blk))
+readBlockIO nodeId = do
+    manager <- Http.newManager Http.defaultManagerSettings
+    baseRequest <- Http.parseRequest "http://localhost:9000/vote_creation_details"
+    let request =
+            Http.setQueryString
+              [ ( BSC.pack "node_id"
+                , Just (BSC.pack (show nodeId))
+                )
+              ]
+              baseRequest
+    responseResult <- try (Http.httpLbs request manager) :: IO (Either SomeException (Http.Response BSL.ByteString))
+    case responseResult of
+        Left err -> error $ show err
+        Right response -> do
+            let rawBody = BSC.unpack $ BSL.toStrict (Http.responseBody response)
+            pure $
+              case readEither rawBody of
+                Right (Just (slotNo, bHash)) -> Just $ mkBlockPoint' slotNo bHash
+                Right Nothing -> Nothing
+                Left errP -> error $ "readBlockIO: " ++ errP
 
 initNodeKernel ::
   forall m addrNTN addrNTC blk.
@@ -436,8 +459,6 @@ initNodeKernel
               (cschcMap varChainSyncHandles)
               varLoEFragment
 
-    -- when ("node1" `isInfixOf` fromMaybe "" (getLast nodeSocketPath)) $ void $
-    -- TODO: Make this controller more generic to perform more actions.
     forkLinkedThread registry "NodeKernel.voteCreation" $ voteCreationController
 
     void $
@@ -488,7 +509,7 @@ initNodeKernel
    where
 
     voteCreationController = forever $ do
-      mBlock <- liftIO readBlockIO
+      mBlock <- liftIO $ readBlockIO (parseNodeIdFromSocketPath nodeSocketPath)
       case mBlock of
         Nothing -> pure ()
         Just block -> do
@@ -500,7 +521,7 @@ initNodeKernel
                 Nothing -> PerasRoundNo 1
                 Just r  -> r + 1
           t <- systemTimeCurrent systemTime
-          addPerasVoteSync chainDB (PerasVoteDB.dummyVote t nextRound block voteId 0.1)
+          addPerasVoteSync chainDB (PerasVoteDB.dummyVote t nextRound block voteId 0.2)
       SI.threadDelay 10
 
     blockForgingController ::
