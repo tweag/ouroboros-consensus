@@ -160,7 +160,7 @@ mkPerasParams =
         PerasCooldownRounds 25
     , -- must be between 30 and 900 as per the design document
       perasBlockMinSlots =
-        PerasBlockMinSlots 30
+        PerasBlockMinSlots 1
     , -- equal to perasIgnoranceRounds as per the design document
       perasCertMaxRounds =
         PerasCertMaxRounds 10
@@ -169,7 +169,7 @@ mkPerasParams =
     , perasRoundLength =
         PerasRoundLength 60
     , perasWeight =
-        PerasWeight 15
+        PerasWeight 100
     , perasQuorumStakeThreshold =
         PerasQuorumStakeThreshold (3 / 4)
     , perasQuorumStakeThresholdSafetyMargin =

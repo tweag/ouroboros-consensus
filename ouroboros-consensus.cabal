@@ -1091,6 +1091,9 @@ library diffusion
   build-depends:
     base,
     bytestring,
+    streamly-core,
+    streamly,
+    base16-bytestring,
     cardano-base,
     cardano-diffusion:{api, cardano-diffusion, protocols},
     cardano-slotting,

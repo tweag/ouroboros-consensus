@@ -174,6 +174,20 @@ import Data.Monoid (Last (..))
 import Data.List (isInfixOf)
 import Data.Maybe (fromMaybe)
 
+import qualified Data.ByteString.Base16 as Base16
+import qualified Data.ByteString.Char8 as BSC
+import qualified Data.ByteString as BS
+
+import qualified System.Random as R
+import Control.Monad.IO.Class (MonadIO (..))
+
+import Text.Read (readEither)
+
+import qualified Streamly.Internal.Network.Inet.TCP as TCP
+import Data.Function ((&))
+import qualified Streamly.Data.Stream as Stream
+import qualified Streamly.Data.Fold as Fold
+
 {-------------------------------------------------------------------------------
   Relay node
 -------------------------------------------------------------------------------}
@@ -251,6 +265,41 @@ data NodeKernelArgs m addrNTN addrNTC blk = NodeKernelArgs
   , getDiffusionPipeliningSupport :: DiffusionPipeliningSupport
   , nodeSocketPath :: Last String
   }
+
+mkBlockPoint ::
+  forall blk. ConvertRawHash blk => Int -> String -> Maybe (Point blk)
+mkBlockPoint slotNo hexHashStr = do
+  let hexByteString = BSC.pack hexHashStr
+  rawBytes <-
+    case Base16.decode hexByteString of
+       Left _ -> Nothing
+       Right bytes -> Just bytes
+  let proxy = Proxy :: Proxy blk
+  if fromIntegral (BSC.length rawBytes) == hashSize proxy
+    then do
+      let hh = fromRawHash proxy rawBytes
+      Just (BlockPoint (fromIntegral slotNo) hh)
+    else Nothing
+
+mkBlockPoint' ::
+  forall blk. ConvertRawHash blk => Int -> String -> Point blk
+mkBlockPoint' s =
+    maybe (error "mkBlockPoint': Parse failed.") id . mkBlockPoint s
+
+genDummyVoteIdIO :: IO String
+genDummyVoteIdIO = map chr <$> replicateM 32 (R.randomRIO (0, 0x10FFFF))
+
+readBlockIO :: ConvertRawHash blk => IO (Maybe (Point blk))
+readBlockIO =
+  TCP.read (127,0,0,1) 9000
+    & Stream.fold (Fold.takeEndBy_ (== 10) parsePointFold)
+  where
+    parsePointFold = parsePointStr . BSC.unpack . BS.pack <$> Fold.toList
+    parsePointStr val =
+      case readEither val of
+        Right (Just (slotNo, bHash)) -> Just $ mkBlockPoint' slotNo bHash
+        Right Nothing -> Nothing
+        Left err -> error $ "readBlockIO: " ++ err
 
 initNodeKernel ::
   forall m addrNTN addrNTC blk.
@@ -387,9 +436,9 @@ initNodeKernel
               (cschcMap varChainSyncHandles)
               varLoEFragment
 
-    -- void $ forkLinkedThread registry "NodeKernel.certCreation" $ certCreationController
-    when ("node1" `isInfixOf` fromMaybe "" (getLast nodeSocketPath)) $ void $
-      forkLinkedThread registry "NodeKernel.voteCreation" $ voteCreationController
+    -- when ("node1" `isInfixOf` fromMaybe "" (getLast nodeSocketPath)) $ void $
+    -- TODO: Make this controller more generic to perform more actions.
+    forkLinkedThread registry "NodeKernel.voteCreation" $ voteCreationController
 
     void $
       forkLinkedThread registry "NodeKernel.blockForging" $
@@ -438,34 +487,21 @@ initNodeKernel
         }
    where
 
-{-
-    -- TODO: Add tracing here to check for source of cert
-    _certCreationController = do
-      let perasParams = mkPerasParams
-      let go i = do
-            SI.threadDelay 10000000
-            _tip <- atomically $ getTipPoint chainDB
-            let nextRound = PerasRoundNo i
-            let cert = PerasCert nextRound GenesisPoint
-                vCert = ValidatedPerasCert cert (perasWeight perasParams)
-            t <- systemTimeCurrent systemTime
-            let arrivalCert = WithArrivalTime t vCert
-            addPerasCertSync chainDB arrivalCert
-            go (i + 1)
-      go 1
--}
-    voteCreationController = do
-      let dummyVoteIds = fmap chr . replicate 32 <$> [0..100]
-      flip mapM_ dummyVoteIds $ \voteId -> do
-        SI.threadDelay 10
-        -- NOTE: This is blocking for some reason in the second iteration
-        -- tip <- atomically $ getTipPoint chainDB
-        mLatestRound <- atomically $ getLatestPerasCertOnChainRound chainDB
-        let nextRound = case mLatestRound of
-              Nothing -> PerasRoundNo 1
-              Just r  -> r + 1
-        t <- systemTimeCurrent systemTime
-        addPerasVoteSync chainDB (PerasVoteDB.dummyVote t nextRound GenesisPoint voteId 0.4)
+    voteCreationController = forever $ do
+      mBlock <- liftIO readBlockIO
+      case mBlock of
+        Nothing -> pure ()
+        Just block -> do
+          voteId <- liftIO genDummyVoteIdIO
+          -- NOTE: This is blocking for some reason in the second iteration
+          -- tip <- atomically $ getTipPoint chainDB
+          mLatestRound <- atomically $ getLatestPerasCertOnChainRound chainDB
+          let nextRound = case mLatestRound of
+                Nothing -> PerasRoundNo 1
+                Just r  -> r + 1
+          t <- systemTimeCurrent systemTime
+          addPerasVoteSync chainDB (PerasVoteDB.dummyVote t nextRound block voteId 0.4)
+      SI.threadDelay 10
 
     blockForgingController ::
       InternalState m remotePeer localPeer blk ->
