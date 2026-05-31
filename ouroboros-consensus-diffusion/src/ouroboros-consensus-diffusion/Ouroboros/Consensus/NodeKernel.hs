@@ -500,7 +500,7 @@ initNodeKernel
                 Nothing -> PerasRoundNo 1
                 Just r  -> r + 1
           t <- systemTimeCurrent systemTime
-          addPerasVoteSync chainDB (PerasVoteDB.dummyVote t nextRound block voteId 0.4)
+          addPerasVoteSync chainDB (PerasVoteDB.dummyVote t nextRound block voteId 0.1)
       SI.threadDelay 10
 
     blockForgingController ::
