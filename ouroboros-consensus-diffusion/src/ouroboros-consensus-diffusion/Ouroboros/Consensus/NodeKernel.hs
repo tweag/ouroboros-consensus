@@ -58,6 +58,7 @@ import qualified Data.List.NonEmpty as NE
 import Data.Maybe (isJust)
 import Data.Proxy
 import Data.Set (Set)
+import qualified Data.Set as Set
 import qualified Data.Text as Text
 import Data.Void (Void)
 import Ouroboros.Consensus.Block hiding (blockMatchesHeader)
@@ -191,6 +192,7 @@ import qualified Streamly.Data.Fold as Fold
 import qualified Network.HTTP.Client as Http
 import Text.Read (readMaybe)
 import Data.Char (isDigit)
+import Cardano.Ledger.Hashes (KeyHash (..))
 
 {-------------------------------------------------------------------------------
   Relay node
@@ -323,6 +325,33 @@ readBlockIO nodeId = do
                 Right (Just (slotNo, bHash)) -> Just $ mkBlockPoint' slotNo bHash
                 Right Nothing -> Nothing
                 Left errP -> error $ "readBlockIO: " ++ errP
+
+sendAdvert ::
+    ConvertRawHash blk => Int -> Set PerasRoundNo -> Set (PerasVoteId blk) -> IO ()
+sendAdvert nodeId certs votes = do
+    manager <- Http.newManager Http.defaultManagerSettings
+    baseRequest <- Http.parseRequest "http://localhost:9000/advert"
+    let request =
+            Http.setQueryString
+              [ ( BSC.pack "node_id"
+                , Just (BSC.pack (show nodeId))
+                )
+              , ( BSC.pack "num_certs"
+                , Just (BSC.pack (show (Set.size certs)))
+                )
+              , ( BSC.pack "num_votes"
+                , Just (BSC.pack (show (Set.size votes)))
+                )
+              ]
+              baseRequest
+    responseResult <- try (Http.httpLbs request manager) :: IO (Either SomeException (Http.Response BSL.ByteString))
+    case responseResult of
+        Left err -> error $ show err
+        Right _ -> pure ()
+  where
+    _showPerasVoteCount PerasVoteId{..} =
+        show (unKeyHash (unPerasVoterId pviVoterId)) ++ " [" ++ show (unPerasRoundNo pviRoundNo) ++ "]"
+
 
 initNodeKernel ::
   forall m addrNTN addrNTC blk.
@@ -460,6 +489,7 @@ initNodeKernel
               varLoEFragment
 
     forkLinkedThread registry "NodeKernel.voteCreation" $ voteCreationController
+    forkLinkedThread registry "NodeKernel.objDiffusionAdvert" $ objDiffusionAdvertController
 
     void $
       forkLinkedThread registry "NodeKernel.blockForging" $
@@ -508,8 +538,16 @@ initNodeKernel
         }
    where
 
+    nodeId = parseNodeIdFromSocketPath nodeSocketPath
+
+    objDiffusionAdvertController = forever $ do
+      certs <- atomically $ ChainDB.getPerasCertIds chainDB
+      votes <- atomically $ ChainDB.getPerasVoteIds chainDB
+      liftIO $ sendAdvert nodeId certs votes
+      SI.threadDelay 3
+
     voteCreationController = forever $ do
-      mBlock <- liftIO $ readBlockIO (parseNodeIdFromSocketPath nodeSocketPath)
+      mBlock <- liftIO $ readBlockIO nodeId
       case mBlock of
         Nothing -> pure ()
         Just block -> do
