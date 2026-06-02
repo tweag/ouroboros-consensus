@@ -193,6 +193,9 @@ import qualified Network.HTTP.Client as Http
 import Text.Read (readMaybe)
 import Data.Char (isDigit)
 import Cardano.Ledger.Hashes (KeyHash (..))
+import Ouroboros.Consensus.Peras.Weight (weightBoostOfFragment)
+
+import Cardano.Slotting.Slot (WithOrigin (..))
 
 {-------------------------------------------------------------------------------
   Relay node
@@ -326,31 +329,59 @@ readBlockIO nodeId = do
                 Right Nothing -> Nothing
                 Left errP -> error $ "readBlockIO: " ++ errP
 
-sendAdvert ::
-    ConvertRawHash blk => Int -> Set PerasRoundNo -> Set (PerasVoteId blk) -> IO ()
-sendAdvert nodeId certs votes = do
-    manager <- Http.newManager Http.defaultManagerSettings
-    baseRequest <- Http.parseRequest "http://localhost:9000/advert"
-    let request =
-            Http.setQueryString
-              [ ( BSC.pack "node_id"
-                , Just (BSC.pack (show nodeId))
-                )
-              , ( BSC.pack "num_certs"
-                , Just (BSC.pack (show (Set.size certs)))
-                )
-              , ( BSC.pack "num_votes"
-                , Just (BSC.pack (show (Set.size votes)))
-                )
+advertController ::
+    (IOLike m, StandardHash blk, HasHeader (Header blk), Typeable blk) =>
+    Int -> ChainDB m blk -> m b
+advertController nodeId chainDB = forever $ do
+    (certs, votes, currChain, perasWeights0, point, blockNum0) <-
+        atomically $
+             (,,,,,) <$>
+             ChainDB.getPerasCertIds chainDB <*>
+             ChainDB.getPerasVoteIds chainDB <*>
+             ChainDB.getCurrentChain chainDB <*>
+             ChainDB.getPerasWeightSnapshot chainDB <*>
+             ChainDB.getTipPoint chainDB <*>
+             ChainDB.getTipBlockNo chainDB
+    let chainLen = AF.length $ currChain
+        perasWeights = forgetFingerprint perasWeights0
+        boost = unPerasWeight (weightBoostOfFragment perasWeights currChain)
+        (slotNo, blockHashStr) =
+            case point of
+                GenesisPoint -> (0, "")
+                BlockPoint s h -> (unSlotNo s, show h)
+        blockNum =
+            case blockNum0 of
+                Origin -> 0
+                At bn -> unBlockNo bn
+        queryPairs =
+              [ pair "node_id" nodeId
+              , pair "num_certs" (Set.size certs)
+              , pair "num_votes" (Set.size votes)
+              , pair "chain_len" chainLen
+              , pair "peras_boost" boost
+              , pair "slot_no" slotNo
+              , pairStr "block_hash" blockHashStr
+              , pair "block_no" blockNum
               ]
-              baseRequest
-    responseResult <- try (Http.httpLbs request manager) :: IO (Either SomeException (Http.Response BSL.ByteString))
-    case responseResult of
-        Left err -> error $ show err
-        Right _ -> pure ()
+    liftIO $ sendAdvert queryPairs
+    SI.threadDelay 3
+
   where
-    _showPerasVoteCount PerasVoteId{..} =
-        show (unKeyHash (unPerasVoterId pviVoterId)) ++ " [" ++ show (unPerasRoundNo pviRoundNo) ++ "]"
+
+    pairStr k v = (BSC.pack k, Just (BSC.pack v))
+    pair k v = pairStr k (show v)
+
+    sendAdvert queryPairs = do
+        manager <- Http.newManager Http.defaultManagerSettings
+        baseRequest <- Http.parseRequest "http://localhost:9000/advert"
+        let request = Http.setQueryString queryPairs baseRequest
+        responseResult <- try (Http.httpLbs request manager) :: IO (Either SomeException (Http.Response BSL.ByteString))
+        case responseResult of
+            Left err -> error $ show err
+            Right _ -> pure ()
+      where
+        _showPerasVoteCount PerasVoteId{..} =
+            show (unKeyHash (unPerasVoterId pviVoterId)) ++ " [" ++ show (unPerasRoundNo pviRoundNo) ++ "]"
 
 
 initNodeKernel ::
@@ -489,7 +520,7 @@ initNodeKernel
               varLoEFragment
 
     forkLinkedThread registry "NodeKernel.voteCreation" $ voteCreationController
-    forkLinkedThread registry "NodeKernel.objDiffusionAdvert" $ objDiffusionAdvertController
+    forkLinkedThread registry "NodeKernel.objDiffusionAdvert" $ advertController nodeId chainDB
 
     void $
       forkLinkedThread registry "NodeKernel.blockForging" $
@@ -539,12 +570,6 @@ initNodeKernel
    where
 
     nodeId = parseNodeIdFromSocketPath nodeSocketPath
-
-    objDiffusionAdvertController = forever $ do
-      certs <- atomically $ ChainDB.getPerasCertIds chainDB
-      votes <- atomically $ ChainDB.getPerasVoteIds chainDB
-      liftIO $ sendAdvert nodeId certs votes
-      SI.threadDelay 3
 
     voteCreationController = forever $ do
       mBlock <- liftIO $ readBlockIO nodeId
