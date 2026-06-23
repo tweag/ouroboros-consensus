@@ -183,6 +183,39 @@ import Ouroboros.Network.TxSubmission.Mempool.Reader
 import qualified Ouroboros.Network.TxSubmission.Mempool.Reader as MempoolReader
 import System.Random (StdGen)
 
+import qualified Data.Set as Set
+import Ouroboros.Consensus.Storage.ChainDB.API
+  (addPerasVoteSync, getLatestPerasCertOnChainRound)
+-- import Ouroboros.Consensus.Storage.ChainDB.API (addPerasCertSync)
+import qualified Ouroboros.Consensus.Storage.PerasVoteDB.Impl as PerasVoteDB
+-- import qualified Cardano.Ledger.Keys as SL
+import Data.Char (chr)
+import Data.Monoid (Last (..))
+import Data.List (isInfixOf)
+import Data.Maybe (fromMaybe)
+
+import qualified Data.ByteString.Base16 as Base16
+import qualified Data.ByteString.Char8 as BSC
+import qualified Data.ByteString as BS
+import qualified Data.ByteString.Lazy as BSL
+
+import qualified System.Random as R
+import Control.Monad.IO.Class (MonadIO (..))
+
+import Text.Read (readEither)
+
+import qualified Streamly.Internal.Network.Inet.TCP as TCP
+import Data.Function ((&))
+import qualified Streamly.Data.Stream as Stream
+import qualified Streamly.Data.Fold as Fold
+import qualified Network.HTTP.Client as Http
+import Text.Read (readMaybe)
+import Data.Char (isDigit)
+import Cardano.Ledger.Hashes (KeyHash (..))
+import Ouroboros.Consensus.Peras.Weight (weightBoostOfFragment)
+
+import Cardano.Slotting.Slot (WithOrigin (..))
+
 {-------------------------------------------------------------------------------
   Relay node
 -------------------------------------------------------------------------------}
@@ -263,6 +296,111 @@ data NodeKernelArgs m addrNTN addrNTC blk = NodeKernelArgs
   , nodeSocketPath :: Last String
   }
 
+mkBlockPoint ::
+  forall blk. ConvertRawHash blk => Int -> String -> Maybe (Point blk)
+mkBlockPoint slotNo hexHashStr = do
+  let hexByteString = BSC.pack hexHashStr
+  rawBytes <-
+    case Base16.decode hexByteString of
+       Left _ -> Nothing
+       Right bytes -> Just bytes
+  let proxy = Proxy :: Proxy blk
+  if fromIntegral (BSC.length rawBytes) == hashSize proxy
+    then do
+      let hh = fromRawHash proxy rawBytes
+      Just (BlockPoint (fromIntegral slotNo) hh)
+    else Nothing
+
+mkBlockPoint' ::
+  forall blk. ConvertRawHash blk => Int -> String -> Point blk
+mkBlockPoint' s =
+    maybe (error "mkBlockPoint': Parse failed.") id . mkBlockPoint s
+
+genDummyVoteIdIO :: IO String
+genDummyVoteIdIO = map chr <$> replicateM 32 (R.randomRIO (0, 0x10FFFF))
+
+parseNodeIdFromSocketPath :: Last String -> Int
+parseNodeIdFromSocketPath path =
+  case getLast path of
+    Nothing -> error "parseNodeIdFromSocketPath: socket path empty"
+    Just p ->
+      case readMaybe . takeWhile isDigit . drop 13 $ p of
+        Nothing -> error $ "parseNodeIdFromSocketPath: parse failed for " ++ p
+        Just i -> i
+
+readBlockIO :: ConvertRawHash blk => Int -> IO (Maybe (Point blk))
+readBlockIO nodeId = do
+    manager <- Http.newManager Http.defaultManagerSettings
+    baseRequest <- Http.parseRequest "http://localhost:9000/vote_creation_details"
+    let request =
+            Http.setQueryString
+              [ ( BSC.pack "node_id"
+                , Just (BSC.pack (show nodeId))
+                )
+              ]
+              baseRequest
+    responseResult <- try (Http.httpLbs request manager) :: IO (Either SomeException (Http.Response BSL.ByteString))
+    case responseResult of
+        Left err -> error $ show err
+        Right response -> do
+            let rawBody = BSC.unpack $ BSL.toStrict (Http.responseBody response)
+            pure $
+              case readEither rawBody of
+                Right (Just (slotNo, bHash)) -> Just $ mkBlockPoint' slotNo bHash
+                Right Nothing -> Nothing
+                Left errP -> error $ "readBlockIO: " ++ errP
+
+advertController ::
+    (IOLike m, StandardHash blk, HasHeader (Header blk), Typeable blk) =>
+    Int -> ChainDB m blk -> m b
+advertController nodeId chainDB = forever $ do
+    certs <- atomically $ ChainDB.getPerasCertIds chainDB
+    votes <- atomically $ ChainDB.getPerasVoteIds chainDB
+    currChain <- atomically $ ChainDB.getCurrentChain chainDB
+    perasWeights0 <- atomically $ ChainDB.getPerasWeightSnapshot chainDB
+    point <- atomically $ ChainDB.getTipPoint chainDB
+    blockNum0 <- atomically $ ChainDB.getTipBlockNo chainDB
+    let chainLen = AF.length $ currChain
+        perasWeights = forgetFingerprint perasWeights0
+        boost = unPerasWeight (weightBoostOfFragment perasWeights currChain)
+        (slotNo, blockHashStr) =
+            case point of
+                GenesisPoint -> (0, "")
+                BlockPoint s h -> (unSlotNo s, show h)
+        blockNum =
+            case blockNum0 of
+                Origin -> 0
+                At bn -> unBlockNo bn
+        queryPairs =
+              [ pair "node_id" nodeId
+              , pair "num_certs" (Set.size certs)
+              , pair "num_votes" (Set.size votes)
+              , pair "chain_len" chainLen
+              , pair "peras_boost" boost
+              , pair "slot_no" slotNo
+              , pairStr "block_hash" blockHashStr
+              , pair "block_no" blockNum
+              ]
+    liftIO $ sendAdvert queryPairs
+    SI.threadDelay 3
+
+  where
+
+    pairStr k v = (BSC.pack k, Just (BSC.pack v))
+    pair k v = pairStr k (show v)
+
+    sendAdvert queryPairs = do
+        manager <- Http.newManager Http.defaultManagerSettings
+        baseRequest <- Http.parseRequest "http://localhost:9000/advert"
+        let request = Http.setQueryString queryPairs baseRequest
+        responseResult <- try (Http.httpLbs request manager) :: IO (Either SomeException (Http.Response BSL.ByteString))
+        case responseResult of
+            Left err -> error $ show err
+            Right _ -> pure ()
+      where
+        _showPerasVoteCount PerasVoteId{..} =
+            show (unPerasSeatIndex pviSeatIndex) ++ " [" ++ show (unPerasRoundNo pviRoundNo) ++ "]"
+
 initNodeKernel ::
   forall m addrNTN addrNTC blk.
   ( IOLike m
@@ -291,6 +429,8 @@ initNodeKernel
     , genesisArgs
     , getDiffusionPipeliningSupport
     , miniProtocolParameters
+    , systemTime
+    , nodeSocketPath
     } = do
     -- using a lazy 'TVar', 'BlockForging' does not have a 'NoThunks' instance.
     blockForgingVar :: LazySTM.TMVar m [MkBlockForging m blk] <- LazySTM.newTMVarIO []
@@ -402,6 +542,9 @@ initNodeKernel
       forkLinkedThread registry "NodeKernel.blockForging" $
         blockForgingController st (LazySTM.takeTMVar blockForgingVar)
 
+    forkLinkedThread registry "NodeKernel.voteCreation" $ voteCreationController
+    forkLinkedThread registry "NodeKernel.objDiffusionAdvert" $ advertController nodeId chainDB
+
     -- Run the block fetch logic in the background. This will call
     -- 'addFetchedBlock' whenever a new block is downloaded.
     void $
@@ -454,6 +597,7 @@ initNodeKernel
         , getTxDecisionPolicy = txDecisionPolicy miniProtocolParameters
         }
    where
+
     -- Start a thread conditionally when the PerasFlag is provided and the
     -- current block type supports Peras.
     whenPerasEnabled currentSlot f =
@@ -473,6 +617,24 @@ initNodeKernel
             Nothing -> pure ()
             Just roundInfo' -> f roundInfo'
         else pure ()
+
+    nodeId = parseNodeIdFromSocketPath nodeSocketPath
+
+    voteCreationController = forever $ do
+      mBlock <- liftIO $ readBlockIO nodeId
+      case mBlock of
+        Nothing -> pure ()
+        Just block -> do
+          voteId <- liftIO genDummyVoteIdIO
+          -- NOTE: This is blocking for some reason in the second iteration
+          -- tip <- atomically $ getTipPoint chainDB
+          mLatestRound <- atomically $ getLatestPerasCertOnChainRound chainDB
+          let nextRound = case mLatestRound of
+                Nothing -> PerasRoundNo 1
+                Just r  -> r + 1
+          t <- systemTimeCurrent systemTime
+          addPerasVoteSync chainDB (PerasVoteDB.dummyVote t nextRound block voteId 0.2)
+      SI.threadDelay 10
 
     blockForgingController ::
       InternalState m remotePeer localPeer blk ->
