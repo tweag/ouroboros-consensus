@@ -79,6 +79,8 @@ import Ouroboros.Consensus.Util.NormalForm.StrictMVar
 import Ouroboros.Consensus.Util.NormalForm.StrictTVar
 import Ouroboros.Consensus.Util.Orphans ()
 
+import Control.Monad.IO.Class (MonadIO (..))
+
 {-------------------------------------------------------------------------------
   IOLike
 -------------------------------------------------------------------------------}
@@ -103,6 +105,7 @@ class
   , MonadCatch (STM m)
   , PrimMonad m
   , MonadLabelledSTM m
+  , MonadIO m
   , forall a. NoThunks (m a)
   , forall a. NoThunks a => NoThunks (StrictSTM.StrictTVar m a)
   , forall a. NoThunks a => NoThunks (StrictSVar m a)
