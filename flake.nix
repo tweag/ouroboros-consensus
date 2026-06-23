@@ -75,7 +75,7 @@
       in
       {
         devShells = rec {
-          default = ghc96;
+          default = ghc912;
           ghc96 = hydraJobs.native.haskell96.devShell;
           ghc96-profiled = hydraJobs.native.haskell96.devShellProfiled;
           ghc910 = hydraJobs.native.haskell910.devShell;
