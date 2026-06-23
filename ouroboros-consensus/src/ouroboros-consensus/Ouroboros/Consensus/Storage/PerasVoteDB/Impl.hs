@@ -12,12 +12,14 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE TypeOperators #-}
 
 module Ouroboros.Consensus.Storage.PerasVoteDB.Impl
   ( -- * Opening
     PerasVoteDbArgs (..)
   , defaultArgs
   , createDB
+  , dummyVote
 
     -- * Trace types
   , TraceEvent (..)
@@ -43,6 +45,13 @@ import Ouroboros.Consensus.Storage.PerasVoteDB.API
 import Ouroboros.Consensus.Util.Args
 import Ouroboros.Consensus.Util.IOLike
 import Ouroboros.Consensus.Util.STM
+
+import Ouroboros.Consensus.BlockchainTime (RelativeTime (..))
+import Data.String (IsString (..))
+import qualified Cardano.Crypto.DSIGN.Class as SL
+import qualified Cardano.Crypto.Seed as SL
+import qualified Cardano.Ledger.Keys as SL
+import qualified Ouroboros.Consensus.Peras.Vote.V1 as V1
 
 {-------------------------------------------------------------------------------
   Database state
@@ -184,6 +193,39 @@ defaultArgs =
     { pvdbaTracer = nullTracer
     , pvdbaPerasEpochContextResolverHandle = noDefault
     }
+
+dummyVote ::
+  (ConvertRawHash blk, PerasVote blk ~ V1.PerasVote blk, HashSize blk ~ 32) =>
+  RelativeTime ->
+  PerasRoundNo ->
+  Point blk ->
+  String ->
+  VoteWeight ->
+  WithArrivalTime (ValidatedPerasVote blk)
+dummyVote time roundNum voteBlock voterKey weight = validatedVoteWithArrivalTime
+  where
+    -- voterKey = fromString $ chr <$> replicate 32 5
+    signKey = SL.genKeyDSIGN (SL.mkSeedFromBytes (fromString voterKey))
+    verKey = SL.deriveVerKeyDSIGN signKey
+    _keyHash = SL.hashKey (SL.VKey verKey)
+    vote =
+      V1.PerasVote
+        { V1.pvRoundNo = roundNum
+        , V1.pvBoostedBlock = PerasBoostedBlock $
+            toBytes32RealPoint <$> (pointToWithOriginRealPoint voteBlock)
+        , V1.pvSeatIndex = PerasSeatIndex 0
+        , V1.pvEligibilityProof = V1.PersistentPerasVoteEligibilityProof
+        , V1.pvSignature = error "VoteSignature PerasBLSCrypto"
+        }
+    validatedVote =
+      ValidatedPerasVote
+        { vpvVote = vote
+        , vpvVoteWeight = weight
+        }
+    validatedVoteWithArrivalTime =
+        WithArrivalTime
+          time
+          validatedVote
 
 createDB ::
   forall m blk.
