@@ -542,7 +542,7 @@ initNodeKernel
       forkLinkedThread registry "NodeKernel.blockForging" $
         blockForgingController st (LazySTM.takeTMVar blockForgingVar)
 
-    forkLinkedThread registry "NodeKernel.voteCreation" $ voteCreationController
+    -- forkLinkedThread registry "NodeKernel.voteCreation" $ voteCreationController
     forkLinkedThread registry "NodeKernel.objDiffusionAdvert" $ advertController nodeId chainDB
 
     -- Run the block fetch logic in the background. This will call
@@ -619,7 +619,7 @@ initNodeKernel
         else pure ()
 
     nodeId = parseNodeIdFromSocketPath nodeSocketPath
-
+{-
     voteCreationController = forever $ do
       mBlock <- liftIO $ readBlockIO nodeId
       case mBlock of
@@ -633,8 +633,9 @@ initNodeKernel
                 Nothing -> PerasRoundNo 1
                 Just r  -> r + 1
           t <- systemTimeCurrent systemTime
-          addPerasVoteSync chainDB (PerasVoteDB.dummyVote t nextRound block voteId 0.2)
+          void $ addPerasVoteSync chainDB (PerasVoteDB.dummyVote t nextRound block voteId 0.2)
       SI.threadDelay 10
+-}
 
     blockForgingController ::
       InternalState m remotePeer localPeer blk ->
