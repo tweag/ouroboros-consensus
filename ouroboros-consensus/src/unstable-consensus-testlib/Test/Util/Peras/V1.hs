@@ -189,6 +189,7 @@ genPerasVote shouldGenNonPersistent = do
       , V1.pvSeatIndex
       , V1.pvEligibilityProof
       , V1.pvSignature
+      , V1.pvIsDummyVote = False
       }
 
 genPerasCert :: Bool -> Gen (V1.PerasCert tag)

@@ -77,6 +77,7 @@ data PerasVote tag
   -- the committee (persistent vs non-persistent)
   , pvSignature :: !(VoteSignature PerasBLSCrypto)
   -- ^ BLS signature on the hash of the election identifier and vote message
+  , pvIsDummyVote :: Bool
   }
   deriving stock (Show, Eq, Generic)
   deriving anyclass NoThunks
@@ -98,12 +99,13 @@ instance
 
 instance Typeable tag => FromCBOR (PerasVote tag) where
   fromCBOR = do
-    decodeListLenOf 5
+    decodeListLenOf 6
     pvRoundNo <- fromCBOR
     pvBoostedBlock <- fromCBOR
     pvSeatIndex <- fromCBOR
     pvEligibilityProof <- fromCBOR
     pvSignature <- fromCBOR
+    pvIsDummyVote <- fromCBOR
     pure
       PerasVote
         { pvRoundNo
@@ -111,16 +113,18 @@ instance Typeable tag => FromCBOR (PerasVote tag) where
         , pvSeatIndex
         , pvEligibilityProof
         , pvSignature
+        , pvIsDummyVote
         }
 
 instance Typeable tag => ToCBOR (PerasVote tag) where
   toCBOR vote =
-    encodeListLen 5
+    encodeListLen 6
       <> toCBOR (pvRoundNo vote)
       <> toCBOR (pvBoostedBlock vote)
       <> toCBOR (pvSeatIndex vote)
       <> toCBOR (pvEligibilityProof vote)
       <> toCBOR (pvSignature vote)
+      <> toCBOR (pvIsDummyVote vote)
 
 -- | Proof of eligibility for voting for committee members
 data PerasVoteEligibilityProof
@@ -180,6 +184,7 @@ instance
           , pvSeatIndex = perasSeatIndex
           , pvEligibilityProof = PersistentPerasVoteEligibilityProof
           , pvSignature = sig
+          , pvIsDummyVote = False
           }
     WFALSNonPersistentVote seatIndex electionId candidate vrfOutput sig -> do
       perasSeatIndex <- toPerasSeatIndex seatIndex
@@ -191,10 +196,11 @@ instance
           , pvSeatIndex = perasSeatIndex
           , pvEligibilityProof = proof
           , pvSignature = sig
+          , pvIsDummyVote = False
           }
 
   fromPerasVote = \case
-    PerasVote electionId candidate seatIndex proof sig -> do
+    PerasVote electionId candidate seatIndex proof sig _ -> do
       let seatIndex' = fromPerasSeatIndex seatIndex
       case proof of
         PersistentPerasVoteEligibilityProof ->
@@ -232,10 +238,11 @@ instance
           , pvSeatIndex = perasSeatIndex
           , pvEligibilityProof = PersistentPerasVoteEligibilityProof
           , pvSignature = sig
+          , pvIsDummyVote = False
           }
 
   fromPerasVote = \case
-    PerasVote electionId candidate seatIndex proof sig -> do
+    PerasVote electionId candidate seatIndex proof sig _ -> do
       let seatIndex' = fromPerasSeatIndex seatIndex
       case proof of
         PersistentPerasVoteEligibilityProof ->

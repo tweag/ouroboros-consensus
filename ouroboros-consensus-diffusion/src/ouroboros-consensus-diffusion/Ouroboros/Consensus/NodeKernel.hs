@@ -186,17 +186,10 @@ import System.Random (StdGen)
 import qualified Data.Set as Set
 import Ouroboros.Consensus.Storage.ChainDB.API
   (addPerasVoteSync, getLatestPerasCertOnChainRound)
--- import Ouroboros.Consensus.Storage.ChainDB.API (addPerasCertSync)
-import qualified Ouroboros.Consensus.Storage.PerasVoteDB.Impl as PerasVoteDB
--- import qualified Cardano.Ledger.Keys as SL
-import Data.Char (chr)
 import Data.Monoid (Last (..))
-import Data.List (isInfixOf)
-import Data.Maybe (fromMaybe)
 
 import qualified Data.ByteString.Base16 as Base16
 import qualified Data.ByteString.Char8 as BSC
-import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as BSL
 
 import qualified System.Random as R
@@ -204,14 +197,9 @@ import Control.Monad.IO.Class (MonadIO (..))
 
 import Text.Read (readEither)
 
-import qualified Streamly.Internal.Network.Inet.TCP as TCP
-import Data.Function ((&))
-import qualified Streamly.Data.Stream as Stream
-import qualified Streamly.Data.Fold as Fold
 import qualified Network.HTTP.Client as Http
 import Text.Read (readMaybe)
 import Data.Char (isDigit)
-import Cardano.Ledger.Hashes (KeyHash (..))
 import Ouroboros.Consensus.Peras.Weight (weightBoostOfFragment)
 
 import Cardano.Slotting.Slot (WithOrigin (..))
@@ -316,8 +304,10 @@ mkBlockPoint' ::
 mkBlockPoint' s =
     maybe (error "mkBlockPoint': Parse failed.") id . mkBlockPoint s
 
-genDummyVoteIdIO :: IO String
-genDummyVoteIdIO = map chr <$> replicateM 32 (R.randomRIO (0, 0x10FFFF))
+-- TODO: Derive the seat index from the socket path for a more deterministic
+-- seat index
+genDummyVoteIdIO :: IO PerasSeatIndex
+genDummyVoteIdIO = PerasSeatIndex <$> R.randomIO
 
 parseNodeIdFromSocketPath :: Last String -> Int
 parseNodeIdFromSocketPath path =
@@ -351,7 +341,7 @@ readBlockIO nodeId = do
                 Left errP -> error $ "readBlockIO: " ++ errP
 
 advertController ::
-    (IOLike m, StandardHash blk, HasHeader (Header blk), Typeable blk) =>
+    (IOLike m, StandardHash blk, HasHeader (Header blk)) =>
     Int -> ChainDB m blk -> m b
 advertController nodeId chainDB = forever $ do
     certs <- atomically $ ChainDB.getPerasCertIds chainDB
@@ -542,8 +532,10 @@ initNodeKernel
       forkLinkedThread registry "NodeKernel.blockForging" $
         blockForgingController st (LazySTM.takeTMVar blockForgingVar)
 
-    -- forkLinkedThread registry "NodeKernel.voteCreation" $ voteCreationController
-    forkLinkedThread registry "NodeKernel.objDiffusionAdvert" $ advertController nodeId chainDB
+    void $
+      forkLinkedThread registry "NodeKernel.voteCreation" $ voteCreationController
+    void $
+      forkLinkedThread registry "NodeKernel.objDiffusionAdvert" $ advertController nodeId chainDB
 
     -- Run the block fetch logic in the background. This will call
     -- 'addFetchedBlock' whenever a new block is downloaded.
@@ -619,7 +611,7 @@ initNodeKernel
         else pure ()
 
     nodeId = parseNodeIdFromSocketPath nodeSocketPath
-{-
+
     voteCreationController = forever $ do
       mBlock <- liftIO $ readBlockIO nodeId
       case mBlock of
@@ -633,9 +625,8 @@ initNodeKernel
                 Nothing -> PerasRoundNo 1
                 Just r  -> r + 1
           t <- systemTimeCurrent systemTime
-          void $ addPerasVoteSync chainDB (PerasVoteDB.dummyVote t nextRound block voteId 0.2)
+          void $ addPerasVoteSync chainDB (createDummyPerasVote t nextRound block voteId 0.2)
       SI.threadDelay 10
--}
 
     blockForgingController ::
       InternalState m remotePeer localPeer blk ->

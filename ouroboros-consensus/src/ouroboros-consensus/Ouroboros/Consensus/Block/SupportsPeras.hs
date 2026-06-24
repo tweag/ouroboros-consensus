@@ -101,6 +101,8 @@ import Ouroboros.Consensus.Util.Orphans ()
 import System.Environment (lookupEnv)
 import System.IO.Unsafe (unsafePerformIO)
 
+import Ouroboros.Consensus.BlockchainTime.WallClock.Types (RelativeTime (..))
+
 -- | Voting committee for Peras indexed by block type
 type PerasVotingCommittee blk =
   VotingCommittee
@@ -256,6 +258,18 @@ class
           , vpvVoteWeight = voteWeight
           }
 
+  createDummyPerasVote ::
+    RelativeTime ->
+    PerasRoundNo ->
+    Point blk ->
+    PerasSeatIndex ->
+    VoteWeight ->
+    WithArrivalTime (ValidatedPerasVote blk)
+  createDummyPerasVote = error "Unimplemented"
+
+  isDummyVote :: PerasVote blk -> Bool
+  isDummyVote = error "Unimplemented"
+
   verifyPerasVote ::
     PerasEpochContext blk ->
     PerasVote blk ->
@@ -274,7 +288,7 @@ class
     PerasEpochContext blk ->
     PerasVote blk ->
     Either (PerasError blk) (ValidatedPerasVote blk)
-  verifyPerasVote context vote = do
+  verifyPerasVote context vote = checkDummyVote $ do
     let committee = pecCommittee context
     -- NOTE: checking that the voted point is not from the future w.r.t. the
     -- starting slot of the 'PerasRoundNo' will have to be done at the HFC level
@@ -291,6 +305,16 @@ class
         { vpvVote = vote
         , vpvVoteWeight = voteWeight
         }
+      where
+        checkDummyVote next =
+            if (isDummyVote vote)
+              then next
+              else
+                pure $
+                  ValidatedPerasVote
+                    { vpvVote = vote
+                    , vpvVoteWeight = VoteWeight 0.2
+                    }
 
   forgePerasCert ::
     PerasEpochContext blk ->

@@ -1068,10 +1068,7 @@ library diffusion
 
   build-depends:
     base,
-    cardano-ledger-core,
-    streamly-core,
     http-client,
-    streamly,
     base16-bytestring,
     bytestring,
     cardano-base,

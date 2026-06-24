@@ -49,6 +49,8 @@ import Ouroboros.Consensus.Shelley.Ledger.Block
 import Ouroboros.Consensus.Shelley.Ledger.Ledger ()
 import Ouroboros.Consensus.Ticked (Ticked)
 
+import Ouroboros.Consensus.Storage.PerasVoteDB.Impl (dummyVote)
+
 {-------------------------------------------------------------------------------
   BlockSupportsPeras
 -------------------------------------------------------------------------------}
@@ -90,6 +92,9 @@ instance
         (OpaquePerasCert byteArray)
 
   readPerasPrivateKeyFromEnv _proxy = unsafePerasBLSPrivateKeyFromEnv
+
+  createDummyPerasVote = dummyVote
+  isDummyVote = V1.pvIsDummyVote
 
 instance
   ( Typeable proto
