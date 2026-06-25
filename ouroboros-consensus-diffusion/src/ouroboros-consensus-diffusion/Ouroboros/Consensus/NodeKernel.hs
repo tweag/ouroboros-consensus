@@ -52,7 +52,7 @@ import Data.Functor ((<&>))
 import Data.Hashable (Hashable)
 import Data.List.NonEmpty (NonEmpty)
 import qualified Data.List.NonEmpty as NE
-import Data.Maybe (isJust, isNothing)
+import Data.Maybe (isJust, isNothing, fromMaybe)
 import Data.Proxy
 import Data.Set (Set, member)
 import qualified Data.Text as Text
@@ -295,7 +295,7 @@ mkBlockPoint slotNo hexHashStr = do
   let proxy = Proxy :: Proxy blk
   if fromIntegral (BSC.length rawBytes) == hashSize proxy
     then do
-      let hh = fromRawHash proxy rawBytes
+      let hh = fromMaybe (error "hh: fromRawHash failed") $ fromRawHash proxy rawBytes
       Just (BlockPoint (fromIntegral slotNo) hh)
     else Nothing
 
@@ -419,7 +419,6 @@ initNodeKernel
     , genesisArgs
     , getDiffusionPipeliningSupport
     , miniProtocolParameters
-    , systemTime
     , nodeSocketPath
     } = do
     -- using a lazy 'TVar', 'BlockForging' does not have a 'NoThunks' instance.
@@ -532,11 +531,6 @@ initNodeKernel
       forkLinkedThread registry "NodeKernel.blockForging" $
         blockForgingController st (LazySTM.takeTMVar blockForgingVar)
 
-    void $
-      forkLinkedThread registry "NodeKernel.voteCreation" $ voteCreationController
-    void $
-      forkLinkedThread registry "NodeKernel.objDiffusionAdvert" $ advertController nodeId chainDB
-
     -- Run the block fetch logic in the background. This will call
     -- 'addFetchedBlock' whenever a new block is downloaded.
     void $
@@ -564,6 +558,11 @@ initNodeKernel
         knownSlotWatcher btime $ \currentSlot ->
           whenPerasEnabled currentSlot $ \roundInfo ->
             withEarlyExit_ $ perasVoteForgingController systemTime st roundInfo
+    when (PerasFlag `member` featureFlags) $ do
+      void $
+        forkLinkedThread registry "NodeKernel.voteCreation" $ voteCreationController
+      void $
+        forkLinkedThread registry "NodeKernel.objDiffusionAdvert" $ advertController nodeId chainDB
 
     return
       NodeKernel
