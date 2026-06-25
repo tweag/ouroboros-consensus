@@ -48,6 +48,10 @@ import Ouroboros.Consensus.Util.STM
 
 import Ouroboros.Consensus.BlockchainTime (RelativeTime (..))
 import qualified Ouroboros.Consensus.Peras.Vote.V1 as V1
+import qualified Ouroboros.Consensus.Committee.Crypto.BLS as BLS
+import qualified Ouroboros.Consensus.Peras.Crypto.BLS as BLS
+import Data.Maybe (fromJust)
+import qualified Data.ByteString.Char8 as BS
 
 {-------------------------------------------------------------------------------
   Database state
@@ -200,6 +204,11 @@ dummyVote ::
   WithArrivalTime (ValidatedPerasVote blk)
 dummyVote time roundNum voteBlock seatIndex weight = validatedVoteWithArrivalTime
   where
+    privateKey =
+      fromJust $
+        BLS.rawDeserialisePrivateKey
+            (BS.pack "")
+            (BS.pack (replicate 32 '0'))
     vote =
       V1.PerasVote
         { V1.pvRoundNo = roundNum
@@ -207,7 +216,9 @@ dummyVote time roundNum voteBlock seatIndex weight = validatedVoteWithArrivalTim
             toBytes32RealPoint <$> (pointToWithOriginRealPoint voteBlock)
         , V1.pvSeatIndex = seatIndex
         , V1.pvEligibilityProof = V1.PersistentPerasVoteEligibilityProof
-        , V1.pvSignature = error "VoteSignature PerasBLSCrypto"
+        , V1.pvSignature =
+            BLS.PerasBLSCryptoVoteSignature $
+             BLS.signWithRole privateKey (BS.pack "")
         , V1.pvIsDummyVote = True
         }
     validatedVote =
