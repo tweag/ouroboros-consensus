@@ -58,7 +58,7 @@ module Ouroboros.Consensus.Node
   , openChainDB
   ) where
 
-import Cardano.Base.FeatureFlags (CardanoFeatureFlag)
+import Cardano.Base.FeatureFlags (CardanoFeatureFlag (..))
 import qualified Cardano.Network.Diffusion as Cardano.Diffusion
 import Cardano.Network.Diffusion.Configuration (ChainSyncIdleTimeout (..))
 import qualified Cardano.Network.Diffusion.Configuration as Diffusion
@@ -185,6 +185,8 @@ import System.FS.IO (ioHasFS)
 import System.FilePath ((</>))
 import System.Random (StdGen, newStdGen, randomIO, splitGen)
 import Data.Monoid (Last (..))
+
+import qualified Data.Set as Set
 
 {-------------------------------------------------------------------------------
   The arguments to the Consensus Layer node functionality
@@ -411,7 +413,7 @@ run ::
   StdRunNodeArgs IO blk ->
   IO ()
 run args stdArgs =
-  stdLowLevelRunNodeArgsIO args stdArgs
+  stdLowLevelRunNodeArgsIO (args { rnFeatureFlags = Set.insert PerasFlag (rnFeatureFlags args) }) stdArgs
     >>= runWith args encodeRemoteAddress decodeRemoteAddress
 
 -- | Extra constraints used by `ouroboros-network`.
