@@ -66,7 +66,7 @@ tests =
  where
   localServerPassesRegressionTests era =
     testCase ("Passes the regression tests (" ++ show era ++ ")") $ do
-      (pInfo :: ProtocolInfo (CardanoBlock StandardCrypto)) <-
+      pInfo <-
         mkSimpleTestProtocolInfo
           (Shelley.DecentralizationParam 1)
           (Consensus.SecurityParam $ knownNonZeroBounded @10)
