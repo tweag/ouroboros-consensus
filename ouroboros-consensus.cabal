@@ -947,19 +947,17 @@ library protocol
     Ouroboros.Consensus.Protocol.Praos
     Ouroboros.Consensus.Protocol.Praos.AgentClient
     Ouroboros.Consensus.Protocol.Praos.Common
-    Ouroboros.Consensus.Protocol.Praos.Header
     Ouroboros.Consensus.Protocol.Praos.Views
-    Ouroboros.Consensus.Protocol.Praos.VRF
     Ouroboros.Consensus.Protocol.TPraos
 
   build-depends:
     base,
-    bytestring,
     cardano-binary,
     cardano-crypto-class:cardano-crypto-class,
     cardano-ledger-binary,
     cardano-ledger-core,
     cardano-ledger-shelley ^>=1.19,
+    cardano-protocol ^>=0.1,
     cardano-protocol-tpraos ^>=1.6,
     cardano-slotting,
     cborg,
@@ -997,7 +995,7 @@ library unstable-protocol-testlib
     cardano-ledger-binary,
     cardano-ledger-core,
     cardano-ledger-shelley-test,
-    cardano-protocol-tpraos,
+    cardano-protocol,
     cardano-slotting,
     containers,
     ouroboros-consensus:protocol,
@@ -1378,6 +1376,7 @@ library cardano
     cardano-ledger-mary ^>=1.11,
     cardano-ledger-shelley,
     cardano-prelude,
+    cardano-protocol ^>=0.1,
     cardano-protocol-tpraos,
     cardano-slotting,
     cardano-strict-containers,
@@ -1540,6 +1539,7 @@ library unstable-shelley-testlib
     cardano-ledger-mary:cardano-ledger-mary,
     cardano-ledger-shelley-test,
     cardano-ledger-shelley:{cardano-ledger-shelley, testlib},
+    cardano-protocol,
     cardano-protocol-tpraos:{cardano-protocol-tpraos, testlib},
     cardano-slotting,
     cardano-strict-containers,

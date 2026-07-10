@@ -18,7 +18,7 @@ import Ouroboros.Consensus.Protocol.Praos
 import Ouroboros.Consensus.Protocol.Praos.Common
   ( MaxMajorProtVer (MaxMajorProtVer)
   )
-import Ouroboros.Consensus.Protocol.Praos.Header
+import Cardano.Protocol.Praos.BlockHeader
   ( Header (..)
   , HeaderBody (..)
   , headerHash

@@ -58,7 +58,7 @@ import qualified Cardano.Ledger.Core as SL (BlockBody, TranslationContext, hashB
 import Cardano.Ledger.Hashes (HASH)
 import qualified Cardano.Ledger.Shelley.API as SL
 import Cardano.Protocol.Crypto (Crypto)
-import qualified Cardano.Protocol.TPraos.BHeader as SL
+import qualified Cardano.Protocol.TPraos.BlockHeader as SL
 import qualified Data.ByteString.Lazy as Lazy
 import Data.Coerce (coerce)
 import Data.Typeable (Typeable)

@@ -34,8 +34,8 @@ source-repository-package
 source-repository-package
   type: git
   location: https://github.com/IntersectMBO/cardano-ledger.git
-  tag: 245e63dcd335e3ca29823609e4aaa8f5f096a425
-  --sha256: sha256-chsapfNnY/V7y1snBzjP0LSVnYl/Axt6GjahTPNOKj0=
+  tag: 1d10c40535b4a8a76c7ca12a54bbeeb672cbf194
+  --sha256: sha256-gVYiBoTuJASnOxzV4VEyORHlLFkLXRtUXzw9J6/+N4Q=
   subdir:
     eras/allegra/impl
     eras/alonzo/impl
@@ -54,6 +54,7 @@ source-repository-package
     libs/cardano-ledger-api
     libs/cardano-ledger-binary
     libs/cardano-ledger-core
+    libs/cardano-protocol
     libs/cardano-protocol-tpraos
     libs/non-integral
     libs/small-steps

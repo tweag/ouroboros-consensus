@@ -67,7 +67,7 @@ import Cardano.Ledger.Keys
   , hashKey
   , signedDSIGN
   )
-import Cardano.Protocol.TPraos.BHeader
+import Cardano.Protocol.TPraos.BlockHeader
   ( HashHeader (..)
   , PrevHash (..)
   , checkLeaderNatValue
@@ -96,12 +96,12 @@ import Data.Text.Encoding (decodeUtf8, encodeUtf8)
 import Data.Word (Word64)
 import GHC.Generics (Generic)
 import Ouroboros.Consensus.Protocol.Praos (PraosValidationErr (..))
-import Ouroboros.Consensus.Protocol.Praos.Header
+import Cardano.Protocol.Praos.BlockHeader
   ( Header
   , HeaderBody (..)
   , pattern Header
   )
-import Ouroboros.Consensus.Protocol.Praos.VRF
+import Cardano.Protocol.Praos.VRF
   ( InputVRF
   , mkInputVRF
   , vrfLeaderValue

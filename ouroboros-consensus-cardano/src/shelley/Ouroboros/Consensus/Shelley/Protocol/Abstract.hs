@@ -34,7 +34,7 @@ import Cardano.Ledger.Hashes
   )
 import Cardano.Ledger.Keys (KeyRole (BlockIssuer), VKey)
 import Cardano.Protocol.Crypto (Crypto, VRF)
-import Cardano.Protocol.TPraos.BHeader (PrevHash)
+import Cardano.Protocol.TPraos.BlockHeader (PrevHash)
 import Cardano.Slotting.Block (BlockNo)
 import Cardano.Slotting.Slot (SlotNo)
 import Codec.Serialise (Serialise (..))

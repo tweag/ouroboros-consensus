@@ -20,7 +20,7 @@ import Cardano.Ledger.Dijkstra.Era (DijkstraEraBlockHeader (..))
 import Cardano.Protocol.Crypto
 import Ouroboros.Consensus.Protocol.Praos (Praos)
 import qualified Ouroboros.Consensus.Protocol.Praos as Praos
-import Ouroboros.Consensus.Protocol.Praos.Header (Header)
+import Cardano.Protocol.Praos.BlockHeader (Header)
 import Ouroboros.Consensus.Protocol.TPraos (TPraos)
 import qualified Ouroboros.Consensus.Protocol.TPraos as TPraos
 import Ouroboros.Consensus.Shelley.Eras

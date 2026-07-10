@@ -13,7 +13,7 @@ import qualified Cardano.Ledger.Core as SL
   , txSeqBlockBodyL
   )
 import qualified Cardano.Ledger.Shelley.API as SL (Block (..), extractTx)
-import qualified Cardano.Protocol.TPraos.BHeader as SL
+import qualified Cardano.Protocol.TPraos.BlockHeader as SL
 import Control.Exception
 import qualified Data.Sequence.Strict as Seq
 import Lens.Micro ((&), (.~))

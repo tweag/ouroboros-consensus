@@ -13,7 +13,7 @@ import Cardano.Ledger.Core (TranslationContext)
 import qualified Cardano.Ledger.Shelley.API as SL
 import Cardano.Ledger.State (InstantStake)
 import Cardano.Protocol.Crypto (Crypto)
-import qualified Cardano.Protocol.TPraos.BHeader as SL
+import qualified Cardano.Protocol.TPraos.BlockHeader as SL
 import Cardano.Slotting.EpochInfo
 import Control.Monad (replicateM)
 import Data.Coerce (coerce)
@@ -25,7 +25,7 @@ import Ouroboros.Consensus.Ledger.Query
 import Ouroboros.Consensus.Ledger.SupportsMempool
 import Ouroboros.Consensus.Protocol.Praos (Praos)
 import qualified Ouroboros.Consensus.Protocol.Praos as Praos
-import qualified Ouroboros.Consensus.Protocol.Praos.Header as Praos
+import qualified Cardano.Protocol.Praos.BlockHeader as Praos
 import Ouroboros.Consensus.Protocol.TPraos (TPraos, TPraosState (..))
 import Ouroboros.Consensus.Shelley.Eras
 import Ouroboros.Consensus.Shelley.Ledger
