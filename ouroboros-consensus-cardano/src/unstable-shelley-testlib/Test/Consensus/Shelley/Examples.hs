@@ -23,19 +23,15 @@ module Test.Consensus.Shelley.Examples
 import qualified Cardano.Ledger.BaseTypes as SL
 import qualified Cardano.Ledger.Block as SL
 import Cardano.Ledger.Core
-import qualified Cardano.Ledger.Core as LC
 import qualified Cardano.Ledger.Shelley.API as SL
 import Cardano.Protocol.Crypto (StandardCrypto)
 import qualified Cardano.Protocol.TPraos.BlockHeader as SL
 import Cardano.Slotting.EpochInfo (fixedEpochInfo)
 import Cardano.Slotting.Time (mkSlotLength)
 import Data.Coerce (coerce)
-import Data.Foldable (toList)
 import Data.List.NonEmpty (NonEmpty ((:|)))
-import qualified Data.Map as Map
 import Data.Maybe.Strict (StrictMaybe (..))
 import qualified Data.Set as Set
-import Lens.Micro
 import Ouroboros.Consensus.Block
 import Ouroboros.Consensus.HeaderValidation
 import Ouroboros.Consensus.Ledger.Extended
@@ -90,23 +86,6 @@ import Test.Util.Serialisation.SomeResult (SomeResult (..))
 codecConfig :: CodecConfig StandardShelleyBlock
 codecConfig = ShelleyCodecConfig
 
-mkLedgerTables ::
-  forall proto era.
-  ShelleyCompatible proto era =>
-  LC.Tx LC.TopTx era ->
-  LedgerTables (ShelleyBlock proto era) ValuesMK
-mkLedgerTables tx =
-  LedgerTables $
-    ValuesMK $
-      Map.fromList $
-        zip exampleTxIns exampleTxOuts
- where
-  exampleTxIns :: [BigEndianTxIn]
-  exampleTxIns = map BigEndianTxIn $ toList (tx ^. (LC.bodyTxL . LC.allInputsTxBodyF))
-
-  exampleTxOuts :: [LC.TxOut era]
-  exampleTxOuts = toList (tx ^. (LC.bodyTxL . LC.outputsTxBodyL))
-
 fromShelleyLedgerExamples ::
   ShelleyCompatible (TPraos StandardCrypto) era =>
   ProtocolLedgerExamples (SL.BHeader StandardCrypto) era ->
@@ -133,7 +112,6 @@ fromShelleyLedgerExamples
       , exampleExtLedgerState = unlabelled extLedgerState
       , exampleSlotNo = unlabelled slotNo
       , exampleLedgerConfig = unlabelled ledgerConfig
-      , exampleLedgerTables = unlabelled $ mkLedgerTables emptyTx
       }
    where
     emptyTx = mkBasicTx mkBasicTxBody
@@ -245,7 +223,6 @@ fromShelleyLedgerExamplesPraos
       , exampleResult = results
       , exampleAnnTip = unlabelled annTip
       , exampleLedgerState = unlabelled ledgerState
-      , exampleLedgerTables = unlabelled $ mkLedgerTables emptyTx
       , exampleChainDepState = unlabelled chainDepState
       , exampleExtLedgerState = unlabelled extLedgerState
       , exampleSlotNo = unlabelled slotNo
