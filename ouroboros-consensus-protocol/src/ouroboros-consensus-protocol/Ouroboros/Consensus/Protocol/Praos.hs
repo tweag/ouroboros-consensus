@@ -53,6 +53,13 @@ import Cardano.Ledger.Shelley (ShelleyEra)
 import Cardano.Ledger.Slot (Duration (Duration), (+*))
 import qualified Cardano.Ledger.State as SL
 import Cardano.Protocol.Crypto (Crypto, KES, StandardCrypto, VRF)
+import Cardano.Protocol.Praos.BlockHeader (HeaderBody)
+import Cardano.Protocol.Praos.VRF
+  ( InputVRF
+  , mkInputVRF
+  , vrfLeaderValue
+  , vrfNonceValue
+  )
 import qualified Cardano.Protocol.TPraos.API as SL
 import Cardano.Protocol.TPraos.BlockHeader
   ( BoundedNatural (bvValue)
@@ -100,13 +107,6 @@ import Ouroboros.Consensus.Protocol.Ledger.HotKey (HotKey)
 import qualified Ouroboros.Consensus.Protocol.Ledger.HotKey as HotKey
 import Ouroboros.Consensus.Protocol.Ledger.Util (isNewEpoch)
 import Ouroboros.Consensus.Protocol.Praos.Common
-import Cardano.Protocol.Praos.BlockHeader (HeaderBody)
-import Cardano.Protocol.Praos.VRF
-  ( InputVRF
-  , mkInputVRF
-  , vrfLeaderValue
-  , vrfNonceValue
-  )
 import qualified Ouroboros.Consensus.Protocol.Praos.Views as Views
 import Ouroboros.Consensus.Protocol.TPraos
   ( ConsensusConfig (TPraosConfig, tpraosEpochInfo, tpraosParams)

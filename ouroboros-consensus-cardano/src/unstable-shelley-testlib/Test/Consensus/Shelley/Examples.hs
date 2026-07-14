@@ -25,6 +25,10 @@ import qualified Cardano.Ledger.Block as SL
 import Cardano.Ledger.Core
 import qualified Cardano.Ledger.Shelley.API as SL
 import Cardano.Protocol.Crypto (StandardCrypto)
+import Cardano.Protocol.Praos.BlockHeader
+  ( HeaderBody (HeaderBody)
+  )
+import qualified Cardano.Protocol.Praos.BlockHeader as Praos
 import qualified Cardano.Protocol.TPraos.BlockHeader as SL
 import Cardano.Slotting.EpochInfo (fixedEpochInfo)
 import Cardano.Slotting.Time (mkSlotLength)
@@ -42,10 +46,6 @@ import Ouroboros.Consensus.Ledger.Tables.Utils
 import Ouroboros.Consensus.Protocol.Abstract (translateChainDepState)
 import Ouroboros.Consensus.Protocol.Praos (Praos)
 import Ouroboros.Consensus.Protocol.Praos.Common
-import Cardano.Protocol.Praos.BlockHeader
-  ( HeaderBody (HeaderBody)
-  )
-import qualified Cardano.Protocol.Praos.BlockHeader as Praos
 import Ouroboros.Consensus.Protocol.TPraos
   ( TPraos
   , TPraosState (TPraosState)

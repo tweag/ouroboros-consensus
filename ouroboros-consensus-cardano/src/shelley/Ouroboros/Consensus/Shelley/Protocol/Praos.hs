@@ -9,6 +9,12 @@ import Cardano.Crypto.VRF (certifiedOutput)
 import Cardano.Ledger.BaseTypes (ProtVer (ProtVer))
 import Cardano.Ledger.Chain (ChainChecksPParams (..))
 import Cardano.Ledger.Slot (SlotNo (unSlotNo))
+import Cardano.Protocol.Praos.BlockHeader
+  ( Header (..)
+  , HeaderBody (..)
+  , headerHash
+  , headerSize
+  )
 import Cardano.Protocol.TPraos.OCert
   ( OCert (ocertKESPeriod, ocertVkHot)
   )
@@ -17,12 +23,6 @@ import Data.Either (isRight)
 import Ouroboros.Consensus.Protocol.Praos
 import Ouroboros.Consensus.Protocol.Praos.Common
   ( MaxMajorProtVer (MaxMajorProtVer)
-  )
-import Cardano.Protocol.Praos.BlockHeader
-  ( Header (..)
-  , HeaderBody (..)
-  , headerHash
-  , headerSize
   )
 import Ouroboros.Consensus.Protocol.Praos.Views
 import Ouroboros.Consensus.Protocol.Signed
