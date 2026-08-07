@@ -84,7 +84,7 @@ mkConsensusProtocolCardano
     }
   npcDijkstraProtocolConfig
   NodeHardForkProtocolConfiguration
-    { npcTestEnableDevelopmentHardForkEras
+    { npcExperimentalHardForksEnabled
     , -- During testing of the latest unreleased era, we conditionally
     -- declared that we knew about it. We do so only when a config option
     -- for testing development/unstable eras is used. This lets us include
@@ -252,9 +252,9 @@ mkConsensusProtocolCardano
         -- IMPORTANT: this Protver below has to be kept in sync with the values
         -- used in the node in cardano-node/src/Cardano/Node/Protocol/Cardano.hs
         -- in function mkSomeConsensusProtocolCardano.
-        ( if npcTestEnableDevelopmentHardForkEras
-            then ProtVer (natVersion @11) 0
-            else ProtVer (natVersion @10) 7
+        ( if npcExperimentalHardForksEnabled
+            then ProtVer (natVersion @12) 0
+            else ProtVer (natVersion @11) 0
         )
 
 -- | An empty Dijkstra genesis to be provided when none is specified in the config.
