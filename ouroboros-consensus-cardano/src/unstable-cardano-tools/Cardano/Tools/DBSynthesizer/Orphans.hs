@@ -19,6 +19,7 @@ import Data.Aeson as Aeson
   , (.:)
   , (.:?)
   )
+import Data.Maybe (fromMaybe, isJust)
 
 instance FromJSON NodeConfigStub where
   parseJSON val = withObject "NodeConfigStub" (parse' val) val
@@ -57,12 +58,14 @@ instance AdjustFilePaths NodeCredentials where
 -- DUPLICATE: mirroring parsers from cardano-node/src/Cardano/Node/Configuration/POM.hs
 
 instance FromJSON NodeHardForkProtocolConfiguration where
-  parseJSON = withObject "NodeHardForkProtocolConfiguration" $ \v ->
-    NodeHardForkProtocolConfiguration
-      <$> v
-        .:? "TestEnableDevelopmentHardForkEras"
-        .!= False
-      <*> v .:? "TestShelleyHardForkAtEpoch"
+  parseJSON = withObject "NodeHardForkProtocolConfiguration" $ \v -> do
+    mNew <- v .:? "ExperimentalHardForksEnabled"
+    mOld <- v .:? "TestEnableDevelopmentHardForkEras"
+    when (isJust mOld && mOld /= mNew) $
+      fail
+        "TestEnableDevelopmentHardForkEras has been renamed to ExperimentalHardForksEnabled in the configuration file"
+    NodeHardForkProtocolConfiguration (fromMaybe False mNew)
+      <$> v .:? "TestShelleyHardForkAtEpoch"
       <*> v .:? "TestAllegraHardForkAtEpoch"
       <*> v .:? "TestMaryHardForkAtEpoch"
       <*> v .:? "TestAlonzoHardForkAtEpoch"
