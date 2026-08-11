@@ -65,7 +65,7 @@ import Ouroboros.Consensus.Config
 import Ouroboros.Consensus.Forecast
 import Ouroboros.Consensus.Genesis.Governor (gddWatcher)
 import qualified Ouroboros.Consensus.HardFork.History.EraParams as HF
-import Ouroboros.Consensus.HardFork.History.Qry (slotToPerasRoundNo')
+import Ouroboros.Consensus.HardFork.History.Qry (slotToPerasRoundNo', forgetEraIndex)
 import Ouroboros.Consensus.HeaderValidation
 import Ouroboros.Consensus.Ledger.Abstract
 import Ouroboros.Consensus.Ledger.Extended
@@ -105,6 +105,7 @@ import Ouroboros.Consensus.Peras.Cert.Opaque (toOpaquePerasCert)
 import Ouroboros.Consensus.Peras.Context
   ( forgePerasVoteIfEligibleWithHandle
   , runQueryWithContextHandle
+  , runQueryEraIndexedWithContextHandle
   )
 import Ouroboros.Consensus.Peras.Voting.Rules
   ( PerasVotingRulesDecision (..)
@@ -182,6 +183,8 @@ import Ouroboros.Network.TxSubmission.Mempool.Reader
   )
 import qualified Ouroboros.Network.TxSubmission.Mempool.Reader as MempoolReader
 import System.Random (StdGen)
+
+import Debug.RecoverRTTI (anythingToString)
 
 {-------------------------------------------------------------------------------
   Relay node
@@ -459,15 +462,23 @@ initNodeKernel
       if PerasFlag `member` featureFlags
         then do
           roundInfo <- atomically $ do
-            runQueryWithContextHandle
+            runQueryEraIndexedWithContextHandle
               (ChainDB.getTimeResolutionContextHandle chainDB)
               (slotToPerasRoundNo' currentSlot)
               >>= \case
                 Left err -> throwSTM err
                 -- We don't know whether Peras is enabled at this point.
                 -- Abort if it isn't.
-                Right HF.NoPerasEnabled -> pure Nothing
-                Right (HF.PerasEnabled roundInfo) -> pure (Just roundInfo)
+                Right val ->
+                  case forgetEraIndex val of
+                    HF.NoPerasEnabled -> do
+                      when (unSlotNo currentSlot > 200) $ do
+                          () <- error (anythingToString val)
+                          pure ()
+                      pure Nothing
+                    HF.PerasEnabled roundInfo -> do
+                      () <- error "PerasEnabled"
+                      pure (Just roundInfo)
           case roundInfo of
             Nothing -> pure ()
             Just roundInfo' -> f roundInfo'

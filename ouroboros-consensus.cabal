@@ -1087,6 +1087,7 @@ library diffusion
     Ouroboros.Consensus.Node.Run,
 
   build-depends:
+    recover-rtti,
     base,
     bytestring,
     cardano-base,

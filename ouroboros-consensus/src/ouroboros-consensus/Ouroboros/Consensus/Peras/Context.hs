@@ -47,6 +47,7 @@ module Ouroboros.Consensus.Peras.Context
   , runQueryEraIndexedWithContext
   , TimeResolutionContextHandle (..)
   , runQueryWithContextHandle
+  , runQueryEraIndexedWithContextHandle
 
     -- * Next-epoch detection
   , EpochCrossing (..)
@@ -904,6 +905,15 @@ runQueryWithContextHandle ::
 runQueryWithContextHandle handle qry = do
   context <- getTimeResolutionContext handle
   pure (runQueryWithContext context qry)
+
+runQueryEraIndexedWithContextHandle ::
+  (HasHardForkHistory blk, MonadSTM m) =>
+  TimeResolutionContextHandle m blk ->
+  Qry a ->
+  STM m (Either PastHorizonException (EraIndexed (HardForkIndices blk) a))
+runQueryEraIndexedWithContextHandle handle qry = do
+  context <- getTimeResolutionContext handle
+  pure (runQueryEraIndexedWithContext context qry)
 
 -- * Next-epoch detection
 
