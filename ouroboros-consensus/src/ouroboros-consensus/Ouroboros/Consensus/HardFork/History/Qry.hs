@@ -383,17 +383,14 @@ evalExprInEra EraSummary{..} = \(ClosedExpr e) -> go e
   -- This one doesn't use 'ensurePerasEnabled' because it should return
   -- 'Just NoPerasEnabled' if the slot matches the current era bounds, but this
   -- era has not peras enabled.
-  go (ERelSlotToPerasRoundNo expr) = runPerasEnabledT $ do
-    SlotInEra relSlot <- lift $ go expr
-    PerasEnabledT $
-      Just $
-        case eraPerasRoundLength of
-          NoPerasEnabled ->
-            NoPerasEnabled
-          PerasEnabled (PerasRoundLength roundLength) ->
-            PerasEnabled $
-              bimap PerasRoundNoInEra SlotInPerasRound $
-                relSlot `divMod` roundLength
+  go (ERelSlotToPerasRoundNo expr) = do
+    SlotInEra relSlot <- go expr
+    case eraPerasRoundLength of
+      NoPerasEnabled -> Nothing
+      PerasEnabled (PerasRoundLength roundLength) ->
+        Just $ PerasEnabled $
+          bimap PerasRoundNoInEra SlotInPerasRound $
+            relSlot `divMod` roundLength
 
   -- Get era parameters
   --
