@@ -121,6 +121,8 @@ class
   , NoThunks (ShelleyProtocolHeader proto)
   , EncCBOR (ShelleyProtocolHeader proto)
   , DecCBOR (Annotator (ShelleyProtocolHeader proto))
+  , EncCBOR (SL.Block (ShelleyProtocolHeader proto) era)
+  , DecCBOR (Annotator (SL.Block (ShelleyProtocolHeader proto) era))
   , SL.EraBlockHeader (ShelleyProtocolHeader proto) era
   , SL.ApplyBlock (ShelleyProtocolHeader proto) era
   , Show (CannotForgeError proto)
