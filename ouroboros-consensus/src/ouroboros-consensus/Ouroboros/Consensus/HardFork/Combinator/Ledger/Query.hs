@@ -83,6 +83,7 @@ import Ouroboros.Consensus.Ledger.Extended
 import Ouroboros.Consensus.Ledger.Peras (PerasState (..))
 import Ouroboros.Consensus.Ledger.Query
 import Ouroboros.Consensus.Node.Serialisation (Some (..))
+import Ouroboros.Consensus.Peras.Context (PerasEpochContextResolver (..))
 import Ouroboros.Consensus.Storage.LedgerDB
 import Ouroboros.Consensus.TypeFamilyWrappers
   ( WrapChainDepState (..)
@@ -295,33 +296,29 @@ answerBlockQueryHelper
 distribExtLedgerState ::
   All SingleEraBlock xs =>
   ExtLedgerState (HardForkBlock xs) mk -> NS (Flip ExtLedgerState mk) xs
-distribExtLedgerState
-  ( ExtLedgerState
-      ledgerState
-      headerState
-      perasState
-    ) =
-    himap
-      ( \idx (Pair hst lst) ->
-          Flip $
-            ExtLedgerState
-              { ledgerState = unFlip lst
-              , headerState = hst
-              , perasState =
-                  PerasState
-                    { perasEpochContextResolver =
-                        castHFCPerasEpochContextResolverAtIndex
-                          idx
-                          (perasEpochContextResolver perasState)
-                    , latestPerasCertOnChainRound =
-                        latestPerasCertOnChainRound perasState
-                    }
-              }
-      )
-      $ mustMatchNS
-        "HeaderState"
-        (distribHeaderState headerState)
-        (State.tip (hardForkLedgerStatePerEra ledgerState))
+distribExtLedgerState (ExtLedgerState ledgerState headerState perasState) =
+  hmap
+    ( \(Pair headerState' ledgerState') ->
+        Flip $
+          ExtLedgerState
+            { ledgerState = unFlip ledgerState'
+            , headerState = headerState'
+            , perasState =
+                PerasState
+                  { perasEpochContextResolver =
+                      PerasEpochContextResolverError $
+                        "distribExtLedgerState: single-era Peras epoch"
+                          <> " context resolution queries are not supported."
+                          <> " Implement them via Hard Fork queries instead."
+                  , latestPerasCertOnChainRound =
+                      latestPerasCertOnChainRound perasState
+                  }
+            }
+    )
+    $ mustMatchNS
+      "HeaderState"
+      (distribHeaderState headerState)
+      (State.tip (hardForkLedgerStatePerEra ledgerState))
 
 -- | Precondition: the 'headerStateTip' and 'headerStateChainDep' should be from
 -- the same era. In practice, this is _always_ the case, unless the

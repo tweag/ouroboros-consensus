@@ -10,7 +10,6 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE NamedFieldPuns #-}
-{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TypeApplications #-}
@@ -41,11 +40,10 @@ module Ouroboros.Consensus.HardFork.Combinator.Basics
   , completeLedgerConfig''
   , distribLedgerConfig
   , distribTopLevelConfig
-  , projectHFCPerasContext
-  , injectHFCPerasEpochContext
-  , projectHFCBoundedPerasEpochContext
+
+    -- ** Functions on Peras context
   , injectHFCBoundedPerasEpochContext
-  , castHFCPerasEpochContextResolverAtIndex
+  , projectHFCBoundedPerasEpochContext
   , injectHFCPerasEpochContextResolver
 
     -- * HFC injection/projection helpers for Peras
@@ -67,7 +65,7 @@ import Data.SOP.Dict (Dict (..))
 import qualified Data.SOP.Dict as Dict
 import Data.SOP.Either (hdistribute, mkEitherF)
 import Data.SOP.Functors
-import Data.SOP.Index (Index (..), himap, injectNS)
+import Data.SOP.Index (himap, injectNS)
 import qualified Data.SOP.Match as Match
 import Data.SOP.Strict
 import Data.Typeable
@@ -111,7 +109,6 @@ import qualified Ouroboros.Consensus.HardFork.Combinator.State.Infra as State
 import Ouroboros.Consensus.HardFork.Combinator.State.Instances ()
 import Ouroboros.Consensus.HardFork.Combinator.State.Types
 import qualified Ouroboros.Consensus.HardFork.History as History
-import qualified Ouroboros.Consensus.HardFork.History.EraParams as HF
 import Ouroboros.Consensus.Ledger.Abstract
 import Ouroboros.Consensus.Ledger.SupportsPeras (LedgerStateSupportsPeras (..))
 import Ouroboros.Consensus.Peras.Context
@@ -374,11 +371,11 @@ projectHFCPerasVoteCollectionWithQuorum hfcCollection =
 -- NOTE: this assumes PerasParams are the same for all eras.
 --
 -- In the future, @pecParams@ will be an @NP@ of @PerasParams@.
-projectHFCPerasContext ::
+projectHFCPerasEpochContext ::
   All Top xs =>
   PerasEpochContext (HardForkBlock xs) ->
   NS PerasEpochContext xs
-projectHFCPerasContext PerasEpochContext{pecCommittee, pecParams} =
+projectHFCPerasEpochContext PerasEpochContext{pecCommittee, pecParams} =
   hmap
     ( \(WrapPerasVotingCommittee committee) ->
         PerasEpochContext
@@ -403,6 +400,27 @@ injectHFCPerasEpochContext nsContext =
         hcollapse
           . hmap (K . castPerasParams . pecParams)
           $ nsContext
+    }
+
+-- | Inject a 'NS' of 'BoundedPerasEpochContext' of the single era blocks into a
+-- 'BoundedPerasEpochContext' of the hard fork block.
+injectHFCBoundedPerasEpochContext ::
+  All Top xs =>
+  NS BoundedPerasEpochContext xs ->
+  BoundedPerasEpochContext (HardForkBlock xs)
+injectHFCBoundedPerasEpochContext nsBoundedContext =
+  BoundedPerasEpochContext
+    { startPerasRoundNo =
+        hcollapse
+          . hmap (K . startPerasRoundNo)
+          $ nsBoundedContext
+    , endPerasRoundNo =
+        hcollapse
+          . hmap (K . endPerasRoundNo)
+          $ nsBoundedContext
+    , epochContext =
+        injectHFCPerasEpochContext $
+          hmap epochContext nsBoundedContext
     }
 
 -- | Project a 'BoundedPerasEpochContext' of the hard fork block into a 'NS' of
@@ -434,133 +452,6 @@ projectHFCBoundedPerasEpochContext
       . getOneEraPerasVotingCommittee
       $ pecCommittee epochContext
 
--- | Inject a 'NS' of 'BoundedPerasEpochContext' of the single era blocks into a
--- 'BoundedPerasEpochContext' of the hard fork block.
-injectHFCBoundedPerasEpochContext ::
-  All Top xs =>
-  NS BoundedPerasEpochContext xs ->
-  BoundedPerasEpochContext (HardForkBlock xs)
-injectHFCBoundedPerasEpochContext nsBoundedContext =
-  BoundedPerasEpochContext
-    { startPerasRoundNo =
-        hcollapse
-          . hmap (K . startPerasRoundNo)
-          $ nsBoundedContext
-    , endPerasRoundNo =
-        hcollapse
-          . hmap (K . endPerasRoundNo)
-          $ nsBoundedContext
-    , epochContext =
-        injectHFCPerasEpochContext $
-          hmap epochContext nsBoundedContext
-    }
-
--- | Try to cast a 'PerasEpochContextResolver' of a 'HardForkBlock' into a
--- 'PerasEpochContextResolver' of the single era block represented by the given
--- index.
---
--- A 'PerasEpochContextResolver' is made of two maybe-like values, one for the
--- context of the current epoch, and one for the context of the past epoch. The
--- current epoch has to be in the current era, i.e. the era represented by the
--- given index; so the current context cast into the requested single era must
--- succeed for the whole operation to be succesful.
---
--- However, the past epoch may be in the past era under normal conditions. So
--- the cast of the previous epoch context into the era block represented by the
--- given index should be allowed to fail gracefully. So when it doesn't match
--- the requested index, the previous context is simply discarded and replaced
--- with a 'HF.NoPerasEnabled'.
---
--- Note that when the current context is 'HF.NoPerasEnabled', and the previous
--- one is 'HF.PerasEnabled cPrev' with 'cPrev' incompatible with the requested
--- era; the output of the cast is a:
--- 'PerasEpochContextResolver HF.NoPerasEnabled HF.NoPerasEnabled',
--- which is no functionally different from a:
--- 'PerasEpochContextResolverError', since it won't be able to resolve anything.
-castHFCPerasEpochContextResolverAtIndex ::
-  All Top xs =>
-  Index xs blk ->
-  PerasEpochContextResolver (HardForkBlock xs) ->
-  PerasEpochContextResolver blk
-castHFCPerasEpochContextResolverAtIndex idx = \case
-  PerasEpochContextResolverError err ->
-    PerasEpochContextResolverError err
-  PerasEpochContextResolver peCurrentBoundedContext pePrevBoundedContext ->
-    case (peCurrentBoundedContext, pePrevBoundedContext) of
-      (HF.PerasEnabled currentBoundedContext, HF.PerasEnabled prevBoundedContext) ->
-        case Match.matchNS (getIndex idx) (projectHFCBoundedPerasEpochContext currentBoundedContext) of
-          Left _mismatch ->
-            eraMismatchErrorResolver
-          Right nsIdxCurrPair ->
-            hcollapse $
-              hmap
-                ( \(Pair Refl currentBoundedContext') ->
-                    K
-                      $ PerasEpochContextResolver
-                        (HF.PerasEnabled currentBoundedContext')
-                      $ case Match.matchNS (getIndex idx) (projectHFCBoundedPerasEpochContext prevBoundedContext) of
-                        Left _mismatch ->
-                          -- The current context is from the right era, but the
-                          -- previous one is from a different one. Instead of
-                          -- erroring out, we just discard the previous context.
-                          HF.NoPerasEnabled
-                        Right nsIdxPrevPair ->
-                          hcollapse $
-                            hmap
-                              ( \(Pair Refl prevBoundedContext') ->
-                                  K $ HF.PerasEnabled prevBoundedContext'
-                              )
-                              nsIdxPrevPair
-                )
-                nsIdxCurrPair
-      (HF.PerasEnabled currentBoundedContext, HF.NoPerasEnabled) ->
-        case Match.matchNS (getIndex idx) (projectHFCBoundedPerasEpochContext currentBoundedContext) of
-          Left _mismatch ->
-            eraMismatchErrorResolver
-          Right nsIdxCurrPair ->
-            hcollapse $
-              hmap
-                ( \(Pair Refl currentBoundedContext') ->
-                    K $
-                      PerasEpochContextResolver
-                        (HF.PerasEnabled currentBoundedContext')
-                        HF.NoPerasEnabled
-                )
-                nsIdxCurrPair
-      (HF.NoPerasEnabled, HF.PerasEnabled prevBoundedContext) ->
-        case Match.matchNS (getIndex idx) (projectHFCBoundedPerasEpochContext prevBoundedContext) of
-          Left _mismatch ->
-            -- The current context is for an epoch/era where Peras is disabled,
-            -- and the previous context is from a different era than the
-            -- requested one, so we just return an empty resolver.
-            --
-            -- TODO: Should we error out instead?
-            -- It would probably give the same end result.
-            PerasEpochContextResolver
-              HF.NoPerasEnabled
-              HF.NoPerasEnabled
-          Right nsIdxPrevPair ->
-            hcollapse $
-              hmap
-                ( \(Pair Refl prevBoundedContext') ->
-                    K $
-                      PerasEpochContextResolver
-                        HF.NoPerasEnabled
-                        (HF.PerasEnabled prevBoundedContext')
-                )
-                nsIdxPrevPair
-      (HF.NoPerasEnabled, HF.NoPerasEnabled) ->
-        PerasEpochContextResolver
-          HF.NoPerasEnabled
-          HF.NoPerasEnabled
- where
-  eraMismatchErrorResolver =
-    PerasEpochContextResolverError $
-      unlines
-        [ "projectHFCPerasEpochContextResolver: currentBoundedContext"
-        , " is not in the same era as the supplied index"
-        ]
-
 -- | Inject a 'NS' of 'PerasEpochContextResolver' of the single era blocks into
 -- a 'PerasEpochContextResolver' of the hard fork block.
 injectHFCPerasEpochContextResolver ::
@@ -575,18 +466,10 @@ injectHFCPerasEpochContextResolver =
             PerasEpochContextResolverError err ->
               K $ PerasEpochContextResolverError err
             PerasEpochContextResolver currBoundedContext prevBoundedContext ->
-              let hfcCurrentBoundedContext =
-                    injectHFCBoundedPerasEpochContext
-                      . injectNS idx
-                      <$> currBoundedContext
-                  hfcPrevBoundedContext =
-                    injectHFCBoundedPerasEpochContext
-                      . injectNS idx
-                      <$> prevBoundedContext
-               in K $
-                    PerasEpochContextResolver
-                      hfcCurrentBoundedContext
-                      hfcPrevBoundedContext
+              K $
+                PerasEpochContextResolver
+                  (injectHFCBoundedPerasEpochContext . injectNS idx <$> currBoundedContext)
+                  (injectHFCBoundedPerasEpochContext . injectNS idx <$> prevBoundedContext)
       )
 
 injectHFCValidatedPerasVote ::
@@ -746,7 +629,7 @@ instance
         hzipWith
           Pair
           (getPerEraPerasPrivateKey privKey)
-          (projectHFCPerasContext context)
+          (projectHFCPerasEpochContext context)
      in
       case proofSingleEraBlockWithHashSizeOfHead @xs of
         Dict ->
@@ -768,7 +651,7 @@ instance
             $ nsPrivKeyContext
 
   verifyPerasVote context vote =
-    case Match.matchNS (projectHFCPerasContext context) (getOneEraPerasVote vote) of
+    case Match.matchNS (projectHFCPerasEpochContext context) (getOneEraPerasVote vote) of
       Left _mismatch ->
         Left HardForkPerasErrorEraMismatch
       Right nsContextVote ->
@@ -789,7 +672,7 @@ instance
       Nothing ->
         Left HardForkPerasErrorEraMismatch
       Just nsCollection ->
-        case Match.matchNS (projectHFCPerasContext context) nsCollection of
+        case Match.matchNS (projectHFCPerasEpochContext context) nsCollection of
           Left _mismatch ->
             Left HardForkPerasErrorEraMismatch
           Right nsContextCollection ->
@@ -806,7 +689,7 @@ instance
               $ nsContextCollection
 
   verifyPerasCert context cert =
-    case Match.matchNS (projectHFCPerasContext context) (getOneEraPerasCert cert) of
+    case Match.matchNS (projectHFCPerasEpochContext context) (getOneEraPerasCert cert) of
       Left _mismatch ->
         Left HardForkPerasErrorEraMismatch
       Right nsContextCert ->

@@ -378,8 +378,7 @@ instance Isomorphic PerasState where
   inject PerasState{..} =
     PerasState
       { perasEpochContextResolver =
-          injectHFCPerasEpochContextResolver
-            (toZ perasEpochContextResolver)
+          injectHFCPerasEpochContextResolver (toZ perasEpochContextResolver)
       , latestPerasCertOnChainRound =
           latestPerasCertOnChainRound
       }
