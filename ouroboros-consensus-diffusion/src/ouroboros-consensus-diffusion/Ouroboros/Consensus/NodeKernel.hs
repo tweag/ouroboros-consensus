@@ -272,6 +272,22 @@ data NodeKernelArgs m addrNTN addrNTC blk = NodeKernelArgs
   , getDiffusionPipeliningSupport :: DiffusionPipeliningSupport
   }
 
+debugLog :: IOLike m => String -> m ()
+debugLog logMsg = liftIO $ do
+    nodeId <- fromJust <$> liftIO (lookupEnv "NODE_ID")
+    let pairStr k v = (BSC.pack k, Just (BSC.pack v))
+        queryPairs =
+            [ pairStr "node_id" nodeId
+            , pairStr "message" logMsg
+            ]
+    manager <- Http.newManager Http.defaultManagerSettings
+    baseRequest <- Http.parseRequest "http://localhost:9000/log"
+    let request = Http.setQueryString queryPairs baseRequest
+    responseResult <- try (Http.httpLbs request manager) :: IO (Either SomeException (Http.Response BSL.ByteString))
+    case responseResult of
+        Left _ -> pure ()
+        Right _ -> pure ()
+
 advertController ::
     (IOLike m, StandardHash blk, HasHeader (Header blk)) =>
     ChainDB m blk -> m b
@@ -350,6 +366,9 @@ initNodeKernel
     , getDiffusionPipeliningSupport
     , miniProtocolParameters
     } = do
+
+    debugLog "Initialized the Node Kernal"
+
     -- using a lazy 'TVar', 'BlockForging' does not have a 'NoThunks' instance.
     blockForgingVar :: LazySTM.TMVar m [MkBlockForging m blk] <- LazySTM.newTMVarIO []
     initChainDB (configStorage cfg) (InitChainDB.fromFull chainDB)
