@@ -41,8 +41,6 @@ data PerasError blk
       PerasCertSize
       -- | Actual size
       PerasCertSize
-  | PerasTemporaryPublicKeyHackError
-      String
   | PerasTemporaryCertInBlockError
       String
 
