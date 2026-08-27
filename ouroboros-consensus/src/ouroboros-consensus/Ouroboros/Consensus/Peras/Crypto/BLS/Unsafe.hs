@@ -20,6 +20,7 @@ module Ouroboros.Consensus.Peras.Crypto.BLS.Unsafe
   , unsafePerasBLSPublicKeysFromEnv
   ) where
 
+import qualified Data.ByteString.Base16 as B16
 import Cardano.Ledger.State (IndividualPoolStake (..), PoolDistr (..))
 import Data.Aeson (eitherDecodeFileStrict')
 import Data.Map.Strict (Map)
@@ -39,20 +40,21 @@ unsafePerasBLSPrivateKeyFromEnv :: Either String PerasPrivateKey
 unsafePerasBLSPrivateKeyFromEnv =
   unsafePerformIO $
     lookupEnv envVar >>= \case
-      Nothing -> do
-        pure $ Left $ "Environment variable " <> envVar <> "not set."
-      Just rawKey -> do
-        pure $ decodeKey rawKey
+      Nothing -> pure $ Left $ "Environment variable " <> envVar <> "not set."
+      Just rawKey -> pure $ decodeKey rawKey
  where
   envVar =
     "PERAS_PRIVATE_KEY"
 
   decodeKey key =
-    case BLS.rawDeserialisePrivateKey keyScope (fromString key) of
-      Nothing ->
-        Left $ "Invalid private key format: " <> key
-      Just sk ->
-        Right $ PerasPrivateKey sk
+    case B16.decode (fromString key) of
+      Left msg -> Left $ "Invalid private key format: " <> msg 
+      Right keyBytes -> do
+        case BLS.rawDeserialisePrivateKey keyScope keyBytes of
+          Nothing -> do
+            Left $ "Invalid private key format: " <> key
+          Just sk -> do
+            Right $ PerasPrivateKey sk
 {-# NOINLINE unsafePerasBLSPrivateKeyFromEnv #-}
 
 -- | Extend a given 'PoolDistr' with the corresponding BLS public keys for each
