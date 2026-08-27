@@ -37,7 +37,7 @@ import Ouroboros.Consensus.Peras.Context
   , mkBoundedPerasEpochContextWith
   )
 import qualified Ouroboros.Consensus.Peras.Crypto.BLS as BLS
-import Ouroboros.Consensus.Peras.Crypto.BLS.Unsafe (unsafePerasBLSPrivateKeyFromEnv)
+import Ouroboros.Consensus.Peras.Crypto.BLS.Unsafe (experimentalPerasBLSPrivateKey)
 import qualified Ouroboros.Consensus.Peras.Error.V1 as V1
 import qualified Ouroboros.Consensus.Peras.Vote.V1 as V1
 import qualified Ouroboros.Consensus.Peras.Voting.V1 as V1
@@ -91,7 +91,8 @@ instance
         (Proxy @(ShelleyBlock proto DijkstraEra))
         (OpaquePerasCert byteArray)
 
-  readPerasPrivateKeyFromEnv _proxy = unsafePerasBLSPrivateKeyFromEnv
+  -- EXPERIMENTAL
+  readPerasPrivateKeyFromEnv _proxy = Right experimentalPerasBLSPrivateKey
 
 instance
   ( Typeable proto
@@ -138,4 +139,6 @@ instance
   ) =>
   StateSupportsPerasEpochContext (ShelleyBlock proto DijkstraEra)
   where
-  mkBoundedPerasEpochContext = mkBoundedPerasEpochContextWith V1.mkPerasVotingCommitteeInput
+  -- EXPERIMENTAL
+  mkBoundedPerasEpochContext =
+    mkBoundedPerasEpochContextWith V1.mkExperimentalPerasVotingCommitteeInput

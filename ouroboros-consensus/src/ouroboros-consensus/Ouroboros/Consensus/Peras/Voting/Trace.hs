@@ -19,6 +19,7 @@ import Ouroboros.Consensus.Storage.ChainDB (AddPerasCertChainSelOutcome, AddPera
 data TracePerasVoteForgingEvent blk
   = TracePerasVotingRuleEvent (PerasVotingRulesDecision blk)
   | TracePerasVotingNoVoteAfterFirstSlotInRound PerasRoundNo Word64 -- slot index
+  | TracePerasVotingAlreadyVoted PerasRoundNo PerasRoundNo Word64
   | TracePerasVotingNotAVoterInRound PerasRoundNo
   | TracePerasVotingForgedVote (WithArrivalTime (ValidatedPerasVote blk))
   | TracePerasVotingAddVoteResult (AddPerasVoteResult blk)

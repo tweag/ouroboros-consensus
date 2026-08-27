@@ -54,7 +54,7 @@ import Ouroboros.Consensus.Peras.Voting.View
   , PerasVotingView (..)
   , PerasVotingViewHandle (..)
   )
-import Ouroboros.Consensus.Util.IOLike (MonadSTM (..))
+import Ouroboros.Consensus.Util.IOLike (IOLike)
 import Ouroboros.Consensus.Util.Pred
   ( Evidence (..)
   , Explainable (..)
@@ -94,10 +94,10 @@ isPerasVotingAllowed pvv =
       EFalse{} -> NoVote e
 
 isPerasVotingAllowedWithHandle ::
-  (IsPerasCert (WithArrivalTime (ValidatedPerasCert blk)) blk, MonadSTM m) =>
+  (IsPerasCert (WithArrivalTime (ValidatedPerasCert blk)) blk, IOLike m) =>
   PerasVotingViewHandle m blk ->
   PerasRoundNo ->
-  STM m (PerasVotingRulesDecision blk)
+  m (PerasVotingRulesDecision blk)
 isPerasVotingAllowedWithHandle (PerasVotingViewHandle getPerasVotingView) =
   fmap isPerasVotingAllowed . getPerasVotingView
 

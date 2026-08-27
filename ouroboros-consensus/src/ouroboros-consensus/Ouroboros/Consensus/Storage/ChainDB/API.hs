@@ -479,7 +479,7 @@ data ChainDB m blk = ChainDB
   , getPerasVoteIds :: STM m (Set PerasVoteId)
   -- ^ Get the set of all Peras vote IDs currently in the database.
   , getPerasVotingViewHandle ::
-      PerasVotingViewHandle m blk
+      (String -> m ()) -> PerasVotingViewHandle m blk
   -- ^ Returns a handle to obtain a 'PerasVotingView' that is used to decide
   -- when to vote with respects to the voting rules.
   --

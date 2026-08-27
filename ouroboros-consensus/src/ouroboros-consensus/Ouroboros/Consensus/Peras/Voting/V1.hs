@@ -7,6 +7,7 @@
 
 module Ouroboros.Consensus.Peras.Voting.V1
   ( PerasVotingCommitteeScheme
+  , mkExperimentalPerasVotingCommitteeInput
   , mkPerasVotingCommitteeInput
   ) where
 
@@ -25,7 +26,8 @@ import Ouroboros.Consensus.Ledger.SupportsPeras
   )
 import Ouroboros.Consensus.Peras.Crypto.BLS (PerasBLSCrypto)
 import Ouroboros.Consensus.Peras.Crypto.BLS.Unsafe
-  ( unsafeExtendPerasStakeDistrWithPublicKeysFromEnv
+  ( experimentalExtendPerasStakeDistrWithPublicKey
+  , unsafeExtendPerasStakeDistrWithPublicKeysFromEnv
   )
 import qualified Ouroboros.Consensus.Peras.Error.V1 as V1
 import Ouroboros.Consensus.Protocol.Abstract
@@ -33,6 +35,32 @@ import Ouroboros.Consensus.Protocol.Abstract
   )
 
 type PerasVotingCommitteeScheme = WFALS
+
+mkExperimentalPerasVotingCommitteeInput ::
+  forall blk ledgerState chainDepState.
+  ( PerasCrypto blk ~ PerasBLSCrypto
+  , LedgerStateSupportsPeras ledgerState
+  , ChainDepStateSupportsPeras chainDepState
+  ) =>
+  ledgerState EmptyMK ->
+  chainDepState ->
+  Either (V1.PerasError blk) (VotingCommitteeInput (PerasCrypto blk) WFALS)
+mkExperimentalPerasVotingCommitteeInput ledgerState headerState = do
+  let epochNonce = getEpochNonce headerState
+      poolDistr = getPoolDistr ledgerState
+  stakeDistrWithPublicKeys <-
+    bimap V1.PerasTemporaryPublicKeyHackError id $
+      experimentalExtendPerasStakeDistrWithPublicKey poolDistr
+  extWFAStakeDistr <-
+    bimap V1.PerasVotingWFAError id $
+      mkExtWFAStakeDistr
+        (wFATiebreakerWithEpochNonce epochNonce)
+        stakeDistrWithPublicKeys
+  pure $
+    WFALSVotingCommitteeInput
+      epochNonce
+      (perasTargetCommitteeSize (getPerasParams (Proxy @blk) ledgerState))
+      extWFAStakeDistr
 
 mkPerasVotingCommitteeInput ::
   forall blk ledgerState chainDepState.

@@ -232,7 +232,7 @@ defaultPerasParams =
     , perasQuorumWeightThresholdSafetyMargin =
         PerasQuorumWeightThresholdSafetyMargin (2 / 100)
     , perasTargetCommitteeSize =
-        Committee.TargetCommitteeSize 800
+        Committee.TargetCommitteeSize 3
     }
 
 -- * Era-dependent default values

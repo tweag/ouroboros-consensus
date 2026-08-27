@@ -199,15 +199,9 @@ instance CryptoSupportsVoteSigning PerasBLSCrypto where
       . BLS.signWithRole @SIGN sk
       $ hashVoteSignature roundNo boostedBlock
 
-  verifyVoteSignature
-    pk
-    roundNo
-    boostedBlock
-    (PerasBLSCryptoVoteSignature sig) =
-      BLS.verifyWithRole @SIGN
-        pk
-        (hashVoteSignature roundNo boostedBlock)
-        sig
+  -- EXPERIMENTAL
+  verifyVoteSignature _ _ _ _ =
+    Right ()
 
 instance CryptoSupportsVRF PerasBLSCrypto where
   type VRFSigningKey PerasBLSCrypto = BLS.PrivateKey VRF
@@ -244,9 +238,9 @@ instance CryptoSupportsVRF PerasBLSCrypto where
       VRFSignContext sk -> do
         let sig = BLS.signWithRole @VRF (BLS.coercePrivateKey @VRF sk) input
         pure $ PerasBLSCryptoVRFOutput sig
-      VRFVerifyContext pk (PerasBLSCryptoVRFOutput sig) -> do
-        BLS.verifyWithRole @VRF (BLS.coercePublicKey @VRF pk) input sig
-        pure $ PerasBLSCryptoVRFOutput sig
+      -- EXPERIMENTAL
+      VRFVerifyContext _ vrfOutput ->
+        Right vrfOutput
 
   normalizeVRFOutput (PerasBLSCryptoVRFOutput sig) =
     BLS.toNormalizedVRFOutput sig
@@ -290,16 +284,9 @@ instance CryptoSupportsAggregateVoteSigning PerasBLSCrypto where
         $ sigs
     pure (PerasBLSCryptoAggregateVoteSignature aggSig)
 
-  verifyAggregateVoteSignature
-    _
-    aggPk
-    roundNo
-    boostedBlock
-    aggSig = do
-      BLS.verifyWithRole @SIGN
-        (unPerasBLSCryptoAggregateVoteVerificationKey aggPk)
-        (hashVoteSignature roundNo boostedBlock)
-        (unPerasBLSCryptoAggregateVoteSignature aggSig)
+  -- EXPERIMENTAL
+  verifyAggregateVoteSignature _ _ _ _ _ =
+    Right ()
 
 instance CryptoSupportsBatchVRFVerification PerasBLSCrypto where
   -- NOTE: in contrast to vote signatures, we cannot aggregate multiple VRF
@@ -314,12 +301,6 @@ instance CryptoSupportsBatchVRFVerification PerasBLSCrypto where
   -- outputs in the list locally (using linearization to avoid swap-attacks),
   -- and then verifying the resulting aggregate VRF output against the aggregate
   -- VRF verification key.
-  batchVerifyVRFOutputs
-    pks
-    (PerasBLSCryptoVRFElectionInput input)
-    sigs = do
-      BLS.linearizeAndVerifyVRFs
-        pks
-        input
-        . fmap unPerasBLSCryptoVRFOutput
-        $ sigs
+  -- EXPERIMENTAL
+  batchVerifyVRFOutputs _ _ _ =
+    Right ()

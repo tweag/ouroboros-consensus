@@ -15,12 +15,15 @@
 -- used under any circumstances in production. This will be replaced with proper
 -- on-chain key registration in the future.
 module Ouroboros.Consensus.Peras.Crypto.BLS.Unsafe
-  ( unsafePerasBLSPrivateKeyFromEnv
+  ( experimentalPerasBLSPrivateKey
+  , experimentalExtendPerasStakeDistrWithPublicKey
+  , unsafePerasBLSPrivateKeyFromEnv
   , unsafeExtendPerasStakeDistrWithPublicKeysFromEnv
   , unsafePerasBLSPublicKeysFromEnv
   ) where
 
 import Cardano.Ledger.State (IndividualPoolStake (..), PoolDistr (..))
+import qualified Data.ByteString as ByteString
 import Data.Aeson (eitherDecodeFileStrict')
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
@@ -33,6 +36,29 @@ import System.IO.Unsafe (unsafePerformIO)
 
 keyScope :: BLS.KeyScope
 keyScope = "TESTNET"
+
+experimentalPerasBLSPrivateKey :: PerasPrivateKey
+experimentalPerasBLSPrivateKey =
+  PerasPrivateKey $
+    case BLS.rawDeserialisePrivateKey keyScope (ByteString.pack [1 .. 32]) of
+      Nothing -> error "experimentalPerasBLSPrivateKey: invalid fixed key"
+      Just privateKey -> privateKey
+{-# NOINLINE experimentalPerasBLSPrivateKey #-}
+
+experimentalPerasBLSPublicKey :: PerasPublicKey
+experimentalPerasBLSPublicKey =
+  case experimentalPerasBLSPrivateKey of
+    PerasPrivateKey privateKey -> PerasPublicKey (BLS.derivePublicKey privateKey)
+{-# NOINLINE experimentalPerasBLSPublicKey #-}
+
+experimentalExtendPerasStakeDistrWithPublicKey ::
+  PoolDistr ->
+  Either String (Map PoolId (LedgerStake, PerasPublicKey))
+experimentalExtendPerasStakeDistrWithPublicKey =
+  Right
+    . Map.map (\stake -> (LedgerStake (individualPoolStake stake), experimentalPerasBLSPublicKey))
+    . Map.mapKeysMonotonic PoolId
+    . unPoolDistr
 
 -- | Read a private key from the environment variable 'PERAS_PRIVATE_KEY'
 unsafePerasBLSPrivateKeyFromEnv :: Either String PerasPrivateKey
