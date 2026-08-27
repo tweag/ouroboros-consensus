@@ -123,6 +123,14 @@ import qualified Ouroboros.Consensus.MiniProtocol.ChainSync.Client.HistoricityCh
 import qualified Ouroboros.Consensus.MiniProtocol.ChainSync.Client.InFutureCheck as InFutureCheck
 import qualified Ouroboros.Consensus.MiniProtocol.ChainSync.Client.Jumping as Jumping
 import Ouroboros.Consensus.MiniProtocol.ChainSync.Client.State
+  ( ChainSyncClientHandle (..)
+  , ChainSyncClientHandleCollection (..)
+  , ChainSyncJumpingState (Disengaged)
+  , ChainSyncState (..)
+  , DisengagedInitState (DisengagedDone)
+  , JumpInfo (..)
+  , newChainSyncClientHandleCollection
+  )
 import Ouroboros.Consensus.Node.GsmState (GsmState (..))
 import Ouroboros.Consensus.Node.NetworkProtocolVersion
 import Ouroboros.Consensus.Peras.Weight (emptyPerasWeightSnapshot)
