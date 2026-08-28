@@ -126,13 +126,13 @@ objectDiffusionOutbound tracer maxFifoLength idleTimeout ObjectPoolReader{..} _v
           }
 
   recvMsgRequestObjectIds ::
-    forall blocking.
+    forall kind.
     OutboundSt objectId object ticketNo ->
-    SingBlockingStyle blocking ->
+    ObjectIdsRequestKind kind ->
     NumObjectIdsAck ->
     NumObjectIdsReq ->
-    m (OutboundStObjectIds blocking 'StCanAwait objectId object m ())
-  recvMsgRequestObjectIds !st@OutboundSt{..} blocking numIdsToAck numIdsToReq = do
+    m (OutboundStObjectIds kind objectId object m ())
+  recvMsgRequestObjectIds !st@OutboundSt{..} requestKind numIdsToAck numIdsToReq = do
     traceWith tracer (TraceObjectDiffusionOutboundRecvMsgRequestObjectIds numIdsToReq)
 
     when (numIdsToAck > fromIntegral (Seq.length outstandingFifo)) $
@@ -155,9 +155,9 @@ objectDiffusionOutbound tracer maxFifoLength idleTimeout ObjectPoolReader{..} _v
 
     -- Grab info about any new objects after the last object ticketNo we've
     -- seen, up to the number that the peer has requested.
-    case blocking of
+    case requestKind of
       -----------------------------------------------------------------------
-      SingBlocking -> do
+      RequestObjectIdsBlocking -> do
         when (numIdsToReq == 0) $
           throwIO ProtocolErrorRequestedNothing
         unless (Seq.null outstandingFifo') $
@@ -166,7 +166,7 @@ objectDiffusionOutbound tracer maxFifoLength idleTimeout ObjectPoolReader{..} _v
         let sendNewContent ::
               forall phase.
               Map.Map ticketNo object ->
-              m (OutboundStObjectIds 'StBlocking phase objectId object m ())
+              m (OutboundStObjectIds ('StObjectIdsBlocking phase) objectId object m ())
             sendNewContent newContent = do
               let sortedNewContent = Map.toAscList newContent
                   !newIds = oprObjectId . snd <$> sortedNewContent
@@ -184,7 +184,7 @@ objectDiffusionOutbound tracer maxFifoLength idleTimeout ObjectPoolReader{..} _v
             -- repeatedly yields stale, garbage-collected actions cannot starve
             -- the timeout. Reuse the same timer when retrying such actions.
             waitForNewContentOrIdle ::
-              m (OutboundStObjectIds 'StBlocking 'StMustReply objectId object m ())
+              m (OutboundStObjectIds ('StObjectIdsBlocking 'StMustReply) objectId object m ())
             waitForNewContentOrIdle = do
               idleVar <- registerDelay idleTimeout
               let getNewContentOrIdle = do
@@ -215,7 +215,7 @@ objectDiffusionOutbound tracer maxFifoLength idleTimeout ObjectPoolReader{..} _v
                 Just newContent -> sendNewContent newContent
 
             sendAwaitReply ::
-              m (OutboundStObjectIds 'StBlocking 'StCanAwait objectId object m ())
+              m (OutboundStObjectIds ('StObjectIdsBlocking 'StCanAwait) objectId object m ())
             sendAwaitReply = do
               traceWith tracer TraceObjectDiffusionOutboundSendMsgAwaitReply
               pure $ SendMsgAwaitReply waitForNewContentOrIdle
@@ -237,7 +237,7 @@ objectDiffusionOutbound tracer maxFifoLength idleTimeout ObjectPoolReader{..} _v
               else sendNewContent newContent
 
       -----------------------------------------------------------------------
-      SingNonBlocking -> do
+      RequestObjectIdsNonBlocking -> do
         when (numIdsToReq == 0 && numIdsToAck == 0) $
           throwIO ProtocolErrorRequestedNothing
         when (Seq.null outstandingFifo') $
