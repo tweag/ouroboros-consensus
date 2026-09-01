@@ -213,16 +213,16 @@ defaultPerasParams =
   PerasParams
     { -- ceil(T_heal + T_cq) / perasRoundLength) as per the design document
       perasIgnoranceRounds =
-        PerasIgnoranceRounds 487
+        PerasIgnoranceRounds 40
     , -- ceil(T_heal + T_cq + T_cp) / perasRoundLength) + 1 as per the design document
       perasCooldownRounds =
-        PerasCooldownRounds 1928
+        PerasCooldownRounds 100
     , -- must be between 30 and 900 as per the design document
       perasBlockMinSlots =
         PerasBlockMinSlots 90
     , -- equal to perasIgnoranceRounds as per the design document
       perasCertMaxRounds =
-        PerasCertMaxRounds 487
+        PerasCertMaxRounds 40
     , perasCertArrivalThreshold =
         PerasCertArrivalThreshold 30
     , perasWeight =

@@ -18,6 +18,7 @@
 -- do not denote ignored variables.
 module Ouroboros.Consensus.Peras.Voting.Rules
   ( isPerasVotingAllowed
+  , alwaysPerasVotingAllowedWithHandle
   , isPerasVotingAllowedWithHandle
   , PerasVotingRule (..)
   , PerasVotingRulesDecision (..)
@@ -93,6 +94,12 @@ isPerasVotingAllowed pvv =
       ETrue{} -> Vote e (candidateBlock pvv)
       EFalse{} -> NoVote e
 
+alwaysPerasVotingAllowed ::
+  PerasVotingView cert blk ->
+  PerasVotingRulesDecision blk
+alwaysPerasVotingAllowed pvv =
+  Vote (ETrue (Bool True)) (candidateBlock pvv)
+
 isPerasVotingAllowedWithHandle ::
   (IsPerasCert (WithArrivalTime (ValidatedPerasCert blk)) blk, MonadSTM m) =>
   PerasVotingViewHandle m blk ->
@@ -100,6 +107,14 @@ isPerasVotingAllowedWithHandle ::
   STM m (PerasVotingRulesDecision blk)
 isPerasVotingAllowedWithHandle (PerasVotingViewHandle getPerasVotingView) =
   fmap isPerasVotingAllowed . getPerasVotingView
+
+alwaysPerasVotingAllowedWithHandle ::
+  (MonadSTM m) =>
+  PerasVotingViewHandle m blk ->
+  PerasRoundNo ->
+  STM m (PerasVotingRulesDecision blk)
+alwaysPerasVotingAllowedWithHandle (PerasVotingViewHandle getPerasVotingView) =
+  fmap alwaysPerasVotingAllowed . getPerasVotingView
 
 -- | Voting rules
 --

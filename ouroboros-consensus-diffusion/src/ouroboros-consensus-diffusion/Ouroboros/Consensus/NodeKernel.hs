@@ -105,13 +105,16 @@ import Ouroboros.Consensus.Peras.Cert.Inclusion
   )
 import Ouroboros.Consensus.Peras.Cert.Opaque (toOpaquePerasCert)
 import Ouroboros.Consensus.Peras.Context
-  ( forgePerasVoteIfEligibleWithHandle
+  ( BoundedPerasEpochContext (..)
+  , forgePerasVoteIfEligibleWithHandle
   , runQueryWithContextHandle
   , PerasEpochContextNotFoundForRound (..)
+  , PerasEpochContextResolver (..)
   )
 import Ouroboros.Consensus.Peras.Voting.Rules
   ( PerasVotingRulesDecision (..)
   , isPerasVotingAllowedWithHandle
+  , alwaysPerasVotingAllowedWithHandle
   )
 import Ouroboros.Consensus.Peras.Voting.Trace (TracePerasVoteForgingEvent (..))
 import Ouroboros.Consensus.Protocol.Abstract
@@ -279,21 +282,8 @@ data NodeKernelArgs m addrNTN addrNTC blk = NodeKernelArgs
   , getDiffusionPipeliningSupport :: DiffusionPipeliningSupport
   }
 
-debugLog :: IOLike m => String -> m ()
-debugLog logMsg = liftIO $ do
-    nodeId <- fromJust <$> liftIO (lookupEnv "NODE_ID")
-    let pairStr k v = (BSC.pack k, Just (BSC.pack v))
-        queryPairs =
-            [ pairStr "node_id" nodeId
-            , pairStr "message" logMsg
-            ]
-    manager <- Http.newManager Http.defaultManagerSettings
-    baseRequest <- Http.parseRequest "http://localhost:9000/log"
-    let request = Http.setQueryString queryPairs baseRequest
-    responseResult <- try (Http.httpLbs request manager) :: IO (Either SomeException (Http.Response BSL.ByteString))
-    case responseResult of
-        Left _ -> pure ()
-        Right _ -> pure ()
+debugLog :: Monad m => Tracer m SomeException -> String -> m ()
+debugLog tracer = traceWith tracer . toException . StringException
 
 advertController ::
     (IOLike m, StandardHash blk, HasHeader (Header blk)) =>
@@ -337,7 +327,7 @@ advertController chainDB = forever $ do
 
     sendAdvert queryPairs = do
         manager <- Http.newManager Http.defaultManagerSettings
-        baseRequest <- Http.parseRequest "http://localhost:9000/advert"
+        baseRequest <- Http.parseRequest "http://localhost:9001/advert"
         let request = Http.setQueryString queryPairs baseRequest
         responseResult <- try (Http.httpLbs request manager) :: IO (Either SomeException (Http.Response BSL.ByteString))
         case responseResult of
@@ -374,7 +364,7 @@ initNodeKernel
     , miniProtocolParameters
     } = do
 
-    debugLog "Initialized the Node Kernal"
+    debugLog (consensusErrorTracer tracers) "Initialized the Node Kernal"
 
     -- using a lazy 'TVar', 'BlockForging' does not have a 'NoThunks' instance.
     blockForgingVar :: LazySTM.TMVar m [MkBlockForging m blk] <- LazySTM.newTMVarIO []
@@ -515,7 +505,6 @@ initNodeKernel
       forkLinkedWatcher registry "NodeKernel.perasVoteForging" $ do
         knownSlotWatcher btime $ \currentSlot -> do
           whenPerasEnabled currentSlot $ \roundInfo -> do
-            debugLog "vote foraging thread: peras enabled"
             withEarlyExit_ $ perasVoteForgingController systemTime st roundInfo
 
     return
@@ -576,13 +565,55 @@ initNodeKernel
         go blockForging'
 
 
-prettyExtendedLedgerState
+-- | Pretty-print an 'ExtLedgerState', only displaying:
+--
+-- 1. the 'headerStateTip' of the 'HeaderState', and
+-- 2. the 'PerasEpochContextResolver' without the 'pecCommittee'.
+prettyExtendedLedgerState ::
+  forall blk mk.
+  ExtLedgerState blk mk ->
+  [String]
+prettyExtendedLedgerState els =
+    [ prettyHeaderState (headerStateTip (headerState els))
+    , show ("perasEpochContextResolver", prettyResolver (perasEpochContextResolver els))]
 
+ where
+  prettyHeaderState x =
+    case x of
+     Origin -> show ("headerStateTip", "Origin")
+     At x1 -> show ("headerStateTip", (annTipSlotNo x1, annTipBlockNo x1))
+
+  prettyResolver :: PerasEpochContextResolver blk -> String
+  prettyResolver = \case
+    PerasEpochContextResolverError err ->
+      "PerasEpochContextResolverError " <> show err
+    PerasEpochContextResolver curr prev ->
+      "PerasEpochContextResolver"
+        <> " (current: "
+        <> show (prettyBounded <$> curr)
+        <> ") (previous: "
+        <> show (prettyBounded <$> prev)
+        <> ")"
+
+  -- Display everything of a 'BoundedPerasEpochContext' except the
+  -- 'pecCommittee' of its 'PerasEpochContext'.
+  prettyBounded bctx =
+    ( startPerasRoundNo bctx
+    , endPerasRoundNo bctx
+    -- , pecParams (epochContext bctx)
+    )
+
+_FIRST_VOTE_ROUND :: PerasRoundNo
+_FIRST_VOTE_ROUND = PerasRoundNo 3
+
+newtype StringException = StringException String deriving (Show)
+
+instance Exception StringException where
+  displayException (StringException s) = s
 
 perasVoteForgingController ::
   forall m remotePeer localPeer blk.
   ( IOLike m
-  , BlockSupportsProtocol blk
   , HasAnnTip blk
   , BlockSupportsPeras blk
   ) =>
@@ -591,19 +622,18 @@ perasVoteForgingController ::
   (PerasRoundNo, Word64) ->
   WithEarlyExit m ()
 perasVoteForgingController systemTime IS{chainDB, tracers} roundInfo = do
+  when (fst roundInfo < _FIRST_VOTE_ROUND) $ exitEarly
+
   when (snd roundInfo > 12) $ exitEarly
 
   els <- lift $ atomically (ChainDB.getCurrentLedger chainDB)
-  lift $ debugLog $ "STATE: " ++
-       show
-           ( roundInfo
-           , headerStateTip (headerState els)
-           , startPerasRoundNo (perasEpochContextResolver els)
-           , endPerasRoundNo (perasEpochContextResolver els)
-           , latestPerasCertOnChainRound els
-           )
+  lift $ traceWith (consensusErrorTracer tracers) $ toException $ StringException $
+       unlines $
+          [ show ("roundInfo", roundInfo)
+          , show ("latestPerasCertOnChainRound", latestPerasCertOnChainRound els)
+          ] ++ prettyExtendedLedgerState els
 
-  () <- exitEarly
+  -- () <- exitEarly
   -- Get crypto data from environment variables
   -- TODO: move the code outside of the vote forging controller once
   -- they are properly obtained from the ledger/context.
@@ -613,21 +643,18 @@ perasVoteForgingController systemTime IS{chainDB, tracers} roundInfo = do
       exitEarly
     Right poolId -> pure poolId
 
-  lift $ debugLog $ "vote foraging thread: pool id: " ++ show poolId
-
   privateKey <- case readPerasPrivateKeyFromEnv (Proxy @blk) of
     Left err -> do
       trace $ TracePerasVotingCantReadEnv err
       exitEarly
     Right privateKey -> pure privateKey
 
-  lift $ debugLog $ "vote foraging thread: privateKey"
-
   -- We run all 3 STM computations in a WriterT monad so that we can have proper logging,
   -- while keeping everything in the same transaction. We also use MaybeT because there is
   -- a natural abort/continue logic within the transaction. Unfortunately, we can't leverage
   -- the outer WithEarlyExit monad, because we _always_ want to get the trace.
-  let handleErr err@(PerasEpochContextNotFoundForRound _ _) = debugLog (show err) >> pure (Nothing, [])
+  let handleErr err@(PerasEpochContextNotFoundForRound _ _) =
+        debugLog (consensusErrorTracer tracers) (show err) >> pure (Nothing, [])
   (mVote, traceEvents :: [TracePerasVoteForgingEvent blk]) <- lift $ handle handleErr $ atomically $ runWriterT $ runMaybeT $ do
     let (roundNo@(PerasRoundNo prnInt), slotInRound) = roundInfo
 
@@ -637,6 +664,13 @@ perasVoteForgingController systemTime IS{chainDB, tracers} roundInfo = do
 
     -- Do the voting rules state that we should vote?
     votingDecision <-
+     if _FIRST_VOTE_ROUND == roundNo
+     then
+      dyel $
+        alwaysPerasVotingAllowedWithHandle
+          (ChainDB.getPerasVotingViewHandle chainDB)
+          roundNo
+     else
       dyel $
         isPerasVotingAllowedWithHandle
           (ChainDB.getPerasVotingViewHandle chainDB)
@@ -658,19 +692,22 @@ perasVoteForgingController systemTime IS{chainDB, tracers} roundInfo = do
     when (isNothing mVote) $ tell $ [TracePerasVotingNotAVoterInRound roundNo]
     hoistMaybe mVote
 
+  lift $ debugLog (consensusErrorTracer tracers) $ show ("mVote", mVote)
+  lift $ debugLog (consensusErrorTracer tracers) $ show ("events", traceEvents)
+
   traverse_ trace traceEvents
   vote <- maybe exitEarly pure mVote
   tickedVote <- lift $ addArrivalTime systemTime vote
   trace $ TracePerasVotingForgedVote tickedVote
 
-  lift $ debugLog $ "vote foraging thread: vote: " ++ show vote
-  lift $ debugLog $ "vote foraging thread: tickedVote: " ++ show tickedVote
+  -- lift $ debugLog (consensusErrorTracer tracers) $ "vote foraging thread: vote: " ++ show vote
+  -- lift $ debugLog (consensusErrorTracer tracers) $ "vote foraging thread: tickedVote: " ++ show tickedVote
 
   -- Add vote and potential cert to the DB
   (addVoteResult, mAddCertChainSelOutcome) <- lift $ ChainDB.addPerasVoteSync chainDB tickedVote
 
-  lift $ debugLog $ "vote foraging thread: addVoteResult: " ++ show addVoteResult
-  lift $ debugLog $ "vote foraging thread: mAddCertChainSelOutcome: " ++ show mAddCertChainSelOutcome
+  lift $ debugLog (consensusErrorTracer tracers) $ show ("addVoteResult", addVoteResult)
+  lift $ debugLog (consensusErrorTracer tracers) $ show ("mAddCertChainSelOutcome", mAddCertChainSelOutcome)
 
   trace $ TracePerasVotingAddVoteResult addVoteResult
   traverse_ (trace . TracePerasVotingAddCertChainSelOutcome) mAddCertChainSelOutcome
