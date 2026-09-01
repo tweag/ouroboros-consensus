@@ -239,7 +239,7 @@ defaultPerasParams =
 
 -- | Default value for 'PerasRoundLength' in the Dijkstra eras.
 dijkstraPerasRoundLength :: PerasEnabled PerasRoundLength
-dijkstraPerasRoundLength = PerasEnabled (PerasRoundLength 90)
+dijkstraPerasRoundLength = PerasEnabled (PerasRoundLength 40)
 
 -- * 'PerasEnabled' wrapper
 

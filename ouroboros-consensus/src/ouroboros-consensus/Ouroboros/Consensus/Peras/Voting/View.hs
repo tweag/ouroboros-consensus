@@ -67,7 +67,7 @@ import Ouroboros.Consensus.Storage.PerasCertDB.API
   ( WithBoostedBlockStatus (..)
   , forgetBoostedBlockStatus
   )
--- import Ouroboros.Consensus.Util.IOLike (MonadSTM (..))
+import Ouroboros.Consensus.Util.IOLike (MonadSTM (..))
 import Ouroboros.Network.AnchoredFragment (AnchoredFragment)
 import qualified Ouroboros.Network.AnchoredFragment as AF
 
@@ -305,5 +305,5 @@ mkPerasVotingView
 newtype PerasVotingViewHandle m blk
   = PerasVotingViewHandle
       ( PerasRoundNo ->
-        m (PerasVotingView (WithArrivalTime (ValidatedPerasCert blk)) blk)
+        STM m (PerasVotingView (WithArrivalTime (ValidatedPerasCert blk)) blk)
       )

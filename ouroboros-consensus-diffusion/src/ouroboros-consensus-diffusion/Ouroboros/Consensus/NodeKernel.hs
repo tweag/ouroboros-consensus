@@ -107,6 +107,7 @@ import Ouroboros.Consensus.Peras.Cert.Opaque (toOpaquePerasCert)
 import Ouroboros.Consensus.Peras.Context
   ( forgePerasVoteIfEligibleWithHandle
   , runQueryWithContextHandle
+  , PerasEpochContextNotFoundForRound (..)
   )
 import Ouroboros.Consensus.Peras.Voting.Rules
   ( PerasVotingRulesDecision (..)
@@ -574,9 +575,15 @@ initNodeKernel
         blockForging' <- traverse (forkBlockForging st) blockForging
         go blockForging'
 
+
+prettyExtendedLedgerState
+
+
 perasVoteForgingController ::
   forall m remotePeer localPeer blk.
   ( IOLike m
+  , BlockSupportsProtocol blk
+  , HasAnnTip blk
   , BlockSupportsPeras blk
   ) =>
   SystemTime m ->
@@ -584,6 +591,19 @@ perasVoteForgingController ::
   (PerasRoundNo, Word64) ->
   WithEarlyExit m ()
 perasVoteForgingController systemTime IS{chainDB, tracers} roundInfo = do
+  when (snd roundInfo > 12) $ exitEarly
+
+  els <- lift $ atomically (ChainDB.getCurrentLedger chainDB)
+  lift $ debugLog $ "STATE: " ++
+       show
+           ( roundInfo
+           , headerStateTip (headerState els)
+           , startPerasRoundNo (perasEpochContextResolver els)
+           , endPerasRoundNo (perasEpochContextResolver els)
+           , latestPerasCertOnChainRound els
+           )
+
+  () <- exitEarly
   -- Get crypto data from environment variables
   -- TODO: move the code outside of the vote forging controller once
   -- they are properly obtained from the ledger/context.
@@ -603,75 +623,42 @@ perasVoteForgingController systemTime IS{chainDB, tracers} roundInfo = do
 
   lift $ debugLog $ "vote foraging thread: privateKey"
 
-  lift $ debugLog $ "Hello, world!"
-
-  let (roundNo, slotInRound) = roundInfo
-
-  lift $ debugLog $ "vote foraging thread: " ++ show (roundNo, slotInRound)
-
   -- We run all 3 STM computations in a WriterT monad so that we can have proper logging,
   -- while keeping everything in the same transaction. We also use MaybeT because there is
   -- a natural abort/continue logic within the transaction. Unfortunately, we can't leverage
   -- the outer WithEarlyExit monad, because we _always_ want to get the trace.
+  let handleErr err@(PerasEpochContextNotFoundForRound _ _) = debugLog (show err) >> pure (Nothing, [])
+  (mVote, traceEvents :: [TracePerasVoteForgingEvent blk]) <- lift $ handle handleErr $ atomically $ runWriterT $ runMaybeT $ do
+    let (roundNo@(PerasRoundNo prnInt), slotInRound) = roundInfo
 
-
-
-
-  -- (mVote, traceEvents :: [TracePerasVoteForgingEvent blk]) <- lift $ atomically $ runWriterT $ runMaybeT $ do
-  mVote <- do
-
-{-
-    -- TODO: We want to check for a range instead of the first slot and vote if
-    -- we've not voted yet. Ensure voting rules. perasRoundLength / 5
-    --
-    when (slotInRound /= 0) $ do
+    when (prnInt < 2) $ do
       tell [TracePerasVotingNoVoteAfterFirstSlotInRound roundNo slotInRound]
       hoistMaybe Nothing
--}
 
     -- Do the voting rules state that we should vote?
-
-    -- tell [TracePerasVotingNotAVoterInRound (PerasRoundNo 1234)]
-    lift $ debugLog $ "vote foraging thread: 1234"
-    -- _ <- hoistMaybe Nothing
-
     votingDecision <-
-      lift $
+      dyel $
         isPerasVotingAllowedWithHandle
-          ((ChainDB.getPerasVotingViewHandle chainDB) debugLog)
+          (ChainDB.getPerasVotingViewHandle chainDB)
           roundNo
-    -- tell [TracePerasVotingRuleEvent votingDecision]
-    lift $ debugLog $ "vote foraging thread voting des: " ++ show votingDecision
-
+    tell [TracePerasVotingRuleEvent votingDecision]
     candidateBlock <- case votingDecision of
-      NoVote _ -> exitEarly
+      NoVote _ -> hoistMaybe Nothing
       Vote _ block -> pure block
 
     -- Forge the vote, if allowed
     mVote <-
-      lift $ atomically $
+      dyel $
         forgePerasVoteIfEligibleWithHandle
           (ChainDB.getPerasEpochContextResolverHandle chainDB)
           poolId
           privateKey
           roundNo
           candidateBlock
+    when (isNothing mVote) $ tell $ [TracePerasVotingNotAVoterInRound roundNo]
+    hoistMaybe mVote
 
-    -- when (isNothing mVote) $ tell $ [TracePerasVotingNotAVoterInRound roundNo]
-    lift $ debugLog $ "vote foraging thread round no: " ++ show roundNo
-
-    pure mVote
-
-    -- hoistMaybe mVote
-{-
-    tell [TracePerasVotingNotAVoterInRound (PerasRoundNo 123)]
-    hoistMaybe Nothing
--}
-
-  -- lift $ debugLog $ "vote foraging thread: events: " ++ show traceEvents
-  lift $ debugLog $ "vote foraging thread: mVote: " ++ show mVote
-
-  -- traverse_ trace traceEvents
+  traverse_ trace traceEvents
   vote <- maybe exitEarly pure mVote
   tickedVote <- lift $ addArrivalTime systemTime vote
   trace $ TracePerasVotingForgedVote tickedVote
@@ -692,7 +679,7 @@ perasVoteForgingController systemTime IS{chainDB, tracers} roundInfo = do
   trace = lift . traceWith (perasVoteForgingTracer tracers)
 
   -- Do you even lift, bro?
-  -- dyel = lift . lift
+  dyel = lift . lift
 
 castTraceFetchDecision ::
   forall remotePeer blk.

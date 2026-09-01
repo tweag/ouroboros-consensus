@@ -328,14 +328,12 @@ openDBInternal args launchBgTasks = runWithTempRegistry $ do
             , addPerasVoteWithAsyncCertHandling = getEnv1 h ChainSel.addPerasVoteWithAsyncCertHandling
             , getPerasVotesAfter = getEnvSTM1 h Query.getPerasVotesAfter
             , getPerasVoteIds = getEnvSTM h Query.getPerasVoteIds
-            , getPerasVotingViewHandle = \debugLog ->
-                PerasVotingViewHandle $ \roundNo -> do
-                    chainDbEnv <- atomically $ getEnvSTM h pure
+            , getPerasVotingViewHandle =
+                PerasVotingViewHandle $ \roundNo ->
+                  getEnvSTM h $
                     Query.getPerasVotingView
-                      debugLog
                       (topLevelConfigLedger (Args.cdbsTopLevelConfig cdbSpecificArgs))
                       roundNo
-                      chainDbEnv
             , getPerasCertInclusionViewHandle =
                 PerasCertInclusionViewHandle $ \roundNo ->
                   getEnvSTM h $

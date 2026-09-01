@@ -121,7 +121,6 @@ import Ouroboros.Network.BlockFetch.ConsensusInterface
   )
 import Ouroboros.Network.Protocol.LocalStateQuery.Type
 
-
 -- | Return the last @k@ headers.
 --
 -- While the in-memory fragment ('cdbChain') might temporarily have more weight
@@ -402,6 +401,11 @@ getPerasEpochContextResolver ::
 getPerasEpochContextResolver =
   fmap perasEpochContextResolver . getCurrentLedger
 
+newtype StringException = StringException String deriving (Show)
+
+instance Exception StringException where
+  displayException (StringException s) = s
+
 getPerasVotingView ::
   ( StateSupportsPerasEpochContext blk
   , IOLike m
@@ -409,32 +413,24 @@ getPerasVotingView ::
   , GetHeader blk
   , BlockSupportsPeras blk
   ) =>
-  (String -> m ()) ->
   LedgerConfig blk ->
   PerasRoundNo ->
   ChainDbEnv m blk ->
-  m (PerasVotingView (WithArrivalTime (ValidatedPerasCert blk)) blk)
-getPerasVotingView debugLog ledgerConfig roundNo env = do
-  debugLog "getPerasVotingView: begin"
-  resolver <- atomically $ getPerasEpochContextResolver env
-  debugLog "getPerasVotingView: with resolver"
+  STM m (PerasVotingView (WithArrivalTime (ValidatedPerasCert blk)) blk)
+getPerasVotingView ledgerConfig roundNo env = do
+  resolver <- getPerasEpochContextResolver env
+  -- () <- throwSTM $ StringException $ "Resolver: " ++ show resolver
   perasParams <- case resolveRoundNo resolver roundNo of
-    Left err -> do
-      debugLog $ "getPerasVotingView: resolveRoundNo resolver roundNo failed" ++ show err
-      atomically $ throwSTM err
+    Left err -> throwSTM err
     Right perasContext -> pure $ pecParams perasContext
-  debugLog "getPerasVotingView: peras context"
   latestCertSeen <-
     withOriginFromMaybe
-      <$> atomically (getLatestPerasCertSeen env)
-  debugLog "getPerasVotingView: latestCertSeen"
+      <$> getLatestPerasCertSeen env
   latestCertOnChainRoundNo <-
     withOriginFromMaybe
-      <$> atomically (getLatestPerasCertOnChainRound env)
-  debugLog "getPerasVotingView: latestCertOnChainRoundNo"
+      <$> getLatestPerasCertOnChainRound env
   let blockMinSlots = perasBlockMinSlots perasParams
-  currentChain <- atomically $ getCurrentChain env
-  debugLog "getPerasVotingView: with currentChain"
+  currentChain <- getCurrentChain env
   let qry =
         perasChainAtCandidateBlock blockMinSlots roundNo currentChain >>= \chainAtCandidateBlock ->
           mkPerasVotingView
@@ -443,15 +439,10 @@ getPerasVotingView debugLog ledgerConfig roundNo env = do
             latestCertSeen
             latestCertOnChainRoundNo
             chainAtCandidateBlock
-  summary <- hardForkSummary ledgerConfig . ledgerState <$> atomically (getCurrentLedger env)
-  debugLog "getPerasVotingView: with summary"
+  summary <- hardForkSummary ledgerConfig . ledgerState <$> getCurrentLedger env
   case runPerasQry summary qry of
-    Left err -> do
-      debugLog "getPerasVotingView: runPerasQry summary qry failed"
-      atomically (throwSTM err)
-    Right view -> do
-      debugLog "getPerasVotingView: runPerasQry summary qry passed"
-      pure view
+    Left err -> throwSTM err
+    Right view -> pure view
 
 getPerasCertInclusionView ::
   ( IOLike m
