@@ -83,7 +83,8 @@ import Ouroboros.Consensus.MiniProtocol.ChainSync.Client.InFutureCheck
   ( SomeHeaderInFutureCheck
   )
 import Ouroboros.Consensus.MiniProtocol.ObjectDiffusion.Inbound.State
-  ( newObjectDiffusionInboundHandleCollection, ObjectDiffusionInboundHandleCollection
+  ( ObjectDiffusionInboundHandleCollection
+  , newObjectDiffusionInboundHandleCollection
   )
 import Ouroboros.Consensus.MiniProtocol.ObjectDiffusion.PerasCert
   ( PerasCertDiffusionInboundHandleCollection

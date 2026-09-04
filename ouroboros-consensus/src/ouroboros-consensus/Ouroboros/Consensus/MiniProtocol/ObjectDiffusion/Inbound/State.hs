@@ -2,9 +2,9 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE UndecidableInstances #-}
-{-# LANGUAGE ScopedTypeVariables #-}
 
 module Ouroboros.Consensus.MiniProtocol.ObjectDiffusion.Inbound.State
   ( ObjectDiffusionInboundState (..)
@@ -20,16 +20,18 @@ import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import GHC.Generics (Generic)
 import Ouroboros.Consensus.Block (BlockSupportsProtocol, HasHeader, Header)
+import Ouroboros.Consensus.MiniProtocol.Util.Idling (Idling (Idling, idlingStart, idlingStop))
 import Ouroboros.Consensus.Util.IOLike
   ( IOLike
   , MonadSTM (STM, atomically)
+  , MonadThrow (bracket_)
   , NoThunks
   , StrictTVar
   , modifyTVar
   , newTVar
-  , readTVar, newTVarIO, MonadThrow (bracket_)
+  , newTVarIO
+  , readTVar
   )
-import Ouroboros.Consensus.MiniProtocol.Util.Idling (Idling (Idling, idlingStart, idlingStop))
 
 -- | An ObjectDiffusion inbound client state that's used by other components.
 --
@@ -107,18 +109,20 @@ bracketObjectDiffusionInbound ::
   m a
 bracketObjectDiffusionInbound handles peer body = do
   odiState <- newTVarIO initObjectDiffusionInboundState
-  bracket_ (acquireContext odiState) releaseContext $ body $
-      ObjectDiffusionInboundStateView
-        { odisvIdling =
-            Idling
-              { idlingStart = atomically $ modifyTVar odiState $ \s -> s{odisIdling = True}
-              , idlingStop = atomically $ modifyTVar odiState $ \s -> s{odisIdling = False}
-              }
-        }
+  bracket_ (acquireContext odiState) releaseContext
+    . body
+    $ ObjectDiffusionInboundStateView
+      { odisvIdling =
+          Idling
+            { idlingStart = atomically $ modifyTVar odiState $ \s -> s{odisIdling = True}
+            , idlingStop = atomically $ modifyTVar odiState $ \s -> s{odisIdling = False}
+            }
+      }
  where
-  acquireContext odiState = atomically $
-    odihcAddHandle handles peer $
-      ObjectDiffusionInboundHandle
+  acquireContext odiState =
+    atomically
+      . odihcAddHandle handles peer
+      $ ObjectDiffusionInboundHandle
         { odihState = odiState
         }
 

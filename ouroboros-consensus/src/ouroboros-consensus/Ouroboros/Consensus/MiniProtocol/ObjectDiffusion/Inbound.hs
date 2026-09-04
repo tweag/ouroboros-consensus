@@ -40,13 +40,15 @@ import Data.Word (Word64)
 import GHC.Generics (Generic)
 import Network.TypedProtocol.Core (N (Z), Nat (..), natToInt)
 import NoThunks.Class (NoThunks (..))
+import Ouroboros.Consensus.MiniProtocol.ObjectDiffusion.Inbound.State
+  ( ObjectDiffusionInboundStateView (odisvIdling)
+  )
 import Ouroboros.Consensus.MiniProtocol.ObjectDiffusion.ObjectPool.API
+import Ouroboros.Consensus.MiniProtocol.Util.Idling qualified as Idling
 import Ouroboros.Consensus.Util.NormalForm.Invariant (noThunksInvariant)
 import Ouroboros.Network.ControlMessage
 import Ouroboros.Network.Protocol.ObjectDiffusion.Inbound
 import Ouroboros.Network.Protocol.ObjectDiffusion.Type
-import qualified Ouroboros.Consensus.MiniProtocol.Util.Idling as Idling
-import Ouroboros.Consensus.MiniProtocol.ObjectDiffusion.Inbound.State (ObjectDiffusionInboundStateView(odisvIdling))
 
 -- Note: This module is inspired from TxSubmission inbound side.
 
@@ -454,11 +456,10 @@ objectDiffusionInbound
             $ SendMsgRequestObjectIdsBlocking
               (numToAckOnNextReq st)
               numIdsToRequest
-              (do
-                traceWith tracer TraceObjectDiffusionInboundAwaitReply
-                Idling.idlingStart (odisvIdling state)
-                traceWith tracer $
-                  TraceObjectDiffusionInboundStartedIdling
+              ( do
+                  traceWith tracer TraceObjectDiffusionInboundAwaitReply
+                  Idling.idlingStart (odisvIdling state)
+                  traceWith tracer TraceObjectDiffusionInboundStartedIdling
               )
               ( \neCollectedIds ->
                   WithEffect $ do

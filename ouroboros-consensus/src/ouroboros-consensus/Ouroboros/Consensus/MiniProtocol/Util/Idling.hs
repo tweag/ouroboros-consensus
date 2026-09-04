@@ -1,8 +1,10 @@
+{-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE StandaloneDeriving #-}
-{-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE DeriveAnyClass #-}
+
 module Ouroboros.Consensus.MiniProtocol.Util.Idling where
+
 import GHC.Generics (Generic)
 import Ouroboros.Consensus.Util.IOLike (IOLike, NoThunks)
 

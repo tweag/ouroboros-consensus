@@ -131,6 +131,10 @@ import Ouroboros.Consensus.MiniProtocol.ChainSync.Client.State
   , JumpInfo (..)
   , newChainSyncClientHandleCollection
   )
+import Ouroboros.Consensus.MiniProtocol.Util.Idling
+  ( Idling (Idling, idlingStart, idlingStop)
+  , noIdling
+  )
 import Ouroboros.Consensus.Node.GsmState (GsmState (..))
 import Ouroboros.Consensus.Node.NetworkProtocolVersion
 import Ouroboros.Consensus.Peras.Weight (emptyPerasWeightSnapshot)
@@ -171,7 +175,6 @@ import Ouroboros.Network.PeerSelection.PeerMetric.Type
   )
 import Ouroboros.Network.Protocol.ChainSync.ClientPipelined
 import Ouroboros.Network.Protocol.ChainSync.PipelineDecision
-import Ouroboros.Consensus.MiniProtocol.Util.Idling (Idling (Idling, idlingStart, idlingStop), noIdling)
 
 -- | Merely a helpful abbreviation
 type Consensus

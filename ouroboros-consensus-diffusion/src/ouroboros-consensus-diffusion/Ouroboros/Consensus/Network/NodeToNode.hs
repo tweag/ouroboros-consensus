@@ -75,6 +75,10 @@ import Ouroboros.Consensus.MiniProtocol.ChainSync.Client
 import qualified Ouroboros.Consensus.MiniProtocol.ChainSync.Client as CsClient
 import Ouroboros.Consensus.MiniProtocol.ChainSync.Server
 import Ouroboros.Consensus.MiniProtocol.ObjectDiffusion.Inbound (objectDiffusionInbound)
+import Ouroboros.Consensus.MiniProtocol.ObjectDiffusion.Inbound.State
+  ( ObjectDiffusionInboundStateView
+  , bracketObjectDiffusionInbound
+  )
 import Ouroboros.Consensus.MiniProtocol.ObjectDiffusion.ObjectPool.PerasCert
 import Ouroboros.Consensus.MiniProtocol.ObjectDiffusion.ObjectPool.PerasVote
 import Ouroboros.Consensus.MiniProtocol.ObjectDiffusion.Outbound (objectDiffusionOutbound)
@@ -175,7 +179,6 @@ import Ouroboros.Network.TxSubmission.Mempool.Reader
   )
 import Ouroboros.Network.TxSubmission.Outbound
 import System.Random (StdGen, splitGen)
-import Ouroboros.Consensus.MiniProtocol.ObjectDiffusion.Inbound.State (ObjectDiffusionInboundStateView, bracketObjectDiffusionInbound)
 
 {-------------------------------------------------------------------------------
   Handlers
