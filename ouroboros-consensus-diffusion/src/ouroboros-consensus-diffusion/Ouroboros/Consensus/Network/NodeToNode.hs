@@ -175,6 +175,7 @@ import Ouroboros.Network.TxSubmission.Mempool.Reader
   )
 import Ouroboros.Network.TxSubmission.Outbound
 import System.Random (StdGen, splitGen)
+import Ouroboros.Consensus.MiniProtocol.ObjectDiffusion.Inbound.State (ObjectDiffusionInboundStateView, bracketObjectDiffusionInbound)
 
 {-------------------------------------------------------------------------------
   Handlers
@@ -239,6 +240,7 @@ data Handlers m addr blk = Handlers
   , hPerasCertDiffusionClient ::
       NodeToNodeVersion ->
       ControlMessageSTM m ->
+      ObjectDiffusionInboundStateView m ->
       ConnectionId addr ->
       PerasCertDiffusionInboundPipelined blk m ()
   , hPerasCertDiffusionServer ::
@@ -248,6 +250,7 @@ data Handlers m addr blk = Handlers
   , hPerasVoteDiffusionClient ::
       NodeToNodeVersion ->
       ControlMessageSTM m ->
+      ObjectDiffusionInboundStateView m ->
       ConnectionId addr ->
       PerasVoteDiffusionInboundPipelined blk m ()
   , hPerasVoteDiffusionServer ::
@@ -380,7 +383,7 @@ mkHandlers
                   (mapTxSubmissionMempoolReader txForgetValidated $ getMempoolReader getMempool)
                   (getMempoolWriter getMempool)
                   version
-      , hPerasCertDiffusionClient = \version controlMessageSTM peer ->
+      , hPerasCertDiffusionClient = \version controlMessageSTM state peer ->
           objectDiffusionInbound
             (contramap (TraceLabelPeer peer) (Node.perasCertDiffusionInboundTracer tracers))
             ( perasCertDiffusionMaxObjectsUnacknowledged miniProtocolParameters
@@ -390,6 +393,7 @@ mkHandlers
             (makePerasCertPoolWriterFromChainDB systemTime getChainDB)
             version
             controlMessageSTM
+            state
       , hPerasCertDiffusionServer = \version peer ->
           objectDiffusionOutbound
             (contramap (TraceLabelPeer peer) (Node.perasCertDiffusionOutboundTracer tracers))
@@ -397,7 +401,7 @@ mkHandlers
             objectDiffusionIdleTimeout
             (makePerasCertPoolReaderFromChainDB $ getChainDB)
             version
-      , hPerasVoteDiffusionClient = \version controlMessageSTM peer ->
+      , hPerasVoteDiffusionClient = \version controlMessageSTM state peer ->
           objectDiffusionInbound
             (contramap (TraceLabelPeer peer) (Node.perasVoteDiffusionInboundTracer tracers))
             ( perasVoteDiffusionMaxObjectsUnacknowledged miniProtocolParameters
@@ -417,6 +421,7 @@ mkHandlers
             )
             version
             controlMessageSTM
+            state
       , hPerasVoteDiffusionServer = \version peer ->
           objectDiffusionOutbound
             (contramap (TraceLabelPeer peer) (Node.perasVoteDiffusionOutboundTracer tracers))
@@ -1015,17 +1020,21 @@ mkApps kernel rng Tracers{..} mkCodecs ByteLimits{..} chainSyncTimeouts lopBucke
       }
     channel = do
       labelThisThread "PerasCertDiffusionClient"
-      ((), trailing) <-
-        runPipelinedPeerWithLimits
-          (TraceLabelPeer them `contramap` tPerasCertDiffusionTracer)
-          (cPerasCertDiffusionCodec (mkCodecs version))
-          blPerasCertDiffusion
-          timeLimitsObjectDiffusion
-          channel
-          ( objectDiffusionInboundPeerPipelined
-              (hPerasCertDiffusionClient version controlMessageSTM them)
-          )
-      return (NoInitiatorResult, trailing)
+      bracketObjectDiffusionInbound
+        (getPerasCertDiffusionHandles kernel)
+        them
+        $ \state -> do
+          ((), trailing) <-
+            runPipelinedPeerWithLimits
+              (TraceLabelPeer them `contramap` tPerasCertDiffusionTracer)
+              (cPerasCertDiffusionCodec (mkCodecs version))
+              blPerasCertDiffusion
+              timeLimitsObjectDiffusion
+              channel
+              ( objectDiffusionInboundPeerPipelined
+                  (hPerasCertDiffusionClient version controlMessageSTM state them)
+              )
+          return (NoInitiatorResult, trailing)
 
   aPerasCertDiffusionServer ::
     NodeToNodeVersion ->
@@ -1060,17 +1069,21 @@ mkApps kernel rng Tracers{..} mkCodecs ByteLimits{..} chainSyncTimeouts lopBucke
       }
     channel = do
       labelThisThread "PerasVoteDiffusionClient"
-      ((), trailing) <-
-        runPipelinedPeerWithLimits
-          (TraceLabelPeer them `contramap` tPerasVoteDiffusionTracer)
-          (cPerasVoteDiffusionCodec (mkCodecs version))
-          blPerasVoteDiffusion
-          timeLimitsObjectDiffusion
-          channel
-          ( objectDiffusionInboundPeerPipelined
-              (hPerasVoteDiffusionClient version controlMessageSTM them)
-          )
-      return (NoInitiatorResult, trailing)
+      bracketObjectDiffusionInbound
+        (getPerasCertDiffusionHandles kernel)
+        them
+        $ \state -> do
+          ((), trailing) <-
+            runPipelinedPeerWithLimits
+              (TraceLabelPeer them `contramap` tPerasVoteDiffusionTracer)
+              (cPerasVoteDiffusionCodec (mkCodecs version))
+              blPerasVoteDiffusion
+              timeLimitsObjectDiffusion
+              channel
+              ( objectDiffusionInboundPeerPipelined
+                  (hPerasVoteDiffusionClient version controlMessageSTM state them)
+              )
+          return (NoInitiatorResult, trailing)
 
   aPerasVoteDiffusionServer ::
     NodeToNodeVersion ->

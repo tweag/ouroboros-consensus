@@ -83,7 +83,7 @@ import Ouroboros.Consensus.MiniProtocol.ChainSync.Client.InFutureCheck
   ( SomeHeaderInFutureCheck
   )
 import Ouroboros.Consensus.MiniProtocol.ObjectDiffusion.Inbound.State
-  ( newObjectDiffusionInboundHandleCollection
+  ( newObjectDiffusionInboundHandleCollection, ObjectDiffusionInboundHandleCollection
   )
 import Ouroboros.Consensus.MiniProtocol.ObjectDiffusion.PerasCert
   ( PerasCertDiffusionInboundHandleCollection
@@ -193,6 +193,9 @@ data NodeKernel m addrNTN addrNTC blk = NodeKernel
   -- from it with 'GSM.gsmStateToLedgerJudgement'.
   , getChainSyncHandles :: ChainSyncClientHandleCollection (ConnectionId addrNTN) m blk
   -- ^ The kill handle and exposed state for each ChainSync client.
+  , getPerasCertDiffusionHandles ::
+      ObjectDiffusionInboundHandleCollection (ConnectionId addrNTN) m blk
+  -- ^ The exposed state for each Peras CertDiffusion client.
   , getPeerSharingRegistry :: PeerSharingRegistry addrNTN m
   -- ^ Read the current peer sharing registry, used for interacting with
   -- the PeerSharing protocol
@@ -439,6 +442,7 @@ initNodeKernel
         , getFetchMode = readFetchMode blockFetchInterface
         , getGsmState = readTVar varGsmState
         , getChainSyncHandles = varChainSyncHandles
+        , getPerasCertDiffusionHandles = varPerasCertDiffusionHandles
         , getPeerSharingRegistry = peerSharingRegistry
         , getTracers = tracers
         , setBlockForging = \a -> atomically . LazySTM.putTMVar blockForgingVar $! a
