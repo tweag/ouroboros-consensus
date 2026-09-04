@@ -68,6 +68,8 @@ import Test.Tasty.QuickCheck
 import Test.Util.Orphans.Arbitrary ()
 import Test.Util.Orphans.IOLike ()
 import Test.Util.Peras (ListWithUniqueIds (..), genListWithUniqueIds)
+import Ouroboros.Consensus.MiniProtocol.ObjectDiffusion.Inbound.State (ObjectDiffusionInboundStateView(ObjectDiffusionInboundStateView, odisvIdling))
+import qualified Ouroboros.Consensus.MiniProtocol.Util.Idling as Idling
 
 tests :: TestTree
 tests =
@@ -246,6 +248,7 @@ prop_object_after_await =
             (makeObjectPoolWriter inboundPool)
             nodeToNodeVersion
             (readTVar controlMessage)
+            (ObjectDiffusionInboundStateView {odisvIdling = Idling.noIdling})
         outbound =
           objectDiffusionOutbound
             nullTracer
@@ -351,6 +354,7 @@ prop_await_after_commit =
             inboundWriter
             nodeToNodeVersion
             (readTVar controlMessage)
+            (ObjectDiffusionInboundStateView {odisvIdling = Idling.noIdling})
         outbound =
           objectDiffusionOutbound
             nullTracer
@@ -447,6 +451,7 @@ prop_server_idle_after_stale_reads =
             (makeObjectPoolWriter inboundPool)
             nodeToNodeVersion
             (readTVar controlMessage)
+            (ObjectDiffusionInboundStateView {odisvIdling = Idling.noIdling})
         outbound =
           objectDiffusionOutbound
             nullTracer
@@ -553,6 +558,7 @@ prop_smoke_object_diffusion
               inboundPoolWriter
               nodeToNodeVersion
               (readTVar controlMessage)
+              (ObjectDiffusionInboundStateView {odisvIdling = Idling.noIdling})
 
           outbound =
             objectDiffusionOutbound
