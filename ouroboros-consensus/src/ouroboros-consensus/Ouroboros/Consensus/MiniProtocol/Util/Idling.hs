@@ -9,7 +9,7 @@ import GHC.Generics (Generic)
 import Ouroboros.Consensus.Util.IOLike (IOLike, NoThunks)
 
 -- | Interface for the ChainSync client to manipulate the idling flag in
--- 'ChainSyncState'.
+-- 'ChainSyncState', and the PerasCertDiffusion client in 'PerasCertDiffusionInboundState'.
 data Idling m = Idling
   { idlingStart :: !(m ())
   -- ^ Mark the peer as being idle.

@@ -464,12 +464,8 @@ objectDiffusionInbound
               ( \neCollectedIds ->
                   WithEffect $ do
                     -- We just got some new object id's, so we are no longer idling
-                    --
-                    -- NOTE this change of state should be made explicit:
-                    -- https://github.com/tweag/cardano-peras/issues/144
                     Idling.idlingStop (odisvIdling state)
-                    traceWith tracer $
-                      TraceObjectDiffusionInboundStoppedIdling
+                    traceWith tracer TraceObjectDiffusionInboundStoppedIdling
                     pure $
                       checkState st' & goCollect Zero (CollectObjectIds numIdsToRequest (NonEmpty.toList neCollectedIds))
               )
