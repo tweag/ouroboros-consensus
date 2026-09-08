@@ -62,6 +62,9 @@ import Ouroboros.Consensus.Util.Condense (Condense (..))
 import Ouroboros.Consensus.Util.IOLike (NoThunks)
 import Quiet (Quiet (..))
 
+import System.IO.Unsafe (unsafePerformIO)
+import System.Environment (lookupEnv)
+
 -- * Protocol parameters
 
 -- | Number of rounds for which to ignore certificates after entering a
@@ -190,6 +193,16 @@ instance Typeable blk => ToCBOR (PerasParams blk) where
 castPerasParams :: forall blk' blk. PerasParams blk -> PerasParams blk'
 castPerasParams = coerce
 
+unsafePerasCommitteeSize :: Word64
+unsafePerasCommitteeSize =
+  unsafePerformIO $
+    lookupEnv envVar >>= \case
+      Nothing -> error "NOTHING!!!"
+      Just x -> pure $ read x
+ where
+  envVar = "PERAS_COMMITTEE_SIZE"
+{-# NOINLINE unsafePerasCommitteeSize #-}
+
 -- | Instantiate default Peras protocol parameters.
 --
 -- NOTE: in the future this will depend on a concrete 'BlockConfig'.
@@ -232,14 +245,14 @@ defaultPerasParams =
     , perasQuorumWeightThresholdSafetyMargin =
         PerasQuorumWeightThresholdSafetyMargin (2 / 100)
     , perasTargetCommitteeSize =
-        Committee.TargetCommitteeSize 3
+        Committee.TargetCommitteeSize unsafePerasCommitteeSize
     }
 
 -- * Era-dependent default values
 
 -- | Default value for 'PerasRoundLength' in the Dijkstra eras.
 dijkstraPerasRoundLength :: PerasEnabled PerasRoundLength
-dijkstraPerasRoundLength = PerasEnabled (PerasRoundLength 40)
+dijkstraPerasRoundLength = PerasEnabled (PerasRoundLength 90)
 
 -- * 'PerasEnabled' wrapper
 

@@ -624,7 +624,7 @@ perasVoteForgingController ::
 perasVoteForgingController systemTime IS{chainDB, tracers} roundInfo = do
   when (fst roundInfo < _FIRST_VOTE_ROUND) $ exitEarly
 
-  when (snd roundInfo > 12) $ exitEarly
+  when (snd roundInfo < 30 || snd roundInfo > 60) $ exitEarly
 
   els <- lift $ atomically (ChainDB.getCurrentLedger chainDB)
   lift $ traceWith (consensusErrorTracer tracers) $ toException $ StringException $
@@ -653,8 +653,6 @@ perasVoteForgingController systemTime IS{chainDB, tracers} roundInfo = do
   -- while keeping everything in the same transaction. We also use MaybeT because there is
   -- a natural abort/continue logic within the transaction. Unfortunately, we can't leverage
   -- the outer WithEarlyExit monad, because we _always_ want to get the trace.
-  let handleErr err@(PerasEpochContextNotFoundForRound _ _) =
-        debugLog (consensusErrorTracer tracers) (show err) >> pure (Nothing, [])
   (mVote, traceEvents :: [TracePerasVoteForgingEvent blk]) <- lift $ handle handleErr $ atomically $ runWriterT $ runMaybeT $ do
     let (roundNo@(PerasRoundNo prnInt), slotInRound) = roundInfo
 
@@ -712,6 +710,9 @@ perasVoteForgingController systemTime IS{chainDB, tracers} roundInfo = do
   trace $ TracePerasVotingAddVoteResult addVoteResult
   traverse_ (trace . TracePerasVotingAddCertChainSelOutcome) mAddCertChainSelOutcome
  where
+  handleErr err@(PerasEpochContextNotFoundForRound _ _) =
+      debugLog (consensusErrorTracer tracers) (show err) >> pure (Nothing, [])
+
   trace :: TracePerasVoteForgingEvent blk -> WithEarlyExit m ()
   trace = lift . traceWith (perasVoteForgingTracer tracers)
 
