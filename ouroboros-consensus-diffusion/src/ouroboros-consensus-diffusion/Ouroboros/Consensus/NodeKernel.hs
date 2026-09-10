@@ -312,21 +312,7 @@ initNodeKernel
                           -- We don't have an established ChainSync connection with this peer.
                           -- We conservatively assume that its candidate is not better than ours.
                           GSM.WhetherCandidateIsBetter False
-                , -- to do
-                  -- weights <- ChainDB.getPerasWeightSnapshot chainDB
-                  -- pure $ \(headers, _lst) state ->
-                  --   case AF.intersectionPoint headers (csCandidate state) of
-                  --     Nothing -> GSM.CandidateDoesNotIntersect
-                  --     Just{} ->
-                  --       GSM.WhetherCandidateIsBetter $ -- precondition requires intersection
-                  --         shouldSwitch
-                  --           ( preferAnchoredCandidate
-                  --               (configBlock cfg)
-                  --               (forgetFingerprint weights)
-                  --               headers
-                  --               (csCandidate state)
-                  --           )
-                  GSM.peerIsIdle = gsmPeerIsIdle
+                , GSM.peerIsIdle = gsmPeerIsIdle
                 , GSM.durationUntilTooOld =
                     gsmDurationUntilTooOld
                       <&> \wd (_headers, lst) ->
