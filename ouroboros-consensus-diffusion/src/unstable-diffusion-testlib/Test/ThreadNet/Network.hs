@@ -1427,7 +1427,7 @@ directedEdgeInner
                       "ChainSync"
                       (\_s _ -> RestartChainSyncTerminated)
                       (\_s () -> RestartChainSyncTerminated)
-                      ( \a v e c -> NTN.aChainSyncClient a v (if v >= NodeToNodeV_16 then PerasSupported else PerasUnsupported) e c
+                      ( \a v e c -> NTN.aChainSyncClient a (if v >= NodeToNodeV_16 then PerasSupported else PerasUnsupported) v e c
                       )
                       NTN.aChainSyncServer
                       chainSyncMiddle

@@ -661,11 +661,7 @@ type ClientApp m addr bytes a =
 
 -- | A node-to-node application
 type ClientAppWithPerasSupport m addr bytes a =
-  NodeToNodeVersion ->
-  PerasSupport ->
-  ExpandedInitiatorContext addr PeerTrustable m ->
-  Channel m bytes ->
-  m (a, Maybe bytes)
+  PerasSupport -> ClientApp m addr bytes a
 
 type ServerApp m addr bytes a =
   NodeToNodeVersion ->
@@ -824,14 +820,14 @@ mkApps kernel rng Tracers{..} mkCodecs ByteLimits{..} chainSyncTimeouts lopBucke
   NodeKernel{getDiffusionPipeliningSupport} = kernel
 
   aChainSyncClient ::
-    NodeToNodeVersion ->
     PerasSupport ->
+    NodeToNodeVersion ->
     ExpandedInitiatorContext addrNTN PeerTrustable m ->
     Channel m bCS ->
     m (NodeToNodeInitiatorResult, Maybe bCS)
   aChainSyncClient
-    version
     perasSupport
+    version
     ExpandedInitiatorContext
       { eicConnectionId = them
       , eicControlMessage = controlMessageSTM
@@ -1236,7 +1232,7 @@ initiator featureFlags miniProtocolParameters version versionData Apps{..} =
     ( NodeToNodeProtocols
         { chainSyncProtocol =
             ( InitiatorProtocolOnly
-                (MiniProtocolCb (\ctx -> aChainSyncClient version (perasSupport versionData) ctx))
+                (MiniProtocolCb (\ctx -> aChainSyncClient (perasSupport versionData) version  ctx))
             )
         , blockFetchProtocol =
             (InitiatorProtocolOnly (MiniProtocolCb (\ctx -> aBlockFetchClient version ctx)))
@@ -1274,7 +1270,7 @@ initiatorAndResponder featureFlags miniProtocolParameters version versionData Ap
     ( NodeToNodeProtocols
         { chainSyncProtocol =
             ( InitiatorAndResponderProtocol
-                (MiniProtocolCb (\initiatorCtx -> aChainSyncClient version (perasSupport versionData) initiatorCtx))
+                (MiniProtocolCb (\initiatorCtx -> aChainSyncClient (perasSupport versionData) version initiatorCtx))
                 (MiniProtocolCb (\responderCtx -> aChainSyncServer version responderCtx))
             )
         , blockFetchProtocol =
