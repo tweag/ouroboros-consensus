@@ -37,7 +37,7 @@ import Ouroboros.Consensus.Util.IOLike
 --
 -- NOTE: 'blk' is not needed for now, but we keep it for future use.
 data ObjectDiffusionInboundState blk = ObjectDiffusionInboundState
-  { odisIdling :: !Bool
+  { odIdling :: !Bool
   -- ^ Whether the client is currently idling
   }
   deriving stock Generic
@@ -51,7 +51,7 @@ deriving anyclass instance
 initObjectDiffusionInboundState :: ObjectDiffusionInboundState blk
 initObjectDiffusionInboundState =
   ObjectDiffusionInboundState
-    { odisIdling = True
+    { odIdling = False
     }
 
 -- | An interface to an ObjectDiffusion inbound client that's used by other components.
@@ -114,8 +114,8 @@ bracketObjectDiffusionInbound handles peer body = do
     $ ObjectDiffusionInboundStateView
       { odisvIdling =
           Idling
-            { idlingStart = atomically $ modifyTVar odiState $ \s -> s{odisIdling = True}
-            , idlingStop = atomically $ modifyTVar odiState $ \s -> s{odisIdling = False}
+            { idlingStart = atomically $ modifyTVar odiState $ \s -> s{odIdling = True}
+            , idlingStop = atomically $ modifyTVar odiState $ \s -> s{odIdling = False}
             }
       }
  where
