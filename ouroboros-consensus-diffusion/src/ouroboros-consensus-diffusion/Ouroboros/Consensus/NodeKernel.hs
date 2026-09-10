@@ -163,14 +163,8 @@ import qualified Ouroboros.Network.TxSubmission.Mempool.Reader as MempoolReader
 import System.Random (StdGen)
 
 import qualified Data.Set as Set
-import qualified Data.ByteString.Char8 as BSC
-import qualified Data.ByteString.Lazy as BSL
-import Control.Monad.IO.Class (MonadIO (..))
-import qualified Network.HTTP.Client as Http
 import Ouroboros.Consensus.Peras.Weight (weightBoostOfFragment)
 import Cardano.Slotting.Slot (WithOrigin (..))
-import System.Environment (lookupEnv)
-import Data.Maybe (fromJust)
 
 {-------------------------------------------------------------------------------
   Relay node
@@ -251,27 +245,14 @@ data NodeKernelArgs m addrNTN addrNTC blk = NodeKernelArgs
   , getDiffusionPipeliningSupport :: DiffusionPipeliningSupport
   }
 
-debugLog :: IOLike m => String -> m ()
-debugLog logMsg = liftIO $ do
-    nodeId <- fromJust <$> liftIO (lookupEnv "NODE_ID")
-    let pairStr k v = (BSC.pack k, Just (BSC.pack v))
-        queryPairs =
-            [ pairStr "node_id" nodeId
-            , pairStr "message" logMsg
-            ]
-    manager <- Http.newManager Http.defaultManagerSettings
-    baseRequest <- Http.parseRequest "http://localhost:9000/log"
-    let request = Http.setQueryString queryPairs baseRequest
-    responseResult <- try (Http.httpLbs request manager) :: IO (Either SomeException (Http.Response BSL.ByteString))
-    case responseResult of
-        Left _ -> pure ()
-        Right _ -> pure ()
+debugLog :: IOLike m => Tracer m TestnetTrace -> String -> m ()
+debugLog tracer logMsg = do
+  traceWith tracer $ DebugLog $ Text.pack logMsg
 
 advertController ::
     (IOLike m, StandardHash blk, HasHeader (Header blk)) =>
-    ChainDB m blk -> m b
-advertController chainDB = forever $ do
-    nodeId <- fromJust <$> liftIO (lookupEnv "NODE_ID")
+    Tracer m TestnetTrace -> ChainDB m blk -> m b
+advertController tracer chainDB = forever $ do
     certs <- atomically $ ChainDB.getPerasCertIds chainDB
     votes <- atomically $ ChainDB.getPerasVoteIds chainDB
     currChain <- atomically $ ChainDB.getCurrentChain chainDB
@@ -289,32 +270,16 @@ advertController chainDB = forever $ do
             case blockNum0 of
                 Origin -> 0
                 At bn -> unBlockNo bn
-        queryPairs =
-              [ pairStr "node_id" nodeId
-              , pair "num_certs" (Set.size certs)
-              , pair "num_votes" (Set.size votes)
-              , pair "chain_len" chainLen
-              , pair "peras_boost" boost
-              , pair "slot_no" slotNo
-              , pairStr "block_hash" blockHashStr
-              , pair "block_no" blockNum
-              ]
-    liftIO $ sendAdvert queryPairs
+    traceWith tracer $
+      AdvertLog
+        (Set.size certs)
+        (Set.size votes)
+        chainLen
+        boost
+        slotNo
+        blockHashStr
+        blockNum
     SI.threadDelay 3
-
-  where
-
-    pairStr k v = (BSC.pack k, Just (BSC.pack v))
-    pair k v = pairStr k (show v)
-
-    sendAdvert queryPairs = do
-        manager <- Http.newManager Http.defaultManagerSettings
-        baseRequest <- Http.parseRequest "http://localhost:9000/advert"
-        let request = Http.setQueryString queryPairs baseRequest
-        responseResult <- try (Http.httpLbs request manager) :: IO (Either SomeException (Http.Response BSL.ByteString))
-        case responseResult of
-            Left _ -> pure ()
-            Right _ -> pure ()
 
 initNodeKernel ::
   forall m addrNTN addrNTC blk.
@@ -346,7 +311,7 @@ initNodeKernel
     , miniProtocolParameters
     } = do
 
-    debugLog "Initialized the Node Kernal"
+    debugLog (testnetTracer tracers) "Initialized the Node Kernal"
 
     -- using a lazy 'TVar', 'BlockForging' does not have a 'NoThunks' instance.
     blockForgingVar :: LazySTM.TMVar m [MkBlockForging m blk] <- LazySTM.newTMVarIO []
@@ -459,7 +424,7 @@ initNodeKernel
         blockForgingController st (LazySTM.takeTMVar blockForgingVar)
 
     void $
-      forkLinkedThread registry "NodeKernel.objDiffusionAdvert" $ advertController chainDB
+      forkLinkedThread registry "NodeKernel.objDiffusionAdvert" $ advertController (testnetTracer tracers) chainDB
 
     -- Run the block fetch logic in the background. This will call
     -- 'addFetchedBlock' whenever a new block is downloaded.

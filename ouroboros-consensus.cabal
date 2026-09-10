@@ -1127,7 +1127,6 @@ library diffusion
 
   build-depends:
     base,
-    http-client,
     bytestring,
     cardano-base,
     cardano-diffusion:{api, cardano-diffusion, protocols},
