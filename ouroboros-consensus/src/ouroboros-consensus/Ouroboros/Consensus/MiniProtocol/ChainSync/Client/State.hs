@@ -76,6 +76,9 @@ data ChainSyncState blk = ChainSyncState
   -- the forecast horizon while the candidate fragment isn't extended yet, to
   -- signal to GDD that the density is known up to this slot.
   , csPerasSupport :: !PerasSupport
+  -- ^ Peras support negotiated with this peer during the node-to-node handshake
+  -- for this connection. The GSM uses this to determine whether certificate
+  -- diffusion is expected.
   }
   deriving stock Generic
 
