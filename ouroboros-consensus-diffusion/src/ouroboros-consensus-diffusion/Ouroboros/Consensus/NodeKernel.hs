@@ -251,7 +251,6 @@ initNodeKernel
   args@NodeKernelArgs
     { registry
     , cfg
-    , featureFlags
     , tracers
     , chainDB
     , initChainDB
@@ -327,7 +326,7 @@ initNodeKernel
                   --               headers
                   --               (csCandidate state)
                   --           )
-                  GSM.peerIsIdle = gsmPeerIsIdle featureFlags
+                  GSM.peerIsIdle = gsmPeerIsIdle
                 , GSM.durationUntilTooOld =
                     gsmDurationUntilTooOld
                       <&> \wd (_headers, lst) ->

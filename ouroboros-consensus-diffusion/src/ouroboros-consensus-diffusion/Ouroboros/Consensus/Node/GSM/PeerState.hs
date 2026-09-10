@@ -6,12 +6,8 @@ module Ouroboros.Consensus.Node.GSM.PeerState
   )
 where
 
-import Cardano.Base.FeatureFlags (CardanoFeatureFlag (PerasFlag))
-import Control.Exception (assert)
 import Data.Align (Semialign (align))
 import Data.Map.Strict (Map)
-import Data.Set (Set)
-import qualified Data.Set as S
 import Data.These (These (That, These, This))
 import Ouroboros.Consensus.MiniProtocol.ChainSync.Client
   ( ChainSyncClientHandle (cschState)
@@ -55,16 +51,16 @@ mkGsmPeerStates csHandles pcdHandles = do
   pure (GsmPeerState <$> align csPeerStates pcdPeerStates)
 
 -- | Determine whether our connections to this peer are idle.
-gsmPeerIsIdle :: Set CardanoFeatureFlag -> GsmPeerState blk -> Bool
-gsmPeerIsIdle featureFlags (GsmPeerState these) =
+gsmPeerIsIdle :: GsmPeerState blk -> Bool
+gsmPeerIsIdle (GsmPeerState these) =
   case these of
     -- We have both ChainSync and PerasCertDiffusion connections => idle if both are idling
     These csState pcdState -> csIdling csState && odisIdling pcdState
-    -- Only a ChainSync connection is available => idle if the ChainSync connection is idling
+    -- Certificate diffusion was not negotiated => ChainSync idling is sufficient
     This csState
       | PerasUnsupported <- csPerasSupport csState ->
-          assert (not $ PerasFlag `S.member` featureFlags) csIdling csState
+          csIdling csState
     -- We will soon establish a PerasCertDiffusion connection => not idling
-    This _ -> assert (PerasFlag `S.member` featureFlags) False
+    This _ -> False
     -- We will soon establish a ChainSync connection => not idling
     That _ -> False
