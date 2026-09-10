@@ -660,10 +660,6 @@ type ClientApp m addr bytes a =
   Channel m bytes ->
   m (a, Maybe bytes)
 
--- | A node-to-node application
-type ClientAppWithPerasSupport m addr bytes a =
-  PerasSupport -> ClientApp m addr bytes a
-
 type ServerApp m addr bytes a =
   NodeToNodeVersion ->
   ResponderContext addr ->
@@ -674,7 +670,7 @@ type ServerApp m addr bytes a =
 --
 -- See 'Network.Mux.Types.MuxApplication'
 data Apps m addr bCS bBF bTX bPCD bPVD bKA bPS a b = Apps
-  { aChainSyncClient :: ClientAppWithPerasSupport m addr bCS a
+  { aChainSyncClient :: PerasSupport -> ClientApp m addr bCS a
   -- ^ Start a chain sync client that communicates with the given upstream
   -- node.
   , aChainSyncServer :: ServerApp m addr bCS b
