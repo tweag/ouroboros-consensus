@@ -48,8 +48,8 @@ source-repository-package
 source-repository-package
   type: git
   location: https://github.com/tweag/ouroboros-network.git
-  tag: 88e56a2480a7fdc4fa5efa36e41df9f145e2cdb8
-  --sha256: 11hcnb08ahcvb2sxs0yhybz0a5pazdhpdw9r04c8cqn24mmjl4ms
+  tag: fe41b66d7a98332e02c97a964276822821817d43
+  --sha256: 1qgmkm6zqdhv0qkl86qpb6c2wj96xvx416yngf0yvg96cx1mjgy2
   subdir:
     ouroboros-network
     cardano-diffusion

@@ -135,6 +135,7 @@ import Ouroboros.Network.PeerSelection.Governor
   ( makePublicPeerSelectionStateVar
   )
 import Ouroboros.Network.PeerSelection.PeerMetric (nullMetric)
+import Ouroboros.Network.PerasSupport (PerasSupport (PerasSupported, PerasUnsupported))
 import Ouroboros.Network.Point (WithOrigin (..))
 import qualified Ouroboros.Network.Protocol.ChainSync.Type as CS
 import Ouroboros.Network.Protocol.KeepAlive.Type
@@ -1426,7 +1427,8 @@ directedEdgeInner
                       "ChainSync"
                       (\_s _ -> RestartChainSyncTerminated)
                       (\_s () -> RestartChainSyncTerminated)
-                      NTN.aChainSyncClient
+                      ( \a v e c -> NTN.aChainSyncClient a v (if v >= NodeToNodeV_16 then PerasSupported else PerasUnsupported) e c
+                      )
                       NTN.aChainSyncServer
                       chainSyncMiddle
                   , miniProtocol

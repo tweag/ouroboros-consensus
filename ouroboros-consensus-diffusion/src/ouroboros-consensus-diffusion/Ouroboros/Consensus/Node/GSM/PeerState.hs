@@ -6,15 +6,17 @@ module Ouroboros.Consensus.Node.GSM.PeerState
   )
 where
 
-import Cardano.Base.FeatureFlags (CardanoFeatureFlag)
+import Cardano.Base.FeatureFlags (CardanoFeatureFlag (PerasFlag))
+import Control.Exception (assert)
 import Data.Align (Semialign (align))
 import Data.Map.Strict (Map)
 import Data.Set (Set)
+import qualified Data.Set as S
 import Data.These (These (That, These, This))
 import Ouroboros.Consensus.MiniProtocol.ChainSync.Client
   ( ChainSyncClientHandle (cschState)
   , ChainSyncClientHandleCollection (cschcMap)
-  , ChainSyncState (csIdling)
+  , ChainSyncState (csIdling, csPerasSupport)
   )
 import Ouroboros.Consensus.MiniProtocol.ObjectDiffusion.Inbound.State
   ( ObjectDiffusionInboundHandle (odihState)
@@ -23,6 +25,7 @@ import Ouroboros.Consensus.MiniProtocol.ObjectDiffusion.Inbound.State
   )
 import Ouroboros.Consensus.MiniProtocol.ObjectDiffusion.PerasCert (PerasCertDiffusionInboundState)
 import Ouroboros.Consensus.Util.IOLike (MonadSTM (STM), readTVar)
+import Ouroboros.Network.PerasSupport (PerasSupport (PerasUnsupported))
 
 -- | State about peers we are connected to during initialization.
 newtype GsmPeerState blk = GsmPeerState
@@ -58,11 +61,10 @@ gsmPeerIsIdle featureFlags (GsmPeerState these) =
     -- We have both ChainSync and PerasCertDiffusion connections => idle if both are idling
     These csState pcdState -> csIdling csState && odisIdling pcdState
     -- Only a ChainSync connection is available => idle if the ChainSync connection is idling
-    This csState | not (perasIsEnabled csState) -> csIdling csState
+    This csState
+      | PerasUnsupported <- csPerasSupport csState ->
+          assert (not $ PerasFlag `S.member` featureFlags) csIdling csState
     -- We will soon establish a PerasCertDiffusion connection => not idling
-    This _ -> False
+    This _ -> assert (PerasFlag `S.member` featureFlags) False
     -- We will soon establish a ChainSync connection => not idling
     That _ -> False
- where
-  -- Is the Peras feature flag enabled and the peer is compatible with it?
-  perasIsEnabled csState = error "to do. isPerasEnabled featureFlags (csNodeToNodeVersion csState)"

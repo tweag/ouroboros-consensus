@@ -51,6 +51,7 @@ import Ouroboros.Network.AnchoredFragment
   ( AnchoredFragment
   , headPoint
   )
+import Ouroboros.Network.PerasSupport (PerasSupport)
 
 -- | A ChainSync client's state that's used by other components, like the GDD or
 -- the jumping governor.
@@ -74,6 +75,7 @@ data ChainSyncState blk = ChainSyncState
   -- processing it further, and the latest slot may refer to a header beyond
   -- the forecast horizon while the candidate fragment isn't extended yet, to
   -- signal to GDD that the density is known up to this slot.
+  , csPerasSupport :: !PerasSupport
   }
   deriving stock Generic
 

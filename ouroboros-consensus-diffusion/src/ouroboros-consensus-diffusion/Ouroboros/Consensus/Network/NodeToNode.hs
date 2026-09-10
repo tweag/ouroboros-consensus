@@ -119,6 +119,7 @@ import Ouroboros.Network.PeerSharing
   , peerSharingClient
   , peerSharingServer
   )
+import Ouroboros.Network.PerasSupport (PerasSupport)
 import Ouroboros.Network.Protocol.BlockFetch.Codec
 import Ouroboros.Network.Protocol.BlockFetch.Server
   ( BlockFetchServer
@@ -658,6 +659,14 @@ type ClientApp m addr bytes a =
   Channel m bytes ->
   m (a, Maybe bytes)
 
+-- | A node-to-node application
+type ClientAppWithPerasSupport m addr bytes a =
+  NodeToNodeVersion ->
+  PerasSupport ->
+  ExpandedInitiatorContext addr PeerTrustable m ->
+  Channel m bytes ->
+  m (a, Maybe bytes)
+
 type ServerApp m addr bytes a =
   NodeToNodeVersion ->
   ResponderContext addr ->
@@ -668,7 +677,7 @@ type ServerApp m addr bytes a =
 --
 -- See 'Network.Mux.Types.MuxApplication'
 data Apps m addr bCS bBF bTX bPCD bPVD bKA bPS a b = Apps
-  { aChainSyncClient :: ClientApp m addr bCS a
+  { aChainSyncClient :: ClientAppWithPerasSupport m addr bCS a
   -- ^ Start a chain sync client that communicates with the given upstream
   -- node.
   , aChainSyncServer :: ServerApp m addr bCS b
@@ -816,11 +825,13 @@ mkApps kernel rng Tracers{..} mkCodecs ByteLimits{..} chainSyncTimeouts lopBucke
 
   aChainSyncClient ::
     NodeToNodeVersion ->
+    PerasSupport ->
     ExpandedInitiatorContext addrNTN PeerTrustable m ->
     Channel m bCS ->
     m (NodeToNodeInitiatorResult, Maybe bCS)
   aChainSyncClient
     version
+    perasSupport
     ExpandedInitiatorContext
       { eicConnectionId = them
       , eicControlMessage = controlMessageSTM
@@ -845,6 +856,7 @@ mkApps kernel rng Tracers{..} mkCodecs ByteLimits{..} chainSyncTimeouts lopBucke
           (getGsmState kernel)
           them
           version
+          perasSupport
           lopBucketConfig
           csjConfig
           getDiffusionPipeliningSupport
@@ -1223,7 +1235,9 @@ initiator featureFlags miniProtocolParameters version versionData Apps{..} =
     -- a quadruple uniquely determining a connection).
     ( NodeToNodeProtocols
         { chainSyncProtocol =
-            (InitiatorProtocolOnly (MiniProtocolCb (\ctx -> aChainSyncClient version ctx)))
+            ( InitiatorProtocolOnly
+                (MiniProtocolCb (\ctx -> aChainSyncClient version (perasSupport versionData) ctx))
+            )
         , blockFetchProtocol =
             (InitiatorProtocolOnly (MiniProtocolCb (\ctx -> aBlockFetchClient version ctx)))
         , txSubmissionProtocol =
@@ -1260,7 +1274,7 @@ initiatorAndResponder featureFlags miniProtocolParameters version versionData Ap
     ( NodeToNodeProtocols
         { chainSyncProtocol =
             ( InitiatorAndResponderProtocol
-                (MiniProtocolCb (\initiatorCtx -> aChainSyncClient version initiatorCtx))
+                (MiniProtocolCb (\initiatorCtx -> aChainSyncClient version (perasSupport versionData) initiatorCtx))
                 (MiniProtocolCb (\responderCtx -> aChainSyncServer version responderCtx))
             )
         , blockFetchProtocol =
