@@ -51,8 +51,6 @@ import Ouroboros.Consensus.Util.IOLike
   , castStrictSVar
   )
 
-import Control.Monad.IO.Class (MonadIO (..))
-
 {-------------------------------------------------------------------------------
   Basic definitions
 -------------------------------------------------------------------------------}
@@ -67,7 +65,6 @@ newtype WithEarlyExit m a = WithEarlyExit
     , Monad
     , MonadTrans
     , MonadPlus
-    , MonadIO
     )
 
 instance
