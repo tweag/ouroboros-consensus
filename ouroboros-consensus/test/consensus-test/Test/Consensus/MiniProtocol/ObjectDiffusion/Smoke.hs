@@ -219,16 +219,19 @@ prop_smoke =
 prop_object_after_await :: Property
 prop_object_after_await =
   case runSimStrictShutdown simulation of
-    Right (mAwait, mDelivered, mTerminated, inboundObjects) ->
+    Right (mAwait, mDelivered, mTerminated, inboundObjects, idlingUpdates) ->
       counterexample "the server did not promptly report that it was awaiting objects" (isJust mAwait)
         .&&. counterexample "object added after await was not delivered promptly" (isJust mDelivered)
         .&&. counterexample "peers did not terminate after delivery" (isJust mTerminated)
         .&&. inboundObjects === [object]
+        .&&. counterexample
+          "await must start idling and subsequent IDs must stop it"
+          (take 2 idlingUpdates === [True, False])
     Left err -> counterexample (show err) $ property False
  where
   object = SmokeObject (SmokeObjectId 42)
 
-  simulation :: forall s. IOSim s (Maybe (), Maybe (), Maybe (), [SmokeObject])
+  simulation :: forall s. IOSim s (Maybe (), Maybe (), Maybe (), [SmokeObject], [Bool])
   simulation = do
     let maxFifoSize = NumObjectsUnacknowledged 5
         maxIdsToReq = NumObjectIdsReq 3
@@ -238,19 +241,23 @@ prop_object_after_await =
     inboundPool@(SmokeObjectPool inboundObjectsVar) <- newObjectPool []
     controlMessage <- uncheckedNewTVarM Continue
     awaitSeen <- uncheckedNewTVarM False
+    idlingUpdates <- uncheckedNewTVarM []
 
-    let inboundTracer = mkTracer $ \event -> case event of
-          TraceObjectDiffusionInboundAwaitReply ->
-            atomically $ writeTVar awaitSeen True
-          _ -> pure ()
+    let idling =
+          Idling.Idling
+            { Idling.idlingStart = atomically $ do
+                modifyTVar idlingUpdates (++ [True])
+                writeTVar awaitSeen True
+            , Idling.idlingStop = atomically $ modifyTVar idlingUpdates (++ [False])
+            }
         inbound =
           objectDiffusionInbound
-            inboundTracer
+            nullTracer
             (maxFifoSize, maxIdsToReq, maxObjectsToReq)
             (makeObjectPoolWriter inboundPool)
             nodeToNodeVersion
             (readTVar controlMessage)
-            (ObjectDiffusionInboundStateView{odisvIdling = Idling.noIdling})
+            (ObjectDiffusionInboundStateView{odisvIdling = idling})
         outbound =
           objectDiffusionOutbound
             nullTracer
@@ -299,7 +306,8 @@ prop_object_after_await =
         check (n == 2)
 
       inboundObjects <- atomically $ readTVar inboundObjectsVar
-      pure (mAwait, mDelivered, mTerminated, inboundObjects)
+      updates <- atomically $ readTVar idlingUpdates
+      pure (mAwait, mDelivered, mTerminated, inboundObjects, updates)
 
 -- | Receiving 'MsgAwaitReply' is the per-peer caught-up observation. Hold a
 -- commit open and verify that it cannot overtake the commit of any previously

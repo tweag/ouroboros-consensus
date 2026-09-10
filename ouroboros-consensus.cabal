@@ -1285,6 +1285,7 @@ test-suite consensus-diffusion-test
     Test.Consensus.Genesis.TestSuite.SmallKey
     Test.Consensus.Genesis.TestSuite.SmallKey.Tests
     Test.Consensus.GSM
+    Test.Consensus.GSM.PeerState
     Test.Consensus.HardFork.Combinator
     Test.Consensus.HardFork.Combinator.A
     Test.Consensus.HardFork.Combinator.B
