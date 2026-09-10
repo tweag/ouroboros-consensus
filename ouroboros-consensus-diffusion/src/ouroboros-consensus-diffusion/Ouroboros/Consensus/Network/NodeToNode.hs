@@ -76,7 +76,7 @@ import qualified Ouroboros.Consensus.MiniProtocol.ChainSync.Client as CsClient
 import Ouroboros.Consensus.MiniProtocol.ChainSync.Server
 import Ouroboros.Consensus.MiniProtocol.ObjectDiffusion.Inbound (objectDiffusionInbound)
 import Ouroboros.Consensus.MiniProtocol.ObjectDiffusion.Inbound.State
-  ( ObjectDiffusionInboundStateView
+  ( ObjectDiffusionInboundStateView (..)
   , bracketObjectDiffusionInbound
   )
 import Ouroboros.Consensus.MiniProtocol.ObjectDiffusion.ObjectPool.PerasCert
@@ -84,6 +84,7 @@ import Ouroboros.Consensus.MiniProtocol.ObjectDiffusion.ObjectPool.PerasVote
 import Ouroboros.Consensus.MiniProtocol.ObjectDiffusion.Outbound (objectDiffusionOutbound)
 import Ouroboros.Consensus.MiniProtocol.ObjectDiffusion.PerasCert
 import Ouroboros.Consensus.MiniProtocol.ObjectDiffusion.PerasVote
+import qualified Ouroboros.Consensus.MiniProtocol.Util.Idling as Idling
 import Ouroboros.Consensus.Node.ExitPolicy
 import Ouroboros.Consensus.Node.NetworkProtocolVersion
 import Ouroboros.Consensus.Node.Run
@@ -1076,21 +1077,20 @@ mkApps kernel rng Tracers{..} mkCodecs ByteLimits{..} chainSyncTimeouts lopBucke
       }
     channel = do
       labelThisThread "PerasVoteDiffusionClient"
-      bracketObjectDiffusionInbound
-        (getPerasCertDiffusionHandles kernel)
-        them
-        $ \state -> do
-          ((), trailing) <-
-            runPipelinedPeerWithLimits
-              (TraceLabelPeer them `contramap` tPerasVoteDiffusionTracer)
-              (cPerasVoteDiffusionCodec (mkCodecs version))
-              blPerasVoteDiffusion
-              timeLimitsObjectDiffusion
-              channel
-              ( objectDiffusionInboundPeerPipelined
-                  (hPerasVoteDiffusionClient version controlMessageSTM state them)
-              )
-          return (NoInitiatorResult, trailing)
+      -- Only certificate diffusion participates in GSM caught-up detection.
+      -- Votes must not register in or remove entries from the certificate handles.
+      let state = ObjectDiffusionInboundStateView{odisvIdling = Idling.noIdling}
+      ((), trailing) <-
+        runPipelinedPeerWithLimits
+          (TraceLabelPeer them `contramap` tPerasVoteDiffusionTracer)
+          (cPerasVoteDiffusionCodec (mkCodecs version))
+          blPerasVoteDiffusion
+          timeLimitsObjectDiffusion
+          channel
+          ( objectDiffusionInboundPeerPipelined
+              (hPerasVoteDiffusionClient version controlMessageSTM state them)
+          )
+      return (NoInitiatorResult, trailing)
 
   aPerasVoteDiffusionServer ::
     NodeToNodeVersion ->
