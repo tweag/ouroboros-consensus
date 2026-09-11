@@ -1228,7 +1228,7 @@ initiator featureFlags miniProtocolParameters version versionData Apps{..} =
     ( NodeToNodeProtocols
         { chainSyncProtocol =
             ( InitiatorProtocolOnly
-                (MiniProtocolCb (\ctx -> aChainSyncClient (perasSupport versionData) version  ctx))
+                (MiniProtocolCb (\ctx -> aChainSyncClient (perasSupport versionData) version ctx))
             )
         , blockFetchProtocol =
             (InitiatorProtocolOnly (MiniProtocolCb (\ctx -> aBlockFetchClient version ctx)))

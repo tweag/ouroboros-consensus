@@ -1428,8 +1428,7 @@ directedEdgeInner
                       (\_s _ -> RestartChainSyncTerminated)
                       (\_s () -> RestartChainSyncTerminated)
                       -- TODO: ThreadNet currently doesn't start up certificate object diffusion, so we pass PerasUnsupported to avoid waiting indefinitely.
-                      ( \a v e c -> NTN.aChainSyncClient a PerasUnsupported v e c
-                      )
+                      (\a v e c -> NTN.aChainSyncClient a PerasUnsupported v e c)
                       NTN.aChainSyncServer
                       chainSyncMiddle
                   , miniProtocol
