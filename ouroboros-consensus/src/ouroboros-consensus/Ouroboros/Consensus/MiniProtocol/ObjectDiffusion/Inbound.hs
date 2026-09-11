@@ -64,6 +64,13 @@ data TraceObjectDiffusionInbound objectId object
     TraceObjectDiffusionInboundRecvControlMessage ControlMessage
   | TraceObjectDiffusionInboundCanRequestMoreObjects Int
   | TraceObjectDiffusionInboundCannotRequestMoreObjects Int
+  | -- | The server has no object IDs immediately available after its current
+    -- cursor and will wait. All previously advertised objects have been
+    -- processed before this caught-up event can be emitted.
+    TraceObjectDiffusionInboundAwaitReply
+  | -- | The server's bounded wait expired without new object IDs, returning
+    -- agency to the client.
+    TraceObjectDiffusionInboundServerIdle
   deriving (Eq, Show)
 
 data ObjectDiffusionInboundError objectId object
@@ -441,8 +448,19 @@ objectDiffusionInbound
             $ SendMsgRequestObjectIdsBlocking
               (numToAckOnNextReq st)
               numIdsToRequest
+              (traceWith tracer TraceObjectDiffusionInboundAwaitReply)
               ( \neCollectedIds ->
                   checkState st' & goCollect Zero (CollectObjectIds numIdsToRequest (NonEmpty.toList neCollectedIds))
+              )
+              ( WithEffect $ do
+                  traceWith tracer TraceObjectDiffusionInboundServerIdle
+                  pure $!
+                    checkState
+                      st
+                        { numToAckOnNextReq = 0
+                        , numIdsInFlight = 0
+                        }
+                      & go Zero
               )
 
     goReqObjectsAndObjectIdsPipelined ::
