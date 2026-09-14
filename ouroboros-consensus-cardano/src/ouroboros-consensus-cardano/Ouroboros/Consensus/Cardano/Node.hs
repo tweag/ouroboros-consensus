@@ -448,14 +448,7 @@ instance
 
   supportedNodeToClientVersions _ =
     Map.fromList $
-      [ (NodeToClientV_16, CardanoNodeToClientVersion12)
-      , (NodeToClientV_17, CardanoNodeToClientVersion13)
-      , (NodeToClientV_18, CardanoNodeToClientVersion14)
-      , (NodeToClientV_19, CardanoNodeToClientVersion15)
-      , (NodeToClientV_20, CardanoNodeToClientVersion16)
-      , (NodeToClientV_21, CardanoNodeToClientVersion17)
-      , (NodeToClientV_22, CardanoNodeToClientVersion18)
-      , (NodeToClientV_23, CardanoNodeToClientVersion19)
+      [(NodeToClientV_23, CardanoNodeToClientVersion19)
       ]
 
   latestReleasedNodeVersion _prx = (Just NodeToNodeV_15, Just NodeToClientV_23)

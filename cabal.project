@@ -50,8 +50,8 @@ source-repository-package
 source-repository-package
   type: git
   location: https://github.com/tweag/ouroboros-network.git
-  tag: 86b8725930a263ceddf2d7e19d60799febbf8f6f
-  --sha256: sha256-QS5M7rkeH6eqi84GsIuYZmFZ/7yLrZv/ppkud3bBnCk=
+  tag: fd1455d04feedbed759cb298cba0e6cf9d3ee201
+  --sha256: sha256-/ftn7ujOKKUj7OKXwAqpoFCfaS369nMrIOmh7amvpgU
   subdir:
     network-mux
     ouroboros-network
