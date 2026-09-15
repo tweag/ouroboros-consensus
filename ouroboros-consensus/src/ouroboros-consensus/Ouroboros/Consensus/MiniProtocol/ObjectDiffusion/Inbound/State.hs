@@ -39,6 +39,10 @@ import Ouroboros.Consensus.Util.IOLike
 data ObjectDiffusionInboundState blk = ObjectDiffusionInboundState
   { odIdling :: !Bool
   -- ^ Whether the client is currently idling
+  , odRequestBlocked :: !Bool
+  -- ^ Whether the client is waiting for local state to make the next object in
+  -- the peer's FIFO requestable. This is deliberately separate from
+  -- 'odIdling': a request-blocked client has not reached the server's front.
   }
   deriving stock Generic
 
@@ -52,6 +56,7 @@ initObjectDiffusionInboundState :: ObjectDiffusionInboundState blk
 initObjectDiffusionInboundState =
   ObjectDiffusionInboundState
     { odIdling = False
+    , odRequestBlocked = False
     }
 
 -- | An interface to an ObjectDiffusion inbound client that's used by other components.
@@ -97,6 +102,7 @@ newObjectDiffusionInboundHandleCollection = do
 -- 'bracketObjectDiffusionInbound'.
 data ObjectDiffusionInboundStateView m = ObjectDiffusionInboundStateView
   { odisvIdling :: !(Idling m)
+  , odisvSetRequestBlocked :: !(Bool -> m ())
   }
   deriving stock Generic
 
@@ -117,6 +123,8 @@ bracketObjectDiffusionInbound handles peer body = do
             { idlingStart = atomically $ modifyTVar odiState $ \s -> s{odIdling = True}
             , idlingStop = atomically $ modifyTVar odiState $ \s -> s{odIdling = False}
             }
+      , odisvSetRequestBlocked =
+          \blocked -> atomically $ modifyTVar odiState $ \s -> s{odRequestBlocked = blocked}
       }
  where
   acquireContext odiState =
