@@ -50,6 +50,11 @@ data ObjectDiffusionInboundState blk = ObjectDiffusionInboundState
   -- StMustReply)@, where the server has agency. Moreover, after
   -- @MsgServerIdle@ returns the protocol to @StIdle@, this flag deliberately
   -- remains 'True' until the server supplies new object IDs.
+  , odRequestBlocked :: !Bool
+  -- ^ Whether the client is paused because the first unrequested object ID
+  -- in the peer's advertised FIFO is not currently requestable according to
+  -- 'opwIsRequestable'. Unlike 'odIdling', this does not establish that the
+  -- client has reached the server's current object-ID front.
   }
   deriving stock Generic
 
@@ -63,6 +68,7 @@ initObjectDiffusionInboundState :: ObjectDiffusionInboundState blk
 initObjectDiffusionInboundState =
   ObjectDiffusionInboundState
     { odIdling = False
+    , odRequestBlocked = False
     }
 
 -- | An interface to an ObjectDiffusion inbound client that's used by other components.
@@ -110,6 +116,7 @@ data ObjectDiffusionInboundStateView m = ObjectDiffusionInboundStateView
   { odisvIdling :: !(Idling m)
   -- ^ Actions that record whether the client has reached the server's current
   -- object-ID front. See 'odIdling'.
+  , odisvSetRequestBlocked :: !(Bool -> m ())
   }
   deriving stock Generic
 
@@ -130,6 +137,8 @@ bracketObjectDiffusionInbound handles peer body = do
             { idlingStart = atomically $ modifyTVar odiState $ \s -> s{odIdling = True}
             , idlingStop = atomically $ modifyTVar odiState $ \s -> s{odIdling = False}
             }
+      , odisvSetRequestBlocked =
+          \blocked -> atomically $ modifyTVar odiState $ \s -> s{odRequestBlocked = blocked}
       }
  where
   acquireContext odiState =
