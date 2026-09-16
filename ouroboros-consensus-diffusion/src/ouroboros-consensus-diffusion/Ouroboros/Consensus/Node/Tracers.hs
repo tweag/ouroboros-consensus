@@ -17,12 +17,14 @@ module Ouroboros.Consensus.Node.Tracers
   , TraceForgeEvent (..)
   , TraceLabelCreds (..)
   , TracePerasCertInclusionEvent (..)
+  , TestnetTrace(..)
   ) where
 
 import Control.Exception (SomeException)
 import Control.Tracer (Tracer, nullTracer, (>$<))
 import Data.Text (Text)
 import Data.Time (UTCTime)
+import Data.Word (Word64)
 import Ouroboros.Consensus.Block
 import Ouroboros.Consensus.BlockchainTime
 import Ouroboros.Consensus.Forecast (OutsideForecastRange)
@@ -110,7 +112,21 @@ data Tracers' remotePeer localPeer blk f = Tracers
       f (TraceLabelPeer remotePeer (CSJumping.TraceEventCsj remotePeer blk))
   , dbfTracer :: f (CSJumping.TraceEventDbf remotePeer)
   , kesAgentTracer :: f KESAgentClientTrace
+  , testnetTracer :: f TestnetTrace
   }
+
+data TestnetTrace
+  = DebugLog
+      Text -- ^ log message
+  | AdvertLog
+      Int -- ^ number of certs
+      Int -- ^ number of votes
+      Int  -- ^ chain length
+      Word64  -- ^ boost
+      Word64 -- ^ slot no
+      String -- ^ block hash
+      Word64 -- ^ block no
+  deriving (Eq, Ord, Show)
 
 instance
   (forall a. Semigroup (f a)) =>
@@ -147,6 +163,7 @@ instance
       , csjTracer = f csjTracer
       , dbfTracer = f dbfTracer
       , kesAgentTracer = f kesAgentTracer
+      , testnetTracer = f testnetTracer
       }
    where
     f ::
@@ -192,6 +209,7 @@ nullTracers =
     , kesAgentTracer = nullTracer
     , txLogicTracer = nullTracer
     , txCountersTracer = nullTracer
+    , testnetTracer = nullTracer
     }
 
 showTracers ::
@@ -246,6 +264,7 @@ showTracers tr =
     , csjTracer = show >$< tr
     , dbfTracer = show >$< tr
     , kesAgentTracer = show >$< tr
+    , testnetTracer = show >$< tr
     }
 
 {-------------------------------------------------------------------------------
