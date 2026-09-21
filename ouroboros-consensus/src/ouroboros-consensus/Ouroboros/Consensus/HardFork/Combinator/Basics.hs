@@ -737,14 +737,9 @@ instance
           $ nsContextCert
 
   getPerasCertInBlock (HardForkBlock (OneEraBlock nsBlock)) =
-    bimap
-      (HardForkPerasErrorOneEraPerasError . OneEraPerasError)
-      (fmap OneEraPerasCert . hsequence')
-      . hdistribute
+    fmap OneEraPerasCert
+      . hsequence'
       . hcmap
         proxySingle
-        ( \(I block) ->
-            mkEitherF WrapPerasError (Comp . fmap WrapPerasCert) $
-              getPerasCertInBlock block
-        )
+        (\(I block) -> Comp (WrapPerasCert <$> getPerasCertInBlock block))
       $ nsBlock
