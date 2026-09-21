@@ -375,7 +375,7 @@ instance BlockSupportsPeras BlockA where
   verifyPerasVote = defaultVerifyPerasVote
   forgePerasCert = defaultForgePerasCert
   verifyPerasCert = defaultVerifyPerasCert
-  getPerasCertInBlock _ = Right Nothing
+  getPerasCertInBlock _ = Nothing
 
 instance HasPartialConsensusConfig ProtocolA
 

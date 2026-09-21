@@ -17,7 +17,6 @@ module Ouroboros.Consensus.Shelley.Ledger.Block
   , Header (..)
   , IsShelleyBlock
   , ShelleyPerasCertCompatibleWithLedger (..)
-  , LedgerPerasCertError
   , NestedCtxt_ (..)
   , ShelleyBasedEra
   , ShelleyBlock (..)
@@ -276,21 +275,12 @@ instance ShelleyCompatible proto era => HasAnnTip (ShelleyBlock proto era)
   Conversion between Peras certificates type between Ledger and Consensus
 -------------------------------------------------------------------------------}
 
--- | Error type for Ledger <=> Consensus Peras certificate conversions.
---
--- NOTE: this will disappear once we have a proper type for Peras certificates
--- in the Ledger.
-type LedgerPerasCertError = String
-
 -- | Bridge between the Peras certificates types between Consensus and Ledger
---
--- NOTE: this will disappear once we have a proper type for Peras certificates
--- in the Ledger.
 class ShelleyPerasCertCompatibleWithLedger proto era where
   -- | Extract a Peras certificate from a Shelley block body, if present
   extractPerasCertFromShelleyBlockBody ::
     BlockBody era ->
-    Either LedgerPerasCertError (Maybe (PerasCert (ShelleyBlock proto era)))
+    Maybe (PerasCert (ShelleyBlock proto era))
 
   -- | Inject a Peras certificate into a Shelley block body
   injectPerasCertIntoShelleyBlockBody ::
