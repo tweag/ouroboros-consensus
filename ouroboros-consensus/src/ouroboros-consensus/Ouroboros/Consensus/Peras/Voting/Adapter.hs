@@ -57,6 +57,7 @@ data PerasConversionError
   = EveryoneVotesButFoundNonPersistentVoterInVote SeatIndex
   | EveryoneVotesButFoundNonPersistentVotersInCert (NE [SeatIndex])
   | SeatIndexOverflowError Word64
+  | PerasCertVotersError String
   | CryptoError String
   deriving stock (Eq, Show, Generic)
   deriving anyclass NoThunks
