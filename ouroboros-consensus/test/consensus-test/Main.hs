@@ -31,7 +31,6 @@ import qualified Test.Consensus.Peras.Voting.Adapter (tests)
 import qualified Test.Consensus.Peras.Voting.Rules (tests)
 import qualified Test.Consensus.Peras.Voting.V1 (tests)
 import qualified Test.Consensus.Peras.WeightSnapshot (tests)
-import qualified Test.Consensus.Util.Bitmap (tests)
 import qualified Test.Consensus.Util.MonadSTM.NormalForm (tests)
 import qualified Test.Consensus.Util.Pred (tests)
 import qualified Test.Consensus.Util.Versioned (tests)
@@ -82,7 +81,6 @@ tests =
         , Test.Consensus.Peras.WeightSnapshot.tests
         , Test.Consensus.Peras.Serialisation.tests
         ]
-    , Test.Consensus.Util.Bitmap.tests
     , Test.Consensus.Util.MonadSTM.NormalForm.tests
     , Test.Consensus.Util.Versioned.tests
     , Test.Consensus.Util.Pred.tests

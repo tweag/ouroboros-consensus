@@ -5,28 +5,23 @@
 module Test.Consensus.Peras.Cert.V1 (tests) where
 
 import Cardano.Binary (serialize)
+import qualified Cardano.Crypto.Peras.Cert as Base
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as ByteString
 import qualified Data.ByteString.Lazy as LazyByteString
 import qualified Data.List.NonEmpty as NonEmpty
-import qualified Data.Map.NonEmpty as NEMap
 import Data.Maybe (fromMaybe)
 import Data.Proxy (Proxy (..))
 import qualified Ouroboros.Consensus.Committee.Crypto.BLS as BLS
 import Ouroboros.Consensus.Peras.Cert.V1
   ( PerasCert (..)
-  , PerasCertVoters (..)
   , perasCertNumberOfNonPersistentVoters
   , perasCertNumberOfVoters
   , perasCertSizeUpperBound
   )
-import Ouroboros.Consensus.Peras.Crypto.BLS (VRFOutput (..))
 import Ouroboros.Consensus.Peras.Types
   ( PerasCertSize (..)
   , PerasSeatIndex (..)
-  )
-import Ouroboros.Consensus.Peras.Vote.V1
-  ( PerasVoteEligibilityProof (..)
   )
 import Test.QuickCheck.Gen (chooseInt)
 import Test.Tasty (TestTree, testGroup)
@@ -92,29 +87,25 @@ genPerasCertWithCustomVoters = do
   baseCert <- genPerasCert False
   persistentVoters <- chooseInt (1, 1000)
   nonPersistentVoters <- chooseInt (0, 3000)
-  pure $
-    baseCert
-      { pcVoters =
-          PerasCertVoters
-            . NEMap.fromList
-            . fromMaybe (error "test certificates require at least one voter")
-            . NonEmpty.nonEmpty
-            $ [ (seatIndex voter, PersistentPerasVoteEligibilityProof)
-              | voter <- [0 .. persistentVoters - 1]
-              ]
-              <> [ ( seatIndex voter
-                   , NonPersistentPerasVoteEligibilityProof proof
-                   )
-                 | voter <-
-                     [ persistentVoters
-                     .. persistentVoters + nonPersistentVoters - 1
-                     ]
-                 ]
-      }
+  let voters =
+        either error id
+          . Base.perasCertVotersFromSeats
+          . fromMaybe (error "test certificates require at least one voter")
+          . NonEmpty.nonEmpty
+          $ [ (seatIndex voter, Nothing)
+            | voter <- [0 .. persistentVoters - 1]
+            ]
+            <> [ (seatIndex voter, Just proof)
+               | voter <-
+                   [ persistentVoters
+                   .. persistentVoters + nonPersistentVoters - 1
+                   ]
+               ]
+  pure $ PerasCert (unPerasCert baseCert){Base.pcVoters = voters}
  where
   proof =
-    PerasBLSCryptoVRFOutput $
-      BLS.signWithRole
+    Base.PerasVRFOutput . BLS.rawSignature $
+      BLS.signWithRole @BLS.VRF
         (privateKey (Proxy @BLS.VRF))
         ("proof" :: ByteString)
   privateKey _ =
