@@ -252,7 +252,7 @@ does not support Peras, we use the void Peras types and default implementations.
 >   verifyPerasVote = defaultVerifyPerasVote
 >   forgePerasCert = defaultForgePerasCert
 >   verifyPerasCert = defaultVerifyPerasCert
->   getPerasCertInBlock _ = Right Nothing
+>   getPerasCertInBlock _ = Nothing
 
 Then we define a function `computeBlockHash` which computes a `Hash` for a
 `BlockD` - basically aggregating all the data in the block besides the hash

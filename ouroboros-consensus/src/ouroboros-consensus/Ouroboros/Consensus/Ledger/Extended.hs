@@ -382,11 +382,6 @@ applyHelper f opts cfg blk TickedExtLedgerState{..} = do
     (\l -> ExtLedgerState l hdr perasState) <$> castLedgerResult ledgerResult
 
 -- | Extract and validate a Peras certificate from a block, if it exists.
---
--- This can fail in several ways:
--- 1. The block contains a Peras certificate that cannot be deserialized (temporary).
--- 2. The certificate claims to be from a round we cannot resolve.
--- 3. The certificate is invalid in the epoch resolved for its round.
 extractAndValidatePerasCertFromBlock ::
   forall blk.
   BlockSupportsPeras blk =>
@@ -394,7 +389,7 @@ extractAndValidatePerasCertFromBlock ::
   blk ->
   Except (LedgerErr ExtLedgerState blk) (Maybe (ValidatedPerasCert blk))
 extractAndValidatePerasCertFromBlock perasResolver blk = do
-  getPerasCertInBlockOrFail blk >>= \case
+  case getPerasCertInBlock blk of
     Nothing ->
       pure Nothing
     Just cert -> do
@@ -402,11 +397,6 @@ extractAndValidatePerasCertFromBlock perasResolver blk = do
       context <- resolveRoundNoOrFail roundNo
       Just <$> verifyPerasCertOrFail context cert
  where
-  getPerasCertInBlockOrFail =
-    withExcept ExtValidationErrorPerasCertInBlock
-      . except
-      . getPerasCertInBlock
-
   resolveRoundNoOrFail =
     withExcept ExtValidationErrorPerasEpochContextResolver
       . except

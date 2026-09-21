@@ -49,6 +49,7 @@ import Ouroboros.Consensus.Shelley.Ledger.Config
   )
 import Ouroboros.Consensus.Shelley.Ledger.Integrity
 import Ouroboros.Consensus.Shelley.Ledger.Mempool
+import Ouroboros.Consensus.Shelley.Node.Peras (setShelleyBlockBodyPerasCert)
 import Ouroboros.Consensus.Shelley.Protocol.Abstract
   ( ProtoCrypto
   , ProtocolHeaderSupportsKES (configSlotsPerKESPeriod)
@@ -121,6 +122,7 @@ forgeShelleyBlock
       SL.mkBasicBlockBody
         & SL.txSeqBlockBodyL
           .~ Seq.fromList (fmap extractTx fbTxs)
+        & setShelleyBlockBodyPerasCert @proto fbPerasCert
 
     actualBodySize = SL.blockBodySize protocolVersion body
 
