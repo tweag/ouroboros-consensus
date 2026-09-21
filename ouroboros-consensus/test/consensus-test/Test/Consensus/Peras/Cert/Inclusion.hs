@@ -124,7 +124,7 @@ needCertModel
           getPerasCertRound (lcsCert latestCertSeen) > lcocRoundNo lcoc
 
     _A =
-      PerasRoundNo $
+      PerasRoundNo . fromIntegral $
         unPerasCertMaxRounds $
           perasCertMaxRounds $
             perasParams

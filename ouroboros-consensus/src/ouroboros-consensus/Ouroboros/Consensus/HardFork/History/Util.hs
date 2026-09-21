@@ -29,7 +29,7 @@ addEpochs :: Word64 -> EpochNo -> EpochNo
 addEpochs n (EpochNo x) = EpochNo (x + n)
 
 addPerasRounds :: Word64 -> PerasRoundNo -> PerasRoundNo
-addPerasRounds n (PerasRoundNo x) = PerasRoundNo (x + n)
+addPerasRounds n (PerasRoundNo x) = PerasRoundNo (x + fromIntegral n)
 
 -- | @countSlots to fr@ counts the slots from @fr@ to @to@ (@to >= fr@)
 countSlots :: HasCallStack => SlotNo -> SlotNo -> Word64
@@ -44,6 +44,6 @@ countEpochs (EpochNo to) (EpochNo fr) = assert (to >= fr) $ to - fr
   _ = keepRedundantConstraint (Proxy :: Proxy HasCallStack)
 
 countPerasRounds :: HasCallStack => PerasRoundNo -> PerasRoundNo -> Word64
-countPerasRounds (PerasRoundNo to) (PerasRoundNo fr) = assert (to >= fr) $ to - fr
+countPerasRounds (PerasRoundNo to) (PerasRoundNo fr) = assert (to >= fr) $ fromIntegral to - fromIntegral fr
  where
   _ = keepRedundantConstraint (Proxy :: Proxy HasCallStack)
