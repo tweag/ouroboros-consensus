@@ -18,10 +18,8 @@ module Test.Util.Peras.V1
   ) where
 
 import Cardano.Crypto.Hash (ByteString)
-import Cardano.Ledger.BaseTypes (SlotNo (..))
 import Control.Monad (forM)
 import qualified Data.ByteString as ByteString
-import qualified Data.ByteString.Short as ShortByteString
 import qualified Data.List.NonEmpty as NonEmpty
 import qualified Data.Map.NonEmpty as NEMap
 import Data.Maybe (catMaybes, fromMaybe)
@@ -30,8 +28,6 @@ import Data.String (IsString (..))
 import Data.Traversable (mapAccumM)
 import Data.Word (Word8)
 import GHC.Word (Word16)
-import Ouroboros.Consensus.Block.Abstract (WithOrigin (..))
-import Ouroboros.Consensus.Block.RealPoint (Bytes32RealPoint (..))
 import qualified Ouroboros.Consensus.Committee.Crypto.BLS as BLS
 import qualified Ouroboros.Consensus.Peras.Cert.V1 as V1
 import Ouroboros.Consensus.Peras.Crypto.BLS
@@ -44,6 +40,7 @@ import Ouroboros.Consensus.Peras.Types
   , PerasSeatIndex (..)
   )
 import qualified Ouroboros.Consensus.Peras.Vote.V1 as V1
+import qualified Test.Cardano.Crypto.Peras.Gen as Gen
 import Test.QuickCheck
   ( Arbitrary (..)
   , Gen
@@ -81,18 +78,7 @@ perasCertContainsOnlyPersistentVotes cert =
     )
 
 genBoostedBlock :: Gen PerasBoostedBlock
-genBoostedBlock =
-  PerasBoostedBlock <$> genWithOrigin genBytes32RealPoint
- where
-  genWithOrigin gen =
-    frequency
-      [ (1, pure Origin)
-      , (9, NotOrigin <$> gen)
-      ]
-  genBytes32RealPoint = do
-    slotNo <- SlotNo <$> arbitrary
-    hash <- ShortByteString.pack <$> vectorOf 32 arbitrary
-    pure $ Bytes32RealPoint slotNo hash
+genBoostedBlock = Gen.genPerasBoostedBlock
 
 genPrivateKey :: Proxy r -> Gen (BLS.PrivateKey r)
 genPrivateKey _ =
