@@ -29,6 +29,8 @@ module Ouroboros.Consensus.Committee.Crypto.BLS
   , rawSerialisePublicKey
   , coercePublicKey
   , Signature
+  , mkSignature
+  , rawSignature
   , ProofOfPossession
   , mkProofOfPossession
   , rawProofOfPossession
@@ -190,6 +192,16 @@ newtype Signature r = Signature
   deriving stock (Show, Eq, Generic)
   deriving newtype (FromCBOR, ToCBOR)
   deriving anyclass NoThunks
+
+mkSignature ::
+  SigDSIGN BLS12381MinSigDSIGN ->
+  Signature r
+mkSignature = Signature
+
+rawSignature ::
+  Signature r ->
+  SigDSIGN BLS12381MinSigDSIGN
+rawSignature = unSignature
 
 -- | BLS proof of possession type
 newtype ProofOfPossession = ProofOfPossession
