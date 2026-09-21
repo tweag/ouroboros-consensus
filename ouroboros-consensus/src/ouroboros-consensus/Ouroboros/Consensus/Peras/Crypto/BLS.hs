@@ -37,6 +37,7 @@ import Cardano.Binary
 import Cardano.Crypto.DSIGN (BLS12381MinSigDSIGN, DSIGNAlgorithm (..))
 import Cardano.Crypto.Hash (Hash)
 import qualified Cardano.Crypto.Hash as Hash
+import Cardano.Crypto.Peras (PerasBlockRef (..))
 import Cardano.Ledger.BaseTypes (Nonce (..), SlotNo (..))
 import Cardano.Ledger.Binary (runByteBuilder)
 import Cardano.Ledger.Hashes (HASH)
@@ -47,10 +48,6 @@ import GHC.Base (Any)
 import GHC.Generics (Generic)
 import NoThunks.Class (NoThunks)
 import Ouroboros.Consensus.Block.Abstract (WithOrigin (..))
-import Ouroboros.Consensus.Block.RealPoint
-  ( bytes32RealPointHash
-  , bytes32RealPointSlot
-  )
 import Ouroboros.Consensus.Block.SupportsPeras
   ( PerasBoostedBlock (..)
   , PerasRoundNo (..)
@@ -134,6 +131,7 @@ hashVoteSignature roundNo boostedBlock =
  where
   roundNoBytes =
     BS.word64BE
+      . fromIntegral
       . unPerasRoundNo
       $ roundNo
   boostedBlockBytes =
@@ -141,17 +139,17 @@ hashVoteSignature roundNo boostedBlock =
       Origin ->
         mempty
       NotOrigin point ->
-        bytes32RealPointSlotBytes point
-          <> bytes32RealPointHashBytes point
+        blockRefSlotBytes point
+          <> blockRefHashBytes point
 
-  bytes32RealPointSlotBytes =
+  blockRefSlotBytes =
     BS.word64BE
       . unSlotNo
-      . bytes32RealPointSlot
-  bytes32RealPointHashBytes =
+      . pbrSlot
+  blockRefHashBytes =
     BS.byteStringCopy
       . BS.fromShort
-      . bytes32RealPointHash
+      . pbrHash
 
 -- | Hash the input for the VRF used in Peras elections
 --
@@ -168,7 +166,7 @@ hashVRFInput roundNo epochNonce =
     $ roundNoBytes <> epochNonceBytes
  where
   roundNoBytes =
-    BS.word64BE (unPerasRoundNo roundNo)
+    BS.word64BE (fromIntegral (unPerasRoundNo roundNo))
   epochNonceBytes =
     case epochNonce of
       NeutralNonce -> mempty

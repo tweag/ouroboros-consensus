@@ -277,7 +277,7 @@ latestCertSeenIsNotExpired
       lcsCertRound latestCertSeen
 
     _A =
-      PerasRoundNo $
+      PerasRoundNo . fromIntegral $
         unPerasCertMaxRounds $
           perasCertMaxRounds $
             perasParams
