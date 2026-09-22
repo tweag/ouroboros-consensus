@@ -86,6 +86,7 @@ data ObjectDiffusionInboundError objectId object
   | ProtocolErrorObjectIdsNotRequested Int Int
   | ProtocolErrorObjectIdsAlreadyKnown (Set objectId)
   | ProtocolErrorObjectIdsDuplicate (Map objectId Int)
+  | ProtocolErrorObjectIdTooOld objectId
   deriving Show
 
 instance
@@ -109,6 +110,9 @@ instance
   displayException (ProtocolErrorObjectIdsDuplicate offenders) =
     "The peer replied with a batch of objectIds containing duplicates: "
       ++ show offenders
+  displayException (ProtocolErrorObjectIdTooOld objectId) =
+    "The peer advertised an objectId that is older than the local validation horizon: "
+      ++ show objectId
 
 -- | Information maintained internally in the 'objectDiffusionInbound'
 -- implementation.
@@ -145,10 +149,14 @@ data InboundSt objectId object = InboundSt
 initialInboundSt :: InboundSt objectId object
 initialInboundSt = InboundSt 0 Seq.empty Set.empty Map.empty 0
 
-data RequestSelection objectId = RequestSelection
+data RequestablePrefix objectId = RequestablePrefix
   { selectedObjectIds :: ![objectId]
   , blockedAtObjectId :: !(Maybe objectId)
   }
+
+data RequestSelection objectId
+  = RequestSelection !(RequestablePrefix objectId)
+  | RequestSelectionTooOld !objectId
 
 objectDiffusionInbound ::
   forall objectId object m.
@@ -184,23 +192,27 @@ objectDiffusionInbound
       InboundSt objectId object ->
       STM m (RequestSelection objectId)
     selectObjectsToRequest !st = do
-      isRequestable <- opwIsRequestable
+      classifyObjectId <- opwClassifyObjectId
       let unrequestedInFifo =
             filter
               (`Set.member` canRequestNext st)
               (toList (outstandingFifo st))
-          (requestablePrefix, blockedSuffix) =
-            break (not . isRequestable) unrequestedInFifo
-      pure $
-        RequestSelection
-          { selectedObjectIds =
-              take
-                (fromIntegral maxNumObjectsToReq)
-                requestablePrefix
-          , blockedAtObjectId = case blockedSuffix of
-              [] -> Nothing
-              blockedId : _ -> Just blockedId
-          }
+          finish requestablePrefix blockedId =
+            RequestSelection $
+              RequestablePrefix
+                { selectedObjectIds =
+                    take
+                      (fromIntegral maxNumObjectsToReq)
+                      (reverse requestablePrefix)
+                , blockedAtObjectId = blockedId
+                }
+          select requestablePrefix = \case
+            [] -> finish requestablePrefix Nothing
+            objectId : objectIds -> case classifyObjectId objectId of
+              ObjectIdTooOld -> RequestSelectionTooOld objectId
+              ObjectIdRequestable -> select (objectId : requestablePrefix) objectIds
+              ObjectIdTooNew -> finish requestablePrefix (Just objectId)
+      pure $ select [] unrequestedInFifo
 
     -- Computes how many new IDs we can request so that receiving all of them
     -- won't make 'outstandingFifo' exceed 'maxFifoLength'.
@@ -291,58 +303,63 @@ objectDiffusionInbound
         -- Otherwise, we can continue the protocol normally.
         _continue -> do
           requestSelection <- atomically $ selectObjectsToRequest st
-          case n of
-            -- We didn't pipeline any requests, so there are no replies in flight
-            -- (nothing to collect).
-            Zero ->
-              if not (null (selectedObjectIds requestSelection))
-                then do
-                  -- Do not request more IDs when we already know that a later
-                  -- entry in the FIFO is blocked.
-                  traceWith tracer $
-                    TraceObjectDiffusionInboundCanRequestMoreObjects (natToInt n)
-                  pure $!
-                    checkState st
-                      & if blockedAtObjectId requestSelection == Nothing
-                        then goReqObjectsAndObjectIdsPipelined Zero requestSelection
-                        else goReqObjectsPipelined Zero requestSelection
-                else do
-                  traceWith tracer $
-                    TraceObjectDiffusionInboundCannotRequestMoreObjects (natToInt n)
-                  case blockedAtObjectId requestSelection of
-                    Just blockedId ->
-                      waitForRequestableObject blockedId st
-                    Nothing ->
-                      -- There are no replies in flight and no more objects to
-                      -- request, so request more IDs in a blocking call.
-                      pure $! checkState st & goReqObjectIdsBlocking
+          case requestSelection of
+            RequestSelectionTooOld objectId ->
+              throwIO $
+                ProtocolErrorObjectIdTooOld @objectId @object objectId
+            RequestSelection requestablePrefix ->
+              case n of
+                -- We didn't pipeline any requests, so there are no replies in flight
+                -- (nothing to collect).
+                Zero ->
+                  if not (null (selectedObjectIds requestablePrefix))
+                    then do
+                      -- Do not request more IDs when we already know that a later
+                      -- entry in the FIFO is blocked.
+                      traceWith tracer $
+                        TraceObjectDiffusionInboundCanRequestMoreObjects (natToInt n)
+                      pure $!
+                        checkState st
+                          & if blockedAtObjectId requestablePrefix == Nothing
+                            then goReqObjectsAndObjectIdsPipelined Zero requestablePrefix
+                            else goReqObjectsPipelined Zero requestablePrefix
+                    else do
+                      traceWith tracer $
+                        TraceObjectDiffusionInboundCannotRequestMoreObjects (natToInt n)
+                      case blockedAtObjectId requestablePrefix of
+                        Just blockedId ->
+                          waitForRequestableObject blockedId st
+                        Nothing ->
+                          -- There are no replies in flight and no more objects to
+                          -- request, so request more IDs in a blocking call.
+                          pure $! checkState st & goReqObjectIdsBlocking
 
-            -- We have pipelined some requests, so there are replies in flight.
-            Succ n' ->
-              if not (null (selectedObjectIds requestSelection))
-                then do
-                  -- Eagerly collect available replies, but keep requesting the
-                  -- available object prefix rather than blocking on those replies.
-                  traceWith tracer $
-                    TraceObjectDiffusionInboundCanRequestMoreObjects (natToInt n)
-                  let next =
-                        if blockedAtObjectId requestSelection == Nothing
-                          then goReqObjectsAndObjectIdsPipelined (Succ n') requestSelection
-                          else goReqObjectsPipelined (Succ n') requestSelection
-                  pure $!
-                    CollectPipelined
-                      (Just (checkState st & next))
-                      (\collected -> checkState st & goCollect n' collected)
-                else do
-                  traceWith tracer $
-                    TraceObjectDiffusionInboundCannotRequestMoreObjects (natToInt n)
-                  -- Do not pipeline more ID requests here: doing so could fill
-                  -- the pipeline without bound. Collecting also drains replies
-                  -- before waiting at a locally blocked object ID.
-                  pure $!
-                    CollectPipelined
-                      Nothing
-                      (\collected -> checkState st & goCollect n' collected)
+                -- We have pipelined some requests, so there are replies in flight.
+                Succ n' ->
+                  if not (null (selectedObjectIds requestablePrefix))
+                    then do
+                      -- Eagerly collect available replies, but keep requesting the
+                      -- available object prefix rather than blocking on those replies.
+                      traceWith tracer $
+                        TraceObjectDiffusionInboundCanRequestMoreObjects (natToInt n)
+                      let next =
+                            if blockedAtObjectId requestablePrefix == Nothing
+                              then goReqObjectsAndObjectIdsPipelined (Succ n') requestablePrefix
+                              else goReqObjectsPipelined (Succ n') requestablePrefix
+                      pure $!
+                        CollectPipelined
+                          (Just (checkState st & next))
+                          (\collected -> checkState st & goCollect n' collected)
+                    else do
+                      traceWith tracer $
+                        TraceObjectDiffusionInboundCannotRequestMoreObjects (natToInt n)
+                      -- Do not pipeline more ID requests here: doing so could fill
+                      -- the pipeline without bound. Collecting also drains replies
+                      -- before waiting at a locally blocked object ID.
+                      pure $!
+                        CollectPipelined
+                          Nothing
+                          (\collected -> checkState st & goCollect n' collected)
 
     waitForRequestableObject ::
       objectId ->
@@ -354,22 +371,29 @@ objectDiffusionInbound
       mRequestSelection <-
         timeoutWithControlMessage controlMessageSTM $ do
           requestSelection <- selectObjectsToRequest st
-          check $ not (null (selectedObjectIds requestSelection))
-          pure requestSelection
+          case requestSelection of
+            RequestSelectionTooOld{} -> pure requestSelection
+            RequestSelection (RequestablePrefix selectedObjectIds _) -> do
+              check $ not (null selectedObjectIds)
+              pure requestSelection
       case mRequestSelection of
         Nothing -> do
           odisvSetRequestBlocked stateView False
           traceWith tracer $
             TraceObjectDiffusionInboundRecvControlMessage Terminate
           pure $! terminateAfterDrain Zero
-        Just requestSelection -> do
+        Just (RequestSelectionTooOld objectId) -> do
+          odisvSetRequestBlocked stateView False
+          throwIO $
+            ProtocolErrorObjectIdTooOld @objectId @object objectId
+        Just (RequestSelection requestablePrefix) -> do
           odisvSetRequestBlocked stateView False
           traceWith tracer $ TraceObjectDiffusionInboundUnblocked blockedId
           pure $!
             checkState st
-              & if blockedAtObjectId requestSelection == Nothing
-                then goReqObjectsAndObjectIdsPipelined Zero requestSelection
-                else goReqObjectsPipelined Zero requestSelection
+              & if blockedAtObjectId requestablePrefix == Nothing
+                then goReqObjectsAndObjectIdsPipelined Zero requestablePrefix
+                else goReqObjectsPipelined Zero requestablePrefix
 
     goCollect ::
       forall (n :: N).
@@ -537,7 +561,7 @@ objectDiffusionInbound
     goReqObjectsPipelined ::
       forall (n :: N).
       Nat n ->
-      RequestSelection objectId ->
+      RequestablePrefix objectId ->
       InboundSt objectId object ->
       InboundStIdle n objectId object m ()
     goReqObjectsPipelined n requestSelection !st =
@@ -554,7 +578,7 @@ objectDiffusionInbound
     goReqObjectsAndObjectIdsPipelined ::
       forall (n :: N).
       Nat n ->
-      RequestSelection objectId ->
+      RequestablePrefix objectId ->
       InboundSt objectId object ->
       InboundStIdle n objectId object m ()
     goReqObjectsAndObjectIdsPipelined n requestSelection !st =

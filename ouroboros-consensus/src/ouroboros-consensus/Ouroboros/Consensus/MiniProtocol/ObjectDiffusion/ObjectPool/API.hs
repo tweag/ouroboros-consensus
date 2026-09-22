@@ -27,6 +27,7 @@
 module Ouroboros.Consensus.MiniProtocol.ObjectDiffusion.ObjectPool.API
   ( ObjectPoolReader (..)
   , ObjectPoolWriter (..)
+  , ObjectIdRequestability (..)
 
     -- * Invariants
   , prop_objectsAfterAreGreaterThanTicket
@@ -37,6 +38,14 @@ import Control.Concurrent.Class.MonadSTM.Strict (MonadSTM (..), STM)
 import Data.Map (Map)
 import qualified Data.Map.Strict as Map
 import Data.Word (Word64)
+
+-- | Whether an advertised object ID can be requested at the client's current
+-- validation horizon.
+data ObjectIdRequestability
+  = ObjectIdTooOld
+  | ObjectIdRequestable
+  | ObjectIdTooNew
+  deriving (Eq, Show)
 
 -- | Interface used by the outbound side of object diffusion as its source of
 -- objects to give to the remote side.
@@ -70,10 +79,11 @@ data ObjectPoolWriter objectId object m
   -- ^ Add a batch of objects to the objectPool.
   , opwHasObject :: STM m (objectId -> Bool)
   -- ^ Check if the object pool contains an object with the given id
-  , opwIsRequestable :: STM m (objectId -> Bool)
-  -- ^ Check whether an advertised object can currently be requested. The
-  -- inbound client requests objects in FIFO order and waits at the first ID
-  -- for which this predicate returns 'False'.
+  , opwClassifyObjectId :: STM m (objectId -> ObjectIdRequestability)
+  -- ^ Classify advertised object IDs using a consistent snapshot of the local
+  -- validation state. The inbound client requests IDs classified as
+  -- 'ObjectIdRequestable', waits at the first 'ObjectIdTooNew', and rejects a
+  -- peer that advertises an 'ObjectIdTooOld'.
   }
 
 -- * Invariants

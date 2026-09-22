@@ -25,11 +25,12 @@ import Network.TypedProtocol.Codec (AnyMessage)
 import Network.TypedProtocol.Driver.Simple (runPeer, runPipelinedPeer)
 import NoThunks.Class (NoThunks)
 import Ouroboros.Consensus.MiniProtocol.ObjectDiffusion.Inbound
-  ( TraceObjectDiffusionInbound
-      ( TraceObjectDiffusionInboundBlocked
-      , TraceObjectDiffusionInboundServerIdle
-      , TraceObjectDiffusionInboundUnblocked
-      )
+  ( ObjectDiffusionInboundError (ProtocolErrorObjectIdTooOld)
+  , TraceObjectDiffusionInbound
+    ( TraceObjectDiffusionInboundBlocked
+    , TraceObjectDiffusionInboundServerIdle
+    , TraceObjectDiffusionInboundUnblocked
+    )
   , objectDiffusionInbound
   )
 import Ouroboros.Consensus.MiniProtocol.ObjectDiffusion.Inbound.State
@@ -40,7 +41,8 @@ import Ouroboros.Consensus.MiniProtocol.ObjectDiffusion.Inbound.State
       )
   )
 import Ouroboros.Consensus.MiniProtocol.ObjectDiffusion.ObjectPool.API
-  ( ObjectPoolReader (..)
+  ( ObjectIdRequestability (..)
+  , ObjectPoolReader (..)
   , ObjectPoolWriter (..)
   )
 import Ouroboros.Consensus.MiniProtocol.ObjectDiffusion.Outbound (objectDiffusionOutbound)
@@ -52,6 +54,7 @@ import Ouroboros.Consensus.Util.IOLike
   , StrictTVar
   , modifyTVar
   , readTVar
+  , try
   , uncheckedNewTVarM
   , writeTVar
   )
@@ -100,6 +103,9 @@ tests =
     , testProperty
         "ObjectDiffusion can terminate while locally blocked"
         prop_terminate_while_blocked
+    , testProperty
+        "ObjectDiffusion rejects object IDs below the validation horizon"
+        prop_reject_too_old_object_id
     ]
 
 {-------------------------------------------------------------------------------
@@ -151,7 +157,7 @@ makeObjectPoolWriter (SmokeObjectPool poolContentTvar) =
     , opwHasObject = do
         poolContent <- readTVar poolContentTvar
         pure $ \objectId -> any (\obj -> getSmokeObjectId obj == objectId) poolContent
-    , opwIsRequestable = pure $ const True
+    , opwClassifyObjectId = pure $ const ObjectIdRequestable
     }
 
 mkMockPoolInterfaces ::
@@ -372,7 +378,7 @@ prop_await_after_commit =
                 inboundObjects <- readTVar inboundObjectsVar
                 pure $ \objectId ->
                   any ((== objectId) . getSmokeObjectId) inboundObjects
-            , opwIsRequestable = pure $ const True
+            , opwClassifyObjectId = pure $ const ObjectIdRequestable
             }
         inbound =
           objectDiffusionInbound
@@ -603,9 +609,12 @@ prop_request_eligible_prefix =
             }
         inboundWriter =
           (makeObjectPoolWriter inboundPool)
-            { opwIsRequestable = do
+            { opwClassifyObjectId = do
                 upperBound <- readTVar requestableUpperBound
-                pure $ \(SmokeObjectId objectId) -> objectId < upperBound
+                pure $ \(SmokeObjectId objectId) ->
+                  if objectId < upperBound
+                    then ObjectIdRequestable
+                    else ObjectIdTooNew
             }
         inbound =
           objectDiffusionInbound
@@ -710,7 +719,7 @@ prop_terminate_while_blocked =
           _ -> pure ()
         inboundWriter =
           (makeObjectPoolWriter inboundPool)
-            { opwIsRequestable = pure $ const False
+            { opwClassifyObjectId = pure $ const ObjectIdTooNew
             }
         inbound =
           objectDiffusionInbound
@@ -763,6 +772,93 @@ prop_terminate_while_blocked =
 
       inboundObjects <- atomically $ readTVar inboundObjectsVar
       pure (mBlocked, mTerminated, inboundObjects)
+
+-- | An object ID below the validation horizon can never become requestable.
+-- Reject the peer instead of waiting indefinitely or acknowledging the ID.
+prop_reject_too_old_object_id :: Property
+prop_reject_too_old_object_id =
+  case runSimStrictShutdown simulation of
+    Right (Just (Left (ProtocolErrorObjectIdTooOld rejectedId)), inboundObjects) ->
+      rejectedId === objectId
+        .&&. inboundObjects === []
+    Right result ->
+      counterexample ("unexpected simulation result: " ++ show result) $ property False
+    Left err -> counterexample (show err) $ property False
+ where
+  objectId = SmokeObjectId 1
+  object = SmokeObject objectId
+
+  simulation ::
+    forall s.
+    IOSim
+      s
+      ( Maybe
+          ( Either
+              (ObjectDiffusionInboundError SmokeObjectId SmokeObject)
+              ()
+          )
+      , [SmokeObject]
+      )
+  simulation = do
+    let maxFifoSize = NumObjectsUnacknowledged 5
+        maxIdsToReq = NumObjectIdsReq 1
+        maxObjectsToReq = NumObjectsReq 1
+
+    outboundPool <- newObjectPool [object]
+    inboundPool@(SmokeObjectPool inboundObjectsVar) <- newObjectPool []
+    controlMessage <- uncheckedNewTVarM Continue
+    inboundResult <- uncheckedNewTVarM Nothing
+
+    let inboundWriter =
+          (makeObjectPoolWriter inboundPool)
+            { opwClassifyObjectId = pure $ const ObjectIdTooOld
+            }
+        inbound =
+          objectDiffusionInbound
+            nullTracer
+            (maxFifoSize, maxIdsToReq, maxObjectsToReq)
+            inboundWriter
+            nodeToNodeVersion
+            (readTVar controlMessage)
+            ObjectDiffusionInboundStateView
+              { odisvIdling = Idling.noIdling
+              , odisvSetRequestBlocked = \_ -> pure ()
+              }
+        outbound =
+          objectDiffusionOutbound
+            nullTracer
+            maxFifoSize
+            1
+            (makeObjectPoolReader outboundPool)
+            nodeToNodeVersion
+
+    result <- withRegistry $ \reg -> do
+      (outboundChannel, inboundChannel) <- createConnectedChannels
+      _outboundThread <-
+        forkLinkedThread reg "ObjectDiffusion too-old outbound peer" $
+          runPeer
+            nullTracer
+            codecObjectDiffusionId
+            outboundChannel
+            (objectDiffusionOutboundPeer outbound)
+      _inboundThread <-
+        forkLinkedThread reg "ObjectDiffusion too-old inbound peer" $ do
+          peerResult <- try $ do
+            _ <-
+              runPipelinedPeer
+                nullTracer
+                codecObjectDiffusionId
+                inboundChannel
+                (objectDiffusionInboundPeerPipelined inbound)
+            pure ()
+          atomically $ writeTVar inboundResult $ Just peerResult
+
+      timeout 1 $ atomically $ do
+        result <- readTVar inboundResult
+        maybe retry pure result
+
+    inboundObjects <- atomically $ readTVar inboundObjectsVar
+    pure (result, inboundObjects)
 
 --- The core logic of the smoke test is shared between the generic smoke tests for ObjectDiffusion, and the ones specialised to PerasCert/PerasVote diffusion
 prop_smoke_object_diffusion ::

@@ -27,7 +27,8 @@ import Ouroboros.Consensus.BlockchainTime.WallClock.Types
   , WithArrivalTime (..)
   )
 import Ouroboros.Consensus.MiniProtocol.ObjectDiffusion.ObjectPool.API
-  ( ObjectPoolReader (..)
+  ( ObjectIdRequestability (..)
+  , ObjectPoolReader (..)
   , ObjectPoolWriter (..)
   )
 import Ouroboros.Consensus.Peras.Context
@@ -130,7 +131,7 @@ makeTestPerasCertPoolWriterFromCertDB systemTime perasCertDB resolverHandle =
     , opwHasObject = do
         certIds <- PerasCertDB.getCertIds perasCertDB
         pure $ \roundNo -> Set.member roundNo certIds
-    , opwIsRequestable = perasCertIsRequestable resolverHandle
+    , opwClassifyObjectId = perasCertRequestability resolverHandle
     }
 
 -- | Create a pool writer from the 'ChainDB'. This properly handles any needed
@@ -161,22 +162,28 @@ makePerasCertPoolWriterFromChainDB systemTime chainDB =
         , opwHasObject = do
             certIds <- ChainDB.getPerasCertIds chainDB
             pure $ \roundNo -> Set.member roundNo certIds
-        , opwIsRequestable = perasCertIsRequestable resolverHandle
+        , opwClassifyObjectId = perasCertRequestability resolverHandle
         }
 
--- | Certificates are advertised in arrival order. Only request the prefix for
--- which the local ledger currently provides epoch contexts: asking for a later
--- certificate would make validation fail before the ledger catches up.
+-- | Classify certificate IDs against the epoch-context window. Certificates
+-- within the window can be requested, while certificates ahead of the window
+-- must wait until the ledger catches up.
 --
 -- An honest peer does not advertise certificates below the lower bound because
 -- they boost immutable blocks. Such an advertisement therefore violates the
--- expected ordering and should cause the inbound client to reject the peer,
+-- expected ordering and causes the inbound client to reject the peer,
 -- rather than silently acknowledge the certificate.
-perasCertIsRequestable ::
+perasCertRequestability ::
   MonadSTM m =>
   PerasEpochContextResolverHandle m blk ->
-  STM m (PerasRoundNo -> Bool)
-perasCertIsRequestable resolverHandle = do
+  STM m (PerasRoundNo -> ObjectIdRequestability)
+perasCertRequestability resolverHandle = do
   resolver <- getPerasEpochContextResolver resolverHandle
   let (lowerBound, upperBound) = perasEpochContextResolverBounds resolver
-  pure $ \roundNo -> lowerBound <= roundNo && roundNo < upperBound
+  pure $ \roundNo ->
+    if roundNo < lowerBound
+      then ObjectIdTooOld
+      else
+        if roundNo < upperBound
+          then ObjectIdRequestable
+          else ObjectIdTooNew
