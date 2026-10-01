@@ -2520,6 +2520,7 @@ perasCertMetricsPrefix = "perasCert"
 perasVoteMetricsPrefix = "perasVote"
 
 forMachineObjectDiffusionInbound ::
+  Show objectId =>
   TraceObjectDiffusionInbound objectId object ->
   Aeson.Object
 forMachineObjectDiffusionInbound = \case
@@ -2547,6 +2548,16 @@ forMachineObjectDiffusionInbound = \case
     mconcat
       [ "kind" .= String "TraceObjectDiffusionInboundCannotRequestMoreObjects"
       , "payload" .= String (Text.pack . show $ payload)
+      ]
+  TraceObjectDiffusionInboundBlocked objectId ->
+    mconcat
+      [ "kind" .= String "TraceObjectDiffusionInboundBlocked"
+      , "payload" .= String (Text.pack . show $ objectId)
+      ]
+  TraceObjectDiffusionInboundUnblocked objectId ->
+    mconcat
+      [ "kind" .= String "TraceObjectDiffusionInboundUnblocked"
+      , "payload" .= String (Text.pack . show $ objectId)
       ]
 
 asMetricsObjectDiffusionInbound ::
@@ -2593,6 +2604,10 @@ namespaceForObjectDiffusionInbound = \case
     Namespace [] ["TraceObjectDiffusionInboundCanRequestMoreObjects"]
   TraceObjectDiffusionInboundCannotRequestMoreObjects _ ->
     Namespace [] ["TraceObjectDiffusionInboundCannotRequestMoreObjects"]
+  TraceObjectDiffusionInboundBlocked _ ->
+    Namespace [] ["TraceObjectDiffusionInboundBlocked"]
+  TraceObjectDiffusionInboundUnblocked _ ->
+    Namespace [] ["TraceObjectDiffusionInboundUnblocked"]
 
 documentForObjectDiffusionInbound :: Namespace a -> Maybe Text.Text
 documentForObjectDiffusionInbound = \case
@@ -2615,6 +2630,10 @@ documentForObjectDiffusionInbound = \case
     Just
       "No more objects can be requested from the peer for now; the payload is how\
       \ many are already in flight."
+  Namespace _ ["TraceObjectDiffusionInboundBlocked"] ->
+    Just "The next object ID cannot be requested until the local validation context advances."
+  Namespace _ ["TraceObjectDiffusionInboundUnblocked"] ->
+    Just "The local validation context now permits requesting the previously blocked object ID."
   _ -> Nothing
 
 severityForObjectDiffusionInbound :: Namespace a -> Maybe SeverityS
@@ -2624,6 +2643,8 @@ severityForObjectDiffusionInbound = \case
   Namespace _ ["TraceObjectDiffusionInboundRecvControlMessage"] -> Just Info
   Namespace _ ["TraceObjectDiffusionInboundCanRequestMoreObjects"] -> Just Info
   Namespace _ ["TraceObjectDiffusionInboundCannotRequestMoreObjects"] -> Just Info
+  Namespace _ ["TraceObjectDiffusionInboundBlocked"] -> Just Info
+  Namespace _ ["TraceObjectDiffusionInboundUnblocked"] -> Just Info
   _ -> Nothing
 
 allNamespacesObjectDiffusionInbound :: [Namespace a]
@@ -2633,6 +2654,8 @@ allNamespacesObjectDiffusionInbound =
   , Namespace [] ["TraceObjectDiffusionInboundRecvControlMessage"]
   , Namespace [] ["TraceObjectDiffusionInboundCanRequestMoreObjects"]
   , Namespace [] ["TraceObjectDiffusionInboundCannotRequestMoreObjects"]
+  , Namespace [] ["TraceObjectDiffusionInboundBlocked"]
+  , Namespace [] ["TraceObjectDiffusionInboundUnblocked"]
   ]
 
 -- | Peras certificate diffusion, inbound side.
