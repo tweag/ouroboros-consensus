@@ -2549,6 +2549,8 @@ forMachineObjectDiffusionInbound = \case
       [ "kind" .= String "TraceObjectDiffusionInboundCannotRequestMoreObjects"
       , "payload" .= String (Text.pack . show $ payload)
       ]
+  TraceObjectDiffusionInboundServerIdle ->
+    "kind" .= String "TraceObjectDiffusionInboundServerIdle"
   TraceObjectDiffusionInboundBlocked objectId ->
     mconcat
       [ "kind" .= String "TraceObjectDiffusionInboundBlocked"
@@ -2559,6 +2561,10 @@ forMachineObjectDiffusionInbound = \case
       [ "kind" .= String "TraceObjectDiffusionInboundUnblocked"
       , "payload" .= String (Text.pack . show $ objectId)
       ]
+  TraceObjectDiffusionInboundStartedIdling ->
+    "kind" .= String "TraceObjectDiffusionInboundStartedIdling"
+  TraceObjectDiffusionInboundStoppedIdling ->
+    "kind" .= String "TraceObjectDiffusionInboundStoppedIdling"
 
 asMetricsObjectDiffusionInbound ::
   Text.Text ->
@@ -2604,10 +2610,16 @@ namespaceForObjectDiffusionInbound = \case
     Namespace [] ["TraceObjectDiffusionInboundCanRequestMoreObjects"]
   TraceObjectDiffusionInboundCannotRequestMoreObjects _ ->
     Namespace [] ["TraceObjectDiffusionInboundCannotRequestMoreObjects"]
+  TraceObjectDiffusionInboundServerIdle ->
+    Namespace [] ["TraceObjectDiffusionInboundServerIdle"]
   TraceObjectDiffusionInboundBlocked _ ->
     Namespace [] ["TraceObjectDiffusionInboundBlocked"]
   TraceObjectDiffusionInboundUnblocked _ ->
     Namespace [] ["TraceObjectDiffusionInboundUnblocked"]
+  TraceObjectDiffusionInboundStartedIdling ->
+    Namespace [] ["TraceObjectDiffusionInboundStartedIdling"]
+  TraceObjectDiffusionInboundStoppedIdling ->
+    Namespace [] ["TraceObjectDiffusionInboundStoppedIdling"]
 
 documentForObjectDiffusionInbound :: Namespace a -> Maybe Text.Text
 documentForObjectDiffusionInbound = \case
@@ -2630,10 +2642,16 @@ documentForObjectDiffusionInbound = \case
     Just
       "No more objects can be requested from the peer for now; the payload is how\
       \ many are already in flight."
+  Namespace _ ["TraceObjectDiffusionInboundServerIdle"] ->
+    Just "The server's bounded wait expired without new object IDs, returning agency to the client."
   Namespace _ ["TraceObjectDiffusionInboundBlocked"] ->
     Just "The next object ID cannot be requested until the local validation context advances."
   Namespace _ ["TraceObjectDiffusionInboundUnblocked"] ->
     Just "The local validation context now permits requesting the previously blocked object ID."
+  Namespace _ ["TraceObjectDiffusionInboundStartedIdling"] ->
+    Just "The server confirmed that the client reached its current object-ID front."
+  Namespace _ ["TraceObjectDiffusionInboundStoppedIdling"] ->
+    Just "The server supplied new object IDs, ending the client's idling period."
   _ -> Nothing
 
 severityForObjectDiffusionInbound :: Namespace a -> Maybe SeverityS
@@ -2643,8 +2661,11 @@ severityForObjectDiffusionInbound = \case
   Namespace _ ["TraceObjectDiffusionInboundRecvControlMessage"] -> Just Info
   Namespace _ ["TraceObjectDiffusionInboundCanRequestMoreObjects"] -> Just Info
   Namespace _ ["TraceObjectDiffusionInboundCannotRequestMoreObjects"] -> Just Info
+  Namespace _ ["TraceObjectDiffusionInboundServerIdle"] -> Just Info
   Namespace _ ["TraceObjectDiffusionInboundBlocked"] -> Just Info
   Namespace _ ["TraceObjectDiffusionInboundUnblocked"] -> Just Info
+  Namespace _ ["TraceObjectDiffusionInboundStartedIdling"] -> Just Info
+  Namespace _ ["TraceObjectDiffusionInboundStoppedIdling"] -> Just Info
   _ -> Nothing
 
 allNamespacesObjectDiffusionInbound :: [Namespace a]
@@ -2654,8 +2675,11 @@ allNamespacesObjectDiffusionInbound =
   , Namespace [] ["TraceObjectDiffusionInboundRecvControlMessage"]
   , Namespace [] ["TraceObjectDiffusionInboundCanRequestMoreObjects"]
   , Namespace [] ["TraceObjectDiffusionInboundCannotRequestMoreObjects"]
+  , Namespace [] ["TraceObjectDiffusionInboundServerIdle"]
   , Namespace [] ["TraceObjectDiffusionInboundBlocked"]
   , Namespace [] ["TraceObjectDiffusionInboundUnblocked"]
+  , Namespace [] ["TraceObjectDiffusionInboundStartedIdling"]
+  , Namespace [] ["TraceObjectDiffusionInboundStoppedIdling"]
   ]
 
 -- | Peras certificate diffusion, inbound side.
@@ -2713,6 +2737,10 @@ forMachineObjectDiffusionOutbound = \case
     mconcat
       [ "kind" .= String "TraceObjectDiffusionOutboundTerminated"
       ]
+  TraceObjectDiffusionOutboundSendMsgAwaitReply ->
+    "kind" .= String "TraceObjectDiffusionOutboundSendMsgAwaitReply"
+  TraceObjectDiffusionOutboundSendMsgServerIdle ->
+    "kind" .= String "TraceObjectDiffusionOutboundSendMsgServerIdle"
 
 asMetricsObjectDiffusionOutbound ::
   Text.Text ->
@@ -2750,6 +2778,10 @@ namespaceForObjectDiffusionOutbound = \case
     Namespace [] ["TraceObjectDiffusionOutboundSendMsgReplyObjects"]
   TraceObjectDiffusionOutboundTerminated ->
     Namespace [] ["TraceObjectDiffusionOutboundTerminated"]
+  TraceObjectDiffusionOutboundSendMsgAwaitReply ->
+    Namespace [] ["TraceObjectDiffusionOutboundSendMsgAwaitReply"]
+  TraceObjectDiffusionOutboundSendMsgServerIdle ->
+    Namespace [] ["TraceObjectDiffusionOutboundSendMsgServerIdle"]
 
 documentForObjectDiffusionOutbound :: Namespace a -> Maybe Text.Text
 documentForObjectDiffusionOutbound = \case
@@ -2768,6 +2800,10 @@ documentForObjectDiffusionOutbound = \case
   Namespace _ ["TraceObjectDiffusionOutboundTerminated"] ->
     Just
       "The peer sent MsgDone, ending the object diffusion session."
+  Namespace _ ["TraceObjectDiffusionOutboundSendMsgAwaitReply"] ->
+    Just "The server has no new object IDs and will wait for more to become available."
+  Namespace _ ["TraceObjectDiffusionOutboundSendMsgServerIdle"] ->
+    Just "The server's bounded wait expired without new object IDs, returning agency to the client."
   _ -> Nothing
 
 severityForObjectDiffusionOutbound :: Namespace a -> Maybe SeverityS
@@ -2777,6 +2813,8 @@ severityForObjectDiffusionOutbound = \case
   Namespace _ ["TraceObjectDiffusionOutboundRecvMsgRequestObjects"] -> Just Info
   Namespace _ ["TraceObjectDiffusionOutboundSendMsgReplyObjects"] -> Just Info
   Namespace _ ["TraceObjectDiffusionOutboundTerminated"] -> Just Info
+  Namespace _ ["TraceObjectDiffusionOutboundSendMsgAwaitReply"] -> Just Info
+  Namespace _ ["TraceObjectDiffusionOutboundSendMsgServerIdle"] -> Just Info
   _ -> Nothing
 
 allNamespacesObjectDiffusionOutbound :: [Namespace a]
@@ -2786,6 +2824,8 @@ allNamespacesObjectDiffusionOutbound =
   , Namespace [] ["TraceObjectDiffusionOutboundRecvMsgRequestObjects"]
   , Namespace [] ["TraceObjectDiffusionOutboundSendMsgReplyObjects"]
   , Namespace [] ["TraceObjectDiffusionOutboundTerminated"]
+  , Namespace [] ["TraceObjectDiffusionOutboundSendMsgAwaitReply"]
+  , Namespace [] ["TraceObjectDiffusionOutboundSendMsgServerIdle"]
   ]
 
 -- | Peras certificate diffusion, outbound side.
