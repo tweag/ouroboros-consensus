@@ -10,6 +10,8 @@
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE StandaloneDeriving #-}
+-- additions
+{-# LANGUAGE ViewPatterns #-}
 
 -- | Peras protocol parameters
 module Ouroboros.Consensus.Peras.Params
@@ -64,6 +66,10 @@ import Ouroboros.Consensus.Peras.Types (PerasCertSize (..))
 import Ouroboros.Consensus.Util.Condense (Condense (..))
 import Ouroboros.Consensus.Util.IOLike (NoThunks)
 import Quiet (Quiet (..))
+
+import Text.Read (readMaybe)
+import System.Environment (lookupEnv)
+import System.IO.Unsafe (unsafePerformIO)
 
 -- * Protocol parameters
 
@@ -214,18 +220,15 @@ defaultPerasParams =
   --
   -- We also have T_cp = 129_600 and T_cq = 43_200 as per the design document
   PerasParams
-    { -- ceil(T_heal + T_cq) / perasRoundLength) as per the design document
-      perasIgnoranceRounds =
-        PerasIgnoranceRounds 487
-    , -- ceil(T_heal + T_cq + T_cp) / perasRoundLength) + 1 as per the design document
-      perasCooldownRounds =
-        PerasCooldownRounds 1928
+    { -- TEMP: Smaller values for shorter cooldown periods in the local testnet
+      perasIgnoranceRounds = ignoranceRounds
+    , -- TEMP: Smaller values for shorter cooldown periods in the local testnet
+      perasCooldownRounds = cooldownRounds
     , -- must be between 30 and 900 as per the design document
       perasBlockMinSlots =
         PerasBlockMinSlots 90
     , -- equal to perasIgnoranceRounds as per the design document
-      perasCertMaxRounds =
-        PerasCertMaxRounds 487
+      perasCertMaxRounds = coerce ignoranceRounds
     , perasCertArrivalThreshold =
         PerasCertArrivalThreshold 30
     , perasWeight =
@@ -234,9 +237,34 @@ defaultPerasParams =
         PerasQuorumWeightThreshold (3 / 4)
     , perasQuorumWeightThresholdSafetyMargin =
         PerasQuorumWeightThresholdSafetyMargin (2 / 100)
-    , perasTargetCommitteeSize =
-        Committee.TargetCommitteeSize 800
+      -- TEMP: adapt to the 4 nodes of the local testnet
+    , perasTargetCommitteeSize = targetCommitteeSize
     }
+
+-- BEGIN TEMP HACK: read env for Peras values
+
+targetCommitteeSize :: Committee.TargetCommitteeSize
+targetCommitteeSize = unsafePerformIO $
+  lookupEnv "PERAS_TARGET_COMMITTEE_SIZE" >>= \case
+     Just (readMaybe -> Just v) -> return (Committee.TargetCommitteeSize v)
+     _ -> return (Committee.TargetCommitteeSize 2)
+{-# NOINLINE targetCommitteeSize #-}
+
+cooldownRounds :: PerasCooldownRounds
+cooldownRounds = unsafePerformIO $
+  lookupEnv "PERAS_COOLDOWN_ROUNDS" >>= \case
+     Just (readMaybe -> Just v) -> return (PerasCooldownRounds v)
+     _ -> return (PerasCooldownRounds 100)
+{-# NOINLINE cooldownRounds #-}
+
+ignoranceRounds :: PerasIgnoranceRounds
+ignoranceRounds = unsafePerformIO $
+  lookupEnv "PERAS_IGNORANCE_ROUNDS" >>= \case
+     Just (readMaybe -> Just v) -> return (PerasIgnoranceRounds v)
+     _ -> return (PerasIgnoranceRounds 40)
+{-# NOINLINE ignoranceRounds #-}
+
+-- END TEMP HACK
 
 -- * Era-dependent default values
 
