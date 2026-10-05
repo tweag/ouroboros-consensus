@@ -10,6 +10,8 @@
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE StandaloneDeriving #-}
+-- additions
+{-# LANGUAGE ViewPatterns #-}
 
 -- | Peras protocol parameters
 module Ouroboros.Consensus.Peras.Params
@@ -67,6 +69,10 @@ import Ouroboros.Consensus.Util.IOLike (NoThunks)
 import Quiet (Quiet (..))
 import System.Environment (lookupEnv)
 import Text.Read (readMaybe)
+
+import Text.Read (readMaybe)
+import System.Environment (lookupEnv)
+import System.IO.Unsafe (unsafePerformIO)
 
 -- * Protocol parameters
 
@@ -220,11 +226,12 @@ defaultPerasParams =
     { -- ceil(T_heal + T_cq) / perasRoundLength) as per the design document
       perasIgnoranceRounds =
         PerasIgnoranceRounds $
-          487 `orUnsafeEnv` "PERAS_IGNORANCE_ROUNDS"
+          -- TEMP: Smaller values for shorter cooldown periods in the local testnet
+          40 {- 487 -} `orUnsafeEnv` "PERAS_IGNORANCE_ROUNDS"
     , -- ceil(T_heal + T_cq + T_cp) / perasRoundLength) + 1 as per the design document
       perasCooldownRounds =
-        PerasCooldownRounds $
-          1928 `orUnsafeEnv` "PERAS_COOLDOWN_ROUNDS"
+          -- TEMP: Smaller values for shorter cooldown periods in the local testnet
+          100 {- 1928 -} `orUnsafeEnv` "PERAS_COOLDOWN_ROUNDS"
     , -- must be between 30 and 900 as per the design document
       perasBlockMinSlots =
         PerasBlockMinSlots $
@@ -232,7 +239,7 @@ defaultPerasParams =
     , -- equal to perasIgnoranceRounds as per the design document
       perasCertMaxRounds =
         PerasCertMaxRounds $
-          487 `orUnsafeEnv` "PERAS_CERT_MAX_ROUNDS"
+          40 {- 487 -} `orUnsafeEnv` "PERAS_CERT_MAX_ROUNDS"
     , perasCertArrivalThreshold =
         PerasCertArrivalThreshold $
           30 `orUnsafeEnv` "PERAS_CERT_ARRIVAL_THRESHOLD"
@@ -247,7 +254,7 @@ defaultPerasParams =
           (2 / 100) `orUnsafeEnv` "PERAS_QUORUM_WEIGHT_THRESHOLD_SAFETY_MARGIN"
     , perasTargetCommitteeSize =
         Committee.TargetCommitteeSize $
-          800 `orUnsafeEnv` "PERAS_TARGET_COMMITTEE_SIZE"
+          2 {- 800 -} `orUnsafeEnv` "PERAS_TARGET_COMMITTEE_SIZE"
     }
 
 -- | Temporary hack to allow overriding default Peras parameters via env vars.
