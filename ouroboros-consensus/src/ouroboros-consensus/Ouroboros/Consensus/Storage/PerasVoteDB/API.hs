@@ -85,21 +85,22 @@ zeroPerasVoteTicketNo :: PerasVoteTicketNo
 zeroPerasVoteTicketNo = PerasVoteTicketNo 0
 
 data AddPerasVoteResult blk
-  = PerasVoteAlreadyInDB
-  | AddedPerasVoteButDidntGenerateNewCert
-  | AddedPerasVoteAndGeneratedNewCert (ValidatedPerasCert blk)
+  = PerasVoteAlreadyInDB (ValidatedPerasVote blk)
+  | AddedPerasVoteButDidntGenerateNewCert (ValidatedPerasVote blk)
+  | AddedPerasVoteAndGeneratedNewCert (ValidatedPerasVote blk) (ValidatedPerasCert blk)
+
 
 deriving instance
-  Show (PerasCert blk) =>
+  (Show (PerasCert blk), Show (PerasVote blk)) =>
   Show (AddPerasVoteResult blk)
 deriving instance
-  Eq (PerasCert blk) =>
+  (Eq (PerasCert blk), Eq (PerasVote blk)) =>
   Eq (AddPerasVoteResult blk)
 deriving instance
-  Ord (PerasCert blk) =>
+  (Ord (PerasCert blk), Ord (PerasVote blk)) =>
   Ord (AddPerasVoteResult blk)
 deriving instance
-  NoThunks (PerasCert blk) =>
+  (NoThunks (PerasCert blk), NoThunks (PerasVote blk)) =>
   NoThunks (AddPerasVoteResult blk)
 deriving instance
   Generic (AddPerasVoteResult blk)
@@ -235,7 +236,7 @@ prop_addVoteThenGetForgedCertForRound db vote = do
     pure $ do
       getAddVoteResult >>= \case
         -- Just forged a new certificate, so it should be retrievable.
-        AddedPerasVoteAndGeneratedNewCert forgedCert ->
+        AddedPerasVoteAndGeneratedNewCert _vote forgedCert ->
           pure $ Just forgedCert == retrievedCert
         -- None of the other two cases imply there existence of a certificate
         -- for this round, so we can't make any assumptions about it here.

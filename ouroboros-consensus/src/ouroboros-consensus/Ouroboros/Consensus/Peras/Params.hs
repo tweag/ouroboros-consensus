@@ -230,7 +230,7 @@ defaultPerasParams =
     , -- equal to perasIgnoranceRounds as per the design document
       perasCertMaxRounds = coerce ignoranceRounds
     , perasCertArrivalThreshold =
-        PerasCertArrivalThreshold 30
+        PerasCertArrivalThreshold 60
     , perasWeight =
         PerasWeight 15
     , perasQuorumWeightThreshold =
@@ -247,7 +247,7 @@ targetCommitteeSize :: Committee.TargetCommitteeSize
 targetCommitteeSize = unsafePerformIO $
   lookupEnv "PERAS_TARGET_COMMITTEE_SIZE" >>= \case
      Just (readMaybe -> Just v) -> return (Committee.TargetCommitteeSize v)
-     _ -> return (Committee.TargetCommitteeSize 2)
+     _ -> return (Committee.TargetCommitteeSize 5)
 {-# NOINLINE targetCommitteeSize #-}
 
 cooldownRounds :: PerasCooldownRounds
