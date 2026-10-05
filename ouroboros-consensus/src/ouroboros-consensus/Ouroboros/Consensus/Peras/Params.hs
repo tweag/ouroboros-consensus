@@ -254,20 +254,9 @@ defaultPerasParams =
           (2 / 100) `orUnsafeEnv` "PERAS_QUORUM_WEIGHT_THRESHOLD_SAFETY_MARGIN"
     , perasTargetCommitteeSize =
         Committee.TargetCommitteeSize $
-          2 {- 800 -} `orUnsafeEnv` "PERAS_TARGET_COMMITTEE_SIZE"
+          5 {- 800 -} `orUnsafeEnv` "PERAS_TARGET_COMMITTEE_SIZE"
     }
 
--- | Temporary hack to allow overriding default Peras parameters via env vars.
-orUnsafeEnv :: Read a => a -> String -> a
-orUnsafeEnv def var =
-  unsafePerformIO $
-    lookupEnv var >>= \case
-      Nothing -> pure def
-      Just str ->
-        case readMaybe str of
-          Nothing -> pure def
-          Just x -> pure x
-{-# NOINLINE orUnsafeEnv #-}
 
 -- * Era-dependent default values
 
