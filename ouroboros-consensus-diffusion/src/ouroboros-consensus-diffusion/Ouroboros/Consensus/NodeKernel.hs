@@ -168,6 +168,7 @@ import Cardano.Slotting.Slot (WithOrigin (..))
 import System.Posix.Process (getProcessID)
 import System.IO.Unsafe (unsafePerformIO)
 import Debug.RecoverRTTI
+import Ouroboros.Consensus.Peras.Context (PerasEpochContextResolverHandle (..))
 
 {-# NOINLINE traceM #-}
 traceM :: Monad m => String -> m ()
@@ -561,9 +562,7 @@ perasVoteForgingController
         tracePerasVoteForging $ TracePerasVotingCantReadEnv err
         traceM_vote $ "Failed to read Peras pool ID from environment: " ++ show err
         exitEarly
-      Right poolId -> do
-        traceM_vote $ "readPerasPoolIdFromEnv -> poolId: " ++ show poolId
-        pure poolId
+      Right poolId -> pure poolId
 
     privateKey <- case readPerasPrivateKeyFromEnv (Proxy @blk) of
       Left err -> do
@@ -580,12 +579,23 @@ perasVoteForgingController
     (mbPerasVote, traceEvents) <-
       lift $ atomically $ runWriterT $ runMaybeT $ do
         -- Is this the first slot in the round? If not, we don't forge a vote.
+<<<<<<< HEAD
         --
         -- HACK: we leave some time to allow for /some/ block to be applied in
         -- this round before invoking the epoch context resolver. Otherwise, it
         -- can fail to resolve the current round info as it might still be stuck
         -- on the previous epoch.
         when (slotInRound /= 45) $ do
+=======
+        -- when (slotInRound /= 0) $ do
+
+        -- It should help the issue on start when no block was processed.
+        -- We try voting in every slot of the second third of the round:
+        -- late enough that there should be blocks in the epoch, soon enough that votes/certs should diffuse
+        -- before the end of the round.
+        -- Also, it helps in the testnet where slots are 0.2s long.
+        when (slotInRound /= 45 {-30 || slotInRound >= 60-}) $ do
+>>>>>>> 369478bb9 (Add votes to the traces)
           tell [TracePerasVotingNoVoteAfterFirstSlotInRound roundNo slotInRound]
           hoistMaybe Nothing
 
@@ -616,9 +626,13 @@ perasVoteForgingController
                       candidateBlock
                 case mbVote of
                   Nothing -> do
+                    let hdl = ChainDB.getPerasEpochContextResolverHandle chainDB
+                    resolver <- lift $ lift $ getPerasEpochContextResolver hdl
+                    traceM_vote (show resolver)
                     tell [TracePerasVotingNotAVoterInRound roundNo]
                     hoistMaybe Nothing
-                  Just vote ->
+                  Just vote -> do
+                    traceM_vote $ "(Guys, I'm out of order!) Forged vote: " ++ show vote
                     pure vote
 
     traverse_ tracePerasVoteForging traceEvents
@@ -627,9 +641,13 @@ perasVoteForgingController
     vote <- maybe exitEarly pure mbPerasVote
     tickedVote <- lift $ addArrivalTime systemTime vote
     tracePerasVoteForging $ TracePerasVotingForgedVote roundNo tickedVote
+    traceM_vote $ "Ticked vote: " ++ show tickedVote
+
     -- Add vote and potential cert to the DB
     (addVoteResult, mAddCertChainSelOutcome) <- lift $ ChainDB.addPerasVoteSync chainDB tickedVote
     tracePerasVoteForging $ TracePerasVotingAddVoteResult roundNo addVoteResult
+    traceM_vote $ "Add vote result: " ++ show addVoteResult
+
     traverse_
       (tracePerasVoteForging . TracePerasVotingAddCertChainSelOutcome roundNo)
       mAddCertChainSelOutcome
