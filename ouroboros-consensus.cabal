@@ -1152,6 +1152,10 @@ library diffusion
     transformers,
     typed-protocols:{stateful, typed-protocols},
 
+    unix,
+    recover-rtti
+    -- FIXME: remove that
+
 library unstable-diffusion-testlib
   import: common-lib
   visibility: public

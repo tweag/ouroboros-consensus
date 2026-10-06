@@ -166,31 +166,16 @@ import qualified Data.Set as Set
 import Ouroboros.Consensus.Peras.Weight (weightBoostOfFragment)
 import Cardano.Slotting.Slot (WithOrigin (..))
 
-{-
 import System.Posix.Process (getProcessID)
 import System.IO.Unsafe (unsafePerformIO)
 import Debug.RecoverRTTI
 import Ouroboros.Consensus.Peras.Context (PerasEpochContextResolverHandle (..))
-
-{-# NOINLINE traceM #-}
-traceM :: Monad m => String -> m ()
-traceM s = return $! (unsafePerformIO $ do
-  pid <- getProcessID
-  appendFile (show pid ++ ".blog") (s ++ "\n"))
 
 {-# NOINLINE traceM_vote #-}
 traceM_vote :: Monad m => String -> m ()
 traceM_vote s = return $! (unsafePerformIO $ do
   pid <- getProcessID
   appendFile (show pid ++ "_vote.blog") (s ++ "\n"))
-
-traceMIn :: Monad m => String -> b -> b
-traceMIn s b =
-  let printIt = unsafePerformIO $ do
-        pid <- getProcessID
-        appendFile (show pid ++ ".blog") (s ++ "\n")
-  in printIt `seq` b
--}
 
 {-------------------------------------------------------------------------------
   Relay node
@@ -475,12 +460,10 @@ initNodeKernel
           peerTxRegistry
 
     void $ do
-      -- traceM "Starting perasVoteForging thread"
+      traceM_vote "Starting perasVoteForging thread"
       forkLinkedWatcher registry "NodeKernel.perasVoteForging" $
-        knownSlotWatcher btime $ \currentSlot -> do
-          -- traceM "perasVoteForgingController is in watcher"
+        knownSlotWatcher btime $ \currentSlot ->
           whenPerasEnabled currentSlot $ \roundInfo -> do
-            -- traceM "perasVoteForgingController is about to be run"
             withEarlyExit_ $ perasVoteForgingController systemTime st roundInfo
 
     return
@@ -512,7 +495,7 @@ initNodeKernel
     whenPerasEnabled currentSlot f = do
       if PerasFlag `member` featureFlags
         then do
-          -- traceM "Peras is enabled for the current slot"
+          traceM_vote "Peras is enabled for the current slot"
           roundInfo <- atomically $ do
             runQueryWithContextHandle
               (ChainDB.getTimeResolutionContextHandle chainDB)
@@ -561,7 +544,7 @@ perasVoteForgingController
     poolId <- case readPerasPoolIdFromEnv (Proxy @blk) of
       Left err -> do
         tracePerasVoteForging $ TracePerasVotingCantReadEnv err
-        -- traceM_vote $ "Failed to read Peras pool ID from environment: " ++ show err
+        traceM_vote $ "Failed to read Peras pool ID from environment: " ++ show err
         exitEarly
       Right poolId -> pure poolId
 
@@ -618,33 +601,31 @@ perasVoteForgingController
                       candidateBlock
                 case mbVote of
                   Nothing -> do
-                    -- let hdl = ChainDB.getPerasEpochContextResolverHandle chainDB
-                    -- resolver <- lift . lift $ getPerasEpochContextResolver hdl
-                    -- traceM_vote (show resolver)
+                    let hdl = ChainDB.getPerasEpochContextResolverHandle chainDB
+                    resolver <- lift . lift $ getPerasEpochContextResolver hdl
+                    traceM_vote (show resolver)
                     tell [TracePerasVotingNotAVoterInRound roundNo]
                     hoistMaybe Nothing
-                  Just vote -> do
-                    --traceM_vote $ "(Guys, I'm out of order!) Forged vote: " ++ show vote
-                    pure vote
+                  Just vote -> pure vote
 
     traverse_ tracePerasVoteForging traceEvents
-    -- traverse_ (traceM_vote . show) traceEvents
+    traverse_ (traceM_vote . show) traceEvents
 
     vote <- maybe exitEarly pure mbPerasVote
     tickedVote <- lift $ addArrivalTime systemTime vote
     tracePerasVoteForging $ TracePerasVotingForgedVote roundNo tickedVote
-    -- traceM_vote $ "Ticked vote: " ++ show tickedVote
+    traceM_vote $ "Ticked vote: " ++ show tickedVote
 
     -- Add vote and potential cert to the DB
     (addVoteResult, mAddCertChainSelOutcome) <- lift $ ChainDB.addPerasVoteSync chainDB tickedVote
     tracePerasVoteForging $ TracePerasVotingAddVoteResult roundNo addVoteResult
-    -- traceM_vote $ "Add vote result: " ++ show addVoteResult
+    traceM_vote $ "Add vote result: " ++ show addVoteResult
 
     traverse_
       (tracePerasVoteForging . TracePerasVotingAddCertChainSelOutcome roundNo)
       mAddCertChainSelOutcome
-    -- traverse_ (traceM_vote . anythingToString . TracePerasVotingAddCertChainSelOutcome roundNo)
-    --   mAddCertChainSelOutcome
+    traverse_ (traceM_vote . anythingToString . TracePerasVotingAddCertChainSelOutcome roundNo)
+      mAddCertChainSelOutcome
    where
     tracePerasVoteForging :: TracePerasVoteForgingEvent blk -> WithEarlyExit m ()
     tracePerasVoteForging =

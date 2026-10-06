@@ -230,7 +230,7 @@ defaultPerasParams =
     , -- equal to perasIgnoranceRounds as per the design document
       perasCertMaxRounds = coerce ignoranceRounds
     , perasCertArrivalThreshold =
-        PerasCertArrivalThreshold 30
+        PerasCertArrivalThreshold 60
     , perasWeight =
         PerasWeight 15
     , perasQuorumWeightThreshold =
