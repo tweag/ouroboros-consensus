@@ -240,7 +240,8 @@ defaultPerasParams =
           40 {- 487 -} `orUnsafeEnv` "PERAS_CERT_MAX_ROUNDS"
     , perasCertArrivalThreshold =
         PerasCertArrivalThreshold $
-          30 `orUnsafeEnv` "PERAS_CERT_ARRIVAL_THRESHOLD"
+          -- TEMP: Increase time to give more space for block to arrive
+          60 {- 30 -} `orUnsafeEnv` "PERAS_CERT_ARRIVAL_THRESHOLD"
     , perasWeight =
         PerasWeight $
           15 `orUnsafeEnv` "PERAS_WEIGHT"
