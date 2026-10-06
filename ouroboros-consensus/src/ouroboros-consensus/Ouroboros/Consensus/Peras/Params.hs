@@ -242,7 +242,7 @@ defaultPerasParams =
           40 {- 487 -} `orUnsafeEnv` "PERAS_CERT_MAX_ROUNDS"
     , perasCertArrivalThreshold =
         PerasCertArrivalThreshold $
-          30 `orUnsafeEnv` "PERAS_CERT_ARRIVAL_THRESHOLD"
+          60 `orUnsafeEnv` "PERAS_CERT_ARRIVAL_THRESHOLD"
     , perasWeight =
         PerasWeight $
           15 `orUnsafeEnv` "PERAS_WEIGHT"
