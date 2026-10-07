@@ -3058,3 +3058,4 @@ instance MetaTrace (TracePerasVoteForgingEvent blk) where
     , Namespace [] ["CantReadEnv"]
     , Namespace [] ["ViewError"]
     ]
+
