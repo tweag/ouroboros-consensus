@@ -68,7 +68,7 @@ import Ouroboros.Consensus.Peras.Crypto.BLS
 import Ouroboros.Consensus.Peras.Types
   ( BoostedBlock
   , PerasBoostedBlock
-  , PerasCertSize (..)
+  , PerasCertSize
   )
 import Ouroboros.Consensus.Peras.Voting.Adapter
   ( PerasCertCompatibleWithVotingCommittee (..)
@@ -160,23 +160,7 @@ instance ShowProxy blk => ShowProxy (PerasCert blk) where
   showProxy _ = "PerasCert " <> showProxy (Proxy @blk)
 
 perasCertSizeUpperBound :: PerasCert blk -> PerasCertSize
-perasCertSizeUpperBound cert =
-  (`divCeiling` 8) $
-    constSize
-      + numVoters * sizePerVoter
-      + numNonPersistentVoters * extraSizePerNonPersistentVoter
- where
-  numNonPersistentVoters = fromIntegral $ perasCertNumberOfNonPersistentVoters cert
-  numVoters = fromIntegral $ perasCertNumberOfVoters cert
-  -- Each of the following three sizes is an upper bound (in bits, not bytes).
-  -- For a rationale of their value, see
-  -- https://github.com/IntersectMBO/ouroboros-consensus/pull/2187#discussion_r3955585768
-  constSize = 135 * 8
-  sizePerVoter = 1
-  extraSizePerNonPersistentVoter = 50 * 8
-  divCeiling n d = q + min 1 r
-   where
-    (q, r) = n `quotRem` d
+perasCertSizeUpperBound = Base.perasCertSizeUpperBound . unPerasCert
 
 perasCertNumberOfNonPersistentVoters :: PerasCert blk -> Int
 perasCertNumberOfNonPersistentVoters =
