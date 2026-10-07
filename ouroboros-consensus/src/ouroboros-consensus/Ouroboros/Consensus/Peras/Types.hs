@@ -58,9 +58,9 @@ import Cardano.Crypto.Peras
   , onPerasRoundNo
   , perasBlockHashSize
   )
+import Cardano.Crypto.Peras.Cert (PerasCertSize (..))
 import qualified Data.ByteString.Short as SBS
 import Data.Kind (Type)
-import Data.Word (Word32)
 import GHC.Generics (Generic)
 import NoThunks.Class (NoThunks)
 import Ouroboros.Consensus.Block.Abstract
@@ -221,13 +221,3 @@ instance ToCBOR PerasVoteId where
       encodeListLen 2
         <> toCBOR pviRoundNo
         <> toCBOR pviSeatIndex
-
--- | Size of a Peras certificates in bytes.
---
--- We use this to ensure that the maximum block size is not exceeded
--- when including a Peras certificate in a block.
-newtype PerasCertSize
-  = PerasCertSize {unPerasCertSize :: Word32}
-  deriving stock (Show, Eq, Ord, Generic)
-  deriving anyclass NoThunks
-  deriving (Enum, Real, Integral, Num) via Word32
