@@ -230,7 +230,7 @@ defaultPerasParams =
     , -- equal to perasIgnoranceRounds as per the design document
       perasCertMaxRounds = coerce ignoranceRounds
     , perasCertArrivalThreshold =
-        PerasCertArrivalThreshold 60
+        PerasCertArrivalThreshold 80 -- 60
     , perasWeight =
         PerasWeight 15
     , perasQuorumWeightThreshold =
@@ -254,14 +254,14 @@ cooldownRounds :: PerasCooldownRounds
 cooldownRounds = unsafePerformIO $
   lookupEnv "PERAS_COOLDOWN_ROUNDS" >>= \case
      Just (readMaybe -> Just v) -> return (PerasCooldownRounds v)
-     _ -> return (PerasCooldownRounds 100)
+     _ -> return (PerasCooldownRounds 50) -- 100
 {-# NOINLINE cooldownRounds #-}
 
 ignoranceRounds :: PerasIgnoranceRounds
 ignoranceRounds = unsafePerformIO $
   lookupEnv "PERAS_IGNORANCE_ROUNDS" >>= \case
      Just (readMaybe -> Just v) -> return (PerasIgnoranceRounds v)
-     _ -> return (PerasIgnoranceRounds 40)
+     _ -> return (PerasIgnoranceRounds 20) -- 40
 {-# NOINLINE ignoranceRounds #-}
 
 -- END TEMP HACK
