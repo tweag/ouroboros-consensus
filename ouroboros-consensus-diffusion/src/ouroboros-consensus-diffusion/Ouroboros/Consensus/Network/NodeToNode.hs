@@ -246,7 +246,7 @@ data Handlers m addr blk = Handlers
   , hPerasCertDiffusionClient ::
       NodeToNodeVersion ->
       ControlMessageSTM m ->
-      ObjectDiffusionInboundStateView m ->
+      ObjectDiffusionInboundStateView PerasRoundNo m ->
       ConnectionId addr ->
       PerasCertDiffusionInboundPipelined blk m ()
   , hPerasCertDiffusionServer ::
@@ -256,7 +256,7 @@ data Handlers m addr blk = Handlers
   , hPerasVoteDiffusionClient ::
       NodeToNodeVersion ->
       ControlMessageSTM m ->
-      ObjectDiffusionInboundStateView m ->
+      ObjectDiffusionInboundStateView PerasVoteId m ->
       ConnectionId addr ->
       PerasVoteDiffusionInboundPipelined blk m ()
   , hPerasVoteDiffusionServer ::
@@ -1076,7 +1076,11 @@ mkApps kernel rng Tracers{..} mkCodecs ByteLimits{..} chainSyncTimeouts lopBucke
       labelThisThread "PerasVoteDiffusionClient"
       -- Only certificate diffusion participates in GSM caught-up detection.
       -- Votes must not register in or remove entries from the certificate handles.
-      let state = ObjectDiffusionInboundStateView{odisvIdling = Idling.noIdling}
+      let state =
+            ObjectDiffusionInboundStateView
+              { odisvIdling = Idling.noIdling
+              , odisvSetNextOutstandingObjectId = \_ -> pure ()
+              }
       ((), trailing) <-
         runPipelinedPeerWithLimits
           (TraceLabelPeer them `contramap` tPerasVoteDiffusionTracer)
