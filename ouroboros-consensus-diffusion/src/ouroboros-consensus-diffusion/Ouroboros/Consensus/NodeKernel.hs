@@ -567,7 +567,7 @@ perasVoteForgingController
         -- this round before invoking the epoch context resolver. Otherwise, it
         -- can fail to resolve the current round info as it might still be stuck
         -- on the previous epoch.
-        when (slotInRound /= 45) $ do
+        when (slotInRound /= 65) $ do
           tell [TracePerasVotingNoVoteAfterFirstSlotInRound roundNo slotInRound]
           hoistMaybe Nothing
 

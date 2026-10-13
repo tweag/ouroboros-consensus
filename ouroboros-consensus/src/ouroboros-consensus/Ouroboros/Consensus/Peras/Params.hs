@@ -70,9 +70,6 @@ import Quiet (Quiet (..))
 import System.Environment (lookupEnv)
 import Text.Read (readMaybe)
 
-import Text.Read (readMaybe)
-import System.Environment (lookupEnv)
-import System.IO.Unsafe (unsafePerformIO)
 
 -- * Protocol parameters
 
@@ -229,7 +226,7 @@ defaultPerasParams =
           -- TEMP: Smaller values for shorter cooldown periods in the local testnet
           40 {- 487 -} `orUnsafeEnv` "PERAS_IGNORANCE_ROUNDS"
     , -- ceil(T_heal + T_cq + T_cp) / perasRoundLength) + 1 as per the design document
-      perasCooldownRounds =
+      perasCooldownRounds = PerasCooldownRounds $
           -- TEMP: Smaller values for shorter cooldown periods in the local testnet
           100 {- 1928 -} `orUnsafeEnv` "PERAS_COOLDOWN_ROUNDS"
     , -- must be between 30 and 900 as per the design document
@@ -257,6 +254,17 @@ defaultPerasParams =
           5 {- 800 -} `orUnsafeEnv` "PERAS_TARGET_COMMITTEE_SIZE"
     }
 
+-- | Temporary hack to allow overriding default Peras parameters via env vars.
+orUnsafeEnv :: Read a => a -> String -> a
+orUnsafeEnv def var =
+  unsafePerformIO $
+    lookupEnv var >>= \case
+      Nothing -> pure def
+      Just str ->
+        case readMaybe str of
+          Nothing -> pure def
+          Just x -> pure x
+{-# NOINLINE orUnsafeEnv #-}
 
 -- * Era-dependent default values
 
