@@ -833,8 +833,8 @@ checkPerasCertInclusion certInclusionTracer chainDB currentSlot = do
 
   traverse_ (traceWith certInclusionTracer) traceEvents
   traverse_ (\x -> case x of
-    e@(TracePerasCertInclusionRulesDecision _ _ IncludeCert{}) -> traceM_vote . anythingToString $ e
-    TracePerasCertInclusionRulesDecision{} -> pure ()
+    -- e@(TracePerasCertInclusionRulesDecision _ _ IncludeCert{}) -> traceM_vote . anythingToString $ e
+    e@TracePerasCertInclusionRulesDecision{} -> traceM_vote . anythingToString $ e
     TracePerasCertInclusionNoCertToInclude{} -> pure ()
     TracePerasCertInclusionNotEnabledForRound{} -> pure ()
     e@TracePerasCertInclusionPastHorizonException{} -> traceM_vote . anythingToString $ e

@@ -228,7 +228,7 @@ defaultPerasParams =
       perasBlockMinSlots =
         PerasBlockMinSlots 90
     , -- equal to perasIgnoranceRounds as per the design document
-      perasCertMaxRounds = coerce ignoranceRounds
+      perasCertMaxRounds = PerasCertMaxRounds 6 -- coerce ignoranceRounds
     , perasCertArrivalThreshold =
         PerasCertArrivalThreshold 80 -- 60
     , perasWeight =
