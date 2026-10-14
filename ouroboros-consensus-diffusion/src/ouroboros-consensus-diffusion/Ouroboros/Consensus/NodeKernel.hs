@@ -164,12 +164,31 @@ import System.Random (StdGen)
 import qualified Data.Set as Set
 import Ouroboros.Consensus.Peras.Weight (weightBoostOfFragment)
 import Cardano.Slotting.Slot (WithOrigin (..))
- 
-{-------------------------------------------------------------------------------
-  Relay node
--------------------------------------------------------------------------------}
 
--- | Interface against running relay node
+-- Hacks haks hacks
+import qualified Control.Concurrent as CC
+import System.Posix.Process (getProcessID)
+import System.IO.Unsafe (unsafePerformIO)
+import Debug.RecoverRTTI
+-- import Ouroboros.Consensus.Peras.Context (PerasEpochContextResolverHandle (..))
+
+{-# NOINLINE im_the_lock #-}
+im_the_lock :: CC.MVar ()
+im_the_lock = unsafePerformIO $ CC.newMVar ()
+
+{-# NOINLINE traceM_vote #-}
+traceM_vote :: Monad m => String -> m ()
+traceM_vote s = return $! (unsafePerformIO $ do
+  CC.withMVar im_the_lock $ \_ -> do
+    pid <- getProcessID
+    appendFile (show pid ++ "_vote.blog") (s ++ "\n"))
+
+--
+-- {-------------------------------------------------------------------------------
+--   Relay node
+-- -------------------------------------------------------------------------------}
+--
+-- -- | Interface against running relay node
 data NodeKernel m addrNTN addrNTC blk = NodeKernel
   { getChainDB :: ChainDB m blk
   -- ^ The 'ChainDB' of the node
@@ -247,7 +266,7 @@ data NodeKernelArgs m addrNTN addrNTC blk = NodeKernelArgs
 debugLog :: IOLike m => Tracer m TestnetTrace -> String -> m ()
 debugLog tracer logMsg = do
   traceWith tracer $ DebugLog $ Text.pack logMsg
- 
+
 advertController ::
     (IOLike m, StandardHash blk, HasHeader (Header blk)) =>
     Tracer m TestnetTrace -> ChainDB m blk -> m b
@@ -550,7 +569,7 @@ perasVoteForgingController
         -- this round before invoking the epoch context resolver. Otherwise, it
         -- can fail to resolve the current round info as it might still be stuck
         -- on the previous epoch.
-        when (slotInRound /= 45) $ do
+        when (slotInRound /= 75) $ do
           tell [TracePerasVotingNoVoteAfterFirstSlotInRound roundNo slotInRound]
           hoistMaybe Nothing
         -- Do the voting rules state that we should vote? And if so, for which block?
@@ -586,15 +605,22 @@ perasVoteForgingController
                     pure vote
 
     traverse_ tracePerasVoteForging traceEvents
+    traverse_ (traceM_vote . show) traceEvents
 
     vote <- maybe exitEarly pure mbPerasVote
     tickedVote <- lift $ addArrivalTime systemTime vote
+    traceM_vote $ "Ticked vote: " ++ show tickedVote
+
     tracePerasVoteForging $ TracePerasVotingForgedVote roundNo tickedVote
     -- Add vote and potential cert to the DB
     (addVoteResult, mAddCertChainSelOutcome) <- lift $ ChainDB.addPerasVoteSync chainDB tickedVote
     tracePerasVoteForging $ TracePerasVotingAddVoteResult roundNo addVoteResult
+    traceM_vote $ "Add vote result: " ++ show addVoteResult
+
     traverse_
       (tracePerasVoteForging . TracePerasVotingAddCertChainSelOutcome roundNo)
+      mAddCertChainSelOutcome
+    traverse_ (traceM_vote . anythingToString . TracePerasVotingAddCertChainSelOutcome roundNo)
       mAddCertChainSelOutcome
    where
     tracePerasVoteForging :: TracePerasVoteForgingEvent blk -> WithEarlyExit m ()
@@ -719,11 +745,11 @@ forkBlockForging ::
 forkBlockForging IS{..} (MkBlockForging blockForgingM) =
   forkLinkedWatcherAllocate registry label blockForgingMLabel finalize $ \bf ->
     knownSlotWatcher btime $ \currentSlot -> do
-      mbPerasCert <-
-        checkPerasCertInclusion
-          (perasCertInclusionTracer tracers)
-          chainDB
-          currentSlot
+      let mbPerasCert =
+            checkPerasCertInclusion
+              (perasCertInclusionTracer tracers)
+              chainDB
+              currentSlot
       withEarlyExit_ $
         forge
           (forgeTracer tracers)
@@ -795,6 +821,13 @@ checkPerasCertInclusion certInclusionTracer chainDB currentSlot = do
                   pure $ vpcCert (forgetArrivalTime cert)
 
   traverse_ (traceWith certInclusionTracer) traceEvents
+  traverse_ (\x -> case x of
+    -- e@(TracePerasCertInclusionRulesDecision _ _ IncludeCert{}) -> traceM_vote . anythingToString $ e
+    e@TracePerasCertInclusionRulesDecision{} -> traceM_vote . anythingToString $ e
+    TracePerasCertInclusionNoCertToInclude{} -> pure ()
+    TracePerasCertInclusionNotEnabledForRound{} -> pure ()
+    e@TracePerasCertInclusionPastHorizonException{} -> traceM_vote . anythingToString $ e
+    e@TracePerasCertInclusionError{} -> traceM_vote . anythingToString $ e) traceEvents
   return mbPerasCert
 
 {-------------------------------------------------------------------------------

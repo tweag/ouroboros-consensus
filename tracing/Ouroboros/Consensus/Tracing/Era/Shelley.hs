@@ -1480,22 +1480,22 @@ instance
     forMachine dtal certFailure
 
 instance LogFormatting (Dijkstra.DijkstraLedgerPredFailure ledgerera) where
-  forMachine _ = error "Dijkstra era is not active yet"
+  forMachine _ = \_ -> mconcat ["data." .= (String "Dijkstra era is not active yet")]
 
 instance LogFormatting (Dijkstra.DijkstraGovCertPredFailure ledgerera) where
-  forMachine _ = error "Dijkstra era is not active yet"
+  forMachine _ = \_ -> mconcat ["data." .= (String "Dijkstra era is not active yet")]
 
 instance LogFormatting (Dijkstra.DijkstraGovPredFailure ledgerera) where
-  forMachine _ = error "Dijkstra era is not active yet"
+  forMachine _ = \_ -> mconcat ["data." .= (String "Dijkstra era is not active yet")]
 
 instance LogFormatting (Dijkstra.DijkstraUtxowPredFailure ledgerera) where
-  forMachine _ = error "Dijkstra era is not active yet"
+  forMachine _ = \_ -> mconcat ["data." .= (String "Dijkstra era is not active yet")]
 
 instance LogFormatting (Dijkstra.DijkstraBbodyPredFailure ledgerera) where
-  forMachine _ = error "Dijkstra era is not active yet"
+  forMachine _ = \_ -> mconcat ["data." .= (String "Dijkstra era is not active yet")]
 
 instance LogFormatting (Dijkstra.DijkstraUtxoPredFailure ledgerera) where
-  forMachine _ = error "Dijkstra era is not active yet"
+  forMachine _ = \_ -> mconcat ["data." .= (String "Dijkstra era is not active yet")]
 
 instance
   Ledger.Crypto crypto =>

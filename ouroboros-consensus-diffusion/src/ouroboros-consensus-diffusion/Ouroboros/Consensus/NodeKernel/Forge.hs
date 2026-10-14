@@ -68,9 +68,9 @@ forge ::
   Mempool m blk ->
   BlockForging m blk ->
   SlotNo ->
-  Maybe (PerasCert blk) ->
+  m (Maybe (PerasCert blk)) ->
   WithEarlyExit m ()
-forge forgeEventTracer forgeStateInfoTracer cfg chainDB mempool blockForging currentSlot mbPerasCert = do
+forge forgeEventTracer forgeStateInfoTracer cfg chainDB mempool blockForging currentSlot mkMbPerasCert = do
   let trace :: TraceForgeEvent blk -> WithEarlyExit m ()
       trace =
         lift
@@ -117,6 +117,7 @@ forge forgeEventTracer forgeStateInfoTracer cfg chainDB mempool blockForging cur
 
         (txs, txssz, snapSize) <- getTransactionsToForge cfg mempool currentSlot tickedLedgerState forker
 
+        mbPerasCert <- lift mkMbPerasCert
         let fbArgs =
               Block.ForgeBlockArgs
                 { Block.fbConfig = cfg

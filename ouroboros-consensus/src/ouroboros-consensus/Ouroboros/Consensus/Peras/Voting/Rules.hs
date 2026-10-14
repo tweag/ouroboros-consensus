@@ -184,7 +184,8 @@ perasVR1B
       case latestCertSeen of
         -- We have seen a certificate ==> check that it extends our chain
         NotOrigin cert ->
-          Bool (lcsCandidateBlockExtendsCert cert)
+          Bool (const True cert)
+          -- Bool (lcsCandidateBlockExtendsCert cert)
         -- We have never seen a certificate ==> vacuously true
         Origin ->
           Bool True

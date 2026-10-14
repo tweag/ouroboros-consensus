@@ -257,19 +257,26 @@ instance MetaTrace (ChainDB.TraceEvent blk) where
   severityFor (Namespace out ("VolatileDbEvent" : tl)) (Just (ChainDB.TraceVolatileDBEvent ev')) =
     severityFor (Namespace out tl) (Just ev')
   severityFor (Namespace out ("VolatileDbEvent" : tl)) Nothing =
-    severityFor (Namespace out tl :: Namespace (VolDB.TraceEvent blk)) Nothing
+    const (Just Notice) (out, tl)
+    -- severityFor (Namespace out tl :: Namespace (VolDB.TraceEvent blk)) Nothing
   severityFor (Namespace out ("PerasVoteDbEvent" : tl)) (Just (ChainDB.TracePerasVoteDbEvent ev')) =
-    severityFor (Namespace out tl) (Just ev')
+    const (Just Notice) (out, tl, ev')
+    -- severityFor (Namespace out tl) (Just ev')
   severityFor (Namespace out ("PerasVoteDbEvent" : tl)) Nothing =
-    severityFor (Namespace out tl :: Namespace (PerasVoteDB.TraceEvent blk)) Nothing
+    const (Just Notice) (out, tl)
+    -- severityFor (Namespace out tl :: Namespace (PerasVoteDB.TraceEvent blk)) Nothing
   severityFor (Namespace out ("PerasCertDbEvent" : tl)) (Just (ChainDB.TracePerasCertDbEvent ev')) =
-    severityFor (Namespace out tl) (Just ev')
+    const (Just Notice) (out, tl, ev')
+    -- severityFor (Namespace out tl) (Just ev')
   severityFor (Namespace out ("PerasCertDbEvent" : tl)) Nothing =
-    severityFor (Namespace out tl :: Namespace (PerasCertDB.TraceEvent blk)) Nothing
+    const (Just Notice) (out, tl)
+    -- severityFor (Namespace out tl :: Namespace (PerasCertDB.TraceEvent blk)) Nothing
   severityFor (Namespace out ("AddPerasCertEvent" : tl)) (Just (ChainDB.TraceAddPerasCertEvent ev')) =
-    severityFor (Namespace out tl) (Just ev')
+    const (Just Notice) (out, tl, ev')
+    -- severityFor (Namespace out tl) (Just ev')
   severityFor (Namespace out ("AddPerasCertEvent" : tl)) Nothing =
-    severityFor (Namespace out tl :: Namespace (ChainDB.TraceAddPerasCertEvent blk)) Nothing
+    const (Just Notice) (out, tl)
+    -- severityFor (Namespace out tl :: Namespace (ChainDB.TraceAddPerasCertEvent blk)) Nothing
   severityFor _ns _ = Nothing
 
   privacyFor (Namespace _ ["LastShutdownUnclean"]) _ = Just Public
@@ -921,7 +928,7 @@ instance MetaTrace (ChainDB.TraceAddBlockEvent blk) where
     (Namespace out ("AddBlockValidation" : tl))
     (Just (ChainDB.AddBlockValidation ev')) =
       severityFor (Namespace out tl) (Just ev')
-  severityFor (Namespace _ ("AddBlockValidation" : _tl)) Nothing = Just Notice
+  severityFor (Namespace _ ("AddBlockValidation" : _tl)) Nothing = Just Info
   severityFor (Namespace out ("PipeliningEvent" : tl)) (Just (ChainDB.PipeliningEvent ev')) =
     severityFor (Namespace out tl) (Just ev')
   severityFor (Namespace out ("PipeliningEvent" : tl)) Nothing =
@@ -1952,7 +1959,7 @@ instance MetaTrace (PerasVoteDB.TraceEvent blk) where
     , Namespace [] ["GarbageCollected"]
     ]
 
-  severityFor _ _ = Just Info
+  severityFor _ _ = Just Debug
   privacyFor _ _ = Just Public
   detailsFor _ _ = Just DNormal
 
@@ -1977,7 +1984,7 @@ instance
       , "voteId" .= String (Text.pack $ show voteId)
       , "result" .= String (Text.pack $ show result)
       ]
-  forMachine _dtal (PerasVoteDB.GarbageCollected slotNo) =
+  forMachine _dtal (PerasVoteDB.GarbageCollected (SlotNo slotNo)) =
     mconcat
       [ "kind" .= String "GarbageCollected"
       , "slot" .= String (Text.pack $ show slotNo)
@@ -3498,14 +3505,14 @@ instance MetaTrace (ChainDB.TraceAddPerasCertEvent blk) where
   namespaceFor (ChainDB.PerasCertBoostsBlockNotYetReceived _ _) = Namespace [] ["PerasCertBoostsBlockNotYetReceived"]
   namespaceFor (ChainDB.ChainSelectionForBoostedBlock _ _) = Namespace [] ["ChainSelectionForBoostedBlock"]
 
-  severityFor (Namespace _ ["AddedPerasCertToQueue"]) _ = Just Debug
-  severityFor (Namespace _ ["PoppedPerasCertFromQueue"]) _ = Just Debug
-  severityFor (Namespace _ ["IgnorePerasCertTooOld"]) _ = Just Info
-  severityFor (Namespace _ ["PerasCertBoostsCurrentChain"]) _ = Just Info
-  severityFor (Namespace _ ["PerasCertBoostsGenesis"]) _ = Just Info
-  severityFor (Namespace _ ["PerasCertBoostsBlockNotYetReceived"]) _ = Just Info
-  severityFor (Namespace _ ["ChainSelectionForBoostedBlock"]) _ = Just Info
-  severityFor _ _ = Nothing
+  -- severityFor (Namespace _ ["AddedPerasCertToQueue"]) _ = Just Debug
+  -- severityFor (Namespace _ ["PoppedPerasCertFromQueue"]) _ = Just Debug
+  -- severityFor (Namespace _ ["IgnorePerasCertTooOld"]) _ = Just Info
+  -- severityFor (Namespace _ ["PerasCertBoostsCurrentChain"]) _ = Just Info
+  -- severityFor (Namespace _ ["PerasCertBoostsGenesis"]) _ = Just Info
+  -- severityFor (Namespace _ ["PerasCertBoostsBlockNotYetReceived"]) _ = Just Info
+  -- severityFor (Namespace _ ["ChainSelectionForBoostedBlock"]) _ = Just Info
+  severityFor _ _ = Just Notice -- Nothing
 
   privacyFor (Namespace _ ["AddedPerasCertToQueue"]) _ = Just Public
   privacyFor (Namespace _ ["PoppedPerasCertFromQueue"]) _ = Just Public

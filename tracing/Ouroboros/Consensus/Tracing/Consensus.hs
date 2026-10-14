@@ -2871,7 +2871,7 @@ instance MetaTrace (TracePerasCertInclusionEvent blk) where
   severityFor (Namespace _ ["NotEnabledForRound"]) _ = Just Debug
   severityFor (Namespace _ ["PastHorizonException"]) _ = Just Warning
   severityFor (Namespace _ ["Error"]) _ = Just Error
-  severityFor _ _ = Nothing
+  severityFor _ _ = Just Info
 
   documentFor (Namespace _ ["NoCertToInclude"]) =
     Just
@@ -3010,14 +3010,14 @@ instance MetaTrace (TracePerasVoteForgingEvent blk) where
   namespaceFor TracePerasVotingViewError{} =
     Namespace [] ["ViewError"]
 
-  severityFor (Namespace _ ["NoVoteAfterFirstSlotInRound"]) _ = Just Debug
-  severityFor (Namespace _ ["NotAVoterInRound"]) _ = Just Debug
-  severityFor (Namespace _ ["RulesDecision"]) _ = Just Info
-  severityFor (Namespace _ ["ForgedVote"]) _ = Just Info
-  severityFor (Namespace _ ["AddVoteResult"]) _ = Just Info
-  severityFor (Namespace _ ["AddCertChainSelOutcome"]) _ = Just Info
-  severityFor (Namespace _ ["CantReadEnv"]) _ = Just Error
-  severityFor (Namespace _ ["ViewError"]) _ = Just Error
+  -- severityFor (Namespace _ ["NoVoteAfterFirstSlotInRound"]) _ = Just Debug
+  -- severityFor (Namespace _ ["NotAVoterInRound"]) _ = Just Debug
+  -- severityFor (Namespace _ ["RulesDecision"]) _ = Just Info
+  -- severityFor (Namespace _ ["ForgedVote"]) _ = Just Info
+  -- severityFor (Namespace _ ["AddVoteResult"]) _ = Just Info
+  -- severityFor (Namespace _ ["AddCertChainSelOutcome"]) _ = Just Info
+  -- severityFor (Namespace _ ["CantReadEnv"]) _ = Just Error
+  -- severityFor (Namespace _ ["ViewError"]) _ = Just Error
   severityFor _ _ = Nothing
 
   documentFor (Namespace _ ["NoVoteAfterFirstSlotInRound"]) =

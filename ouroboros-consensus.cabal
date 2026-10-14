@@ -1307,6 +1307,8 @@ library diffusion
     time,
     transformers,
     typed-protocols:{stateful, typed-protocols},
+    unix,
+    recover-rtti
 
 library unstable-diffusion-testlib
   import: common-lib
