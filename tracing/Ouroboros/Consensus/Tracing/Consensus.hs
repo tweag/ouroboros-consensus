@@ -32,6 +32,7 @@ import Control.Monad (guard)
 import Data.Aeson (ToJSON, Value (..), object, toJSON, (.=))
 import qualified Data.Aeson as Aeson
 import Data.Foldable (Foldable (toList))
+import Data.Functor ((<&>))
 import Data.Int (Int64)
 import Data.IntPSQ (IntPSQ)
 import qualified Data.IntPSQ as Pq
@@ -2866,12 +2867,12 @@ instance MetaTrace (TracePerasCertInclusionEvent blk) where
   namespaceFor TracePerasCertInclusionError{} =
     Namespace [] ["Error"]
 
-  severityFor (Namespace _ ["NoCertToInclude"]) _ = Just Debug
-  severityFor (Namespace _ ["RulesDecision"]) _ = Just Info
-  severityFor (Namespace _ ["NotEnabledForRound"]) _ = Just Debug
-  severityFor (Namespace _ ["PastHorizonException"]) _ = Just Warning
-  severityFor (Namespace _ ["Error"]) _ = Just Error
-  severityFor _ _ = Just Info
+  severityFor _ x = x <&> \case
+      TracePerasCertInclusionNoCertToInclude{}  -> Debug
+      TracePerasCertInclusionRulesDecision{} -> Info
+      TracePerasCertInclusionNotEnabledForRound{} -> Debug
+      TracePerasCertInclusionPastHorizonException{} -> Warning
+      TracePerasCertInclusionError{} -> Error
 
   documentFor (Namespace _ ["NoCertToInclude"]) =
     Just
@@ -3010,15 +3011,15 @@ instance MetaTrace (TracePerasVoteForgingEvent blk) where
   namespaceFor TracePerasVotingViewError{} =
     Namespace [] ["ViewError"]
 
-  -- severityFor (Namespace _ ["NoVoteAfterFirstSlotInRound"]) _ = Just Debug
-  -- severityFor (Namespace _ ["NotAVoterInRound"]) _ = Just Debug
-  -- severityFor (Namespace _ ["RulesDecision"]) _ = Just Info
-  -- severityFor (Namespace _ ["ForgedVote"]) _ = Just Info
-  -- severityFor (Namespace _ ["AddVoteResult"]) _ = Just Info
-  -- severityFor (Namespace _ ["AddCertChainSelOutcome"]) _ = Just Info
-  -- severityFor (Namespace _ ["CantReadEnv"]) _ = Just Error
-  -- severityFor (Namespace _ ["ViewError"]) _ = Just Error
-  severityFor _ _ = Nothing
+  severityFor _ msg = msg <&> \case
+    TracePerasVotingNoVoteAfterFirstSlotInRound{} -> Debug
+    TracePerasVotingNotAVoterInRound{} -> Info
+    TracePerasVotingRulesDecision{} -> Info
+    TracePerasVotingForgedVote{} -> Info
+    TracePerasVotingAddVoteResult{} -> Info
+    TracePerasVotingAddCertChainSelOutcome{} -> Info
+    TracePerasVotingCantReadEnv{} -> Error
+    TracePerasVotingViewError{} -> Error
 
   documentFor (Namespace _ ["NoVoteAfterFirstSlotInRound"]) =
     Just
