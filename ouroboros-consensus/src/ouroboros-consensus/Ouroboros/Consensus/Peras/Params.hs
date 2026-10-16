@@ -220,11 +220,11 @@ defaultPerasParams =
     { -- ceil(T_heal + T_cq) / perasRoundLength) as per the design document
       perasIgnoranceRounds =
         PerasIgnoranceRounds $
-          487 `orUnsafeEnv` "PERAS_IGNORANCE_ROUNDS"
+          3 {-487-} `orUnsafeEnv` "PERAS_IGNORANCE_ROUNDS"
     , -- ceil(T_heal + T_cq + T_cp) / perasRoundLength) + 1 as per the design document
       perasCooldownRounds =
         PerasCooldownRounds $
-          1928 `orUnsafeEnv` "PERAS_COOLDOWN_ROUNDS"
+          5 {-1928-} `orUnsafeEnv` "PERAS_COOLDOWN_ROUNDS"
     , -- must be between 30 and 900 as per the design document
       perasBlockMinSlots =
         PerasBlockMinSlots $
@@ -232,10 +232,10 @@ defaultPerasParams =
     , -- equal to perasIgnoranceRounds as per the design document
       perasCertMaxRounds =
         PerasCertMaxRounds $
-          487 `orUnsafeEnv` "PERAS_CERT_MAX_ROUNDS"
+          6 {-487-} `orUnsafeEnv` "PERAS_CERT_MAX_ROUNDS"
     , perasCertArrivalThreshold =
         PerasCertArrivalThreshold $
-          30 `orUnsafeEnv` "PERAS_CERT_ARRIVAL_THRESHOLD"
+          80 {-30-} `orUnsafeEnv` "PERAS_CERT_ARRIVAL_THRESHOLD"
     , perasWeight =
         PerasWeight $
           15 `orUnsafeEnv` "PERAS_WEIGHT"
@@ -247,7 +247,7 @@ defaultPerasParams =
           (2 / 100) `orUnsafeEnv` "PERAS_QUORUM_WEIGHT_THRESHOLD_SAFETY_MARGIN"
     , perasTargetCommitteeSize =
         Committee.TargetCommitteeSize $
-          800 `orUnsafeEnv` "PERAS_TARGET_COMMITTEE_SIZE"
+          5 {-800-} `orUnsafeEnv` "PERAS_TARGET_COMMITTEE_SIZE"
     }
 
 -- | Temporary hack to allow overriding default Peras parameters via env vars.
