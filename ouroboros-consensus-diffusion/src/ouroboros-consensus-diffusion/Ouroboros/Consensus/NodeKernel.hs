@@ -81,7 +81,7 @@ import Ouroboros.Consensus.MiniProtocol.LeiosNotify.Client.State
   ( LeiosNotifyPeerState
   )
 import Ouroboros.Consensus.MiniProtocol.ObjectDiffusion.Inbound.State
-  ( ObjectDiffusionInboundHandleCollection
+  ( ObjectDiffusionInboundHandleCollection (..)
   , newObjectDiffusionInboundHandleCollection
   )
 import Ouroboros.Consensus.MiniProtocol.ObjectDiffusion.PerasCert
@@ -386,6 +386,7 @@ initNodeKernel
               (lgnkaGDDRateLimit lgArgs)
               (readTVar varGsmState)
               (cschcMap varChainSyncHandles)
+              (odihcMap varPerasCertDiffusionHandles)
               varLoEFragment
 
     void $
