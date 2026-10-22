@@ -53,6 +53,10 @@ import Ouroboros.Consensus.MiniProtocol.ChainSync.Client.State
   ( ChainSyncJumpingState (..)
   , DisengagedInitState (..)
   )
+import Ouroboros.Consensus.MiniProtocol.ObjectDiffusion.Inbound.State
+  ( ObjectDiffusionInboundHandleCollection (..)
+  , newObjectDiffusionInboundHandleCollection
+  )
 import qualified Ouroboros.Consensus.Node.GSM as GSM
 import Ouroboros.Consensus.Node.Genesis (setGetLoEFragment)
 import Ouroboros.Consensus.Node.GsmState
@@ -110,18 +114,21 @@ run = withRegistry \registry -> do
   let addBlk = ChainDB.addBlock_ chainDB Punishment.noPunishment
 
   chainSyncHandles <- atomically newChainSyncClientHandleCollection
+  objectDiffusionHandles <- atomically newObjectDiffusionInboundHandleCollection
 
   _ <-
     forkLinkedThread registry "GSM" $
       GSM.enterPreSyncing $
         mkGsmEntryPoints
           chainSyncHandles
+          objectDiffusionHandles
           chainDB
           (atomically . writeTVar varGsmState)
 
   forkGDD
     registry
     chainSyncHandles
+    objectDiffusionHandles
     chainDB
     (readTVar varGsmState)
     varLoEFragment
@@ -279,10 +286,12 @@ mkGsmEntryPoints ::
   forall m.
   (IOLike m, SI.MonadTimer m) =>
   ChainSyncClientHandleCollection CoreNodeId m TestBlock ->
+  ObjectDiffusionInboundHandleCollection CoreNodeId m TestBlock ->
   ChainDB m TestBlock ->
   (GsmState -> m ()) ->
   GSM.GsmEntryPoints m
-mkGsmEntryPoints varChainSyncHandles chainDB writeGsmState =
+-- TODO: use OD handles in generation of GSM.getPeerStates
+mkGsmEntryPoints varChainSyncHandles _varObjectDiffusionInboundHandles chainDB writeGsmState =
   GSM.realGsmEntryPoints
     (id, nullTracer)
     GSM.GsmView
@@ -321,11 +330,12 @@ forkGDD ::
   IOLike m =>
   ResourceRegistry m ->
   ChainSyncClientHandleCollection CoreNodeId m TestBlock ->
+  ObjectDiffusionInboundHandleCollection CoreNodeId m TestBlock ->
   ChainDB m TestBlock ->
   STM m GsmState ->
   StrictTVar m (AnchoredFragment (HeaderWithTime TestBlock)) ->
   m ()
-forkGDD registry varChainSyncHandles chainDB getGsmState varLoEFrag =
+forkGDD registry varChainSyncHandles varObjectDiffusionInboundHandles chainDB getGsmState varLoEFrag =
   void $
     forkLinkedWatcher registry "GDD" $
       gddWatcher
@@ -335,4 +345,5 @@ forkGDD registry varChainSyncHandles chainDB getGsmState varLoEFrag =
         (0 :: DiffTime) -- no rate limiting
         getGsmState
         (cschcMap varChainSyncHandles)
+        (odihcMap varObjectDiffusionInboundHandles)
         varLoEFrag

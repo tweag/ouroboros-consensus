@@ -18,6 +18,7 @@ module Ouroboros.Consensus.MiniProtocol.ObjectDiffusion.Inbound.State
 where
 
 import Control.Monad (when)
+import Data.Aeson (ToJSON)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import GHC.Generics (Generic)
@@ -44,6 +45,8 @@ data NextOutstandingRoundNumber
   | CaughtUp
   deriving stock (Eq, Show, Generic)
   deriving anyclass NoThunks
+
+instance ToJSON NextOutstandingRoundNumber
 
 -- | An ObjectDiffusion inbound client state that's used by other components.
 --
@@ -103,6 +106,8 @@ data ObjectDiffusionInboundHandleCollection peer m blk = ObjectDiffusionInboundH
   -- ^ Add the handle for the given peer to the collection
   , odihcRemoveHandle :: !(peer -> STM m ())
   -- ^ Remove the handle for the given peer from the collection
+  , odihcRemoveAllHandles :: !(STM m ())
+  -- ^ Remove all the handles from the collection
   }
   deriving stock Generic
 
@@ -118,6 +123,8 @@ newObjectDiffusionInboundHandleCollection = do
           modifyTVar handlesMap (Map.insert peer handle)
       , odihcRemoveHandle = \peer ->
           modifyTVar handlesMap (Map.delete peer)
+      , odihcRemoveAllHandles =
+          writeTVar handlesMap mempty
       }
 
 -- | Interface for the ObjectDiffusion client to its state allocated by
