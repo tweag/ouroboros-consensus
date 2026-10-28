@@ -60,7 +60,7 @@ import Ouroboros.Consensus.HardFork.Abstract (HasHardForkHistory (..))
 import Ouroboros.Consensus.HardFork.History.Qry
   ( qryFromExpr
   , runQuery
-  , slotToGenesisWindow
+  , slotToGenesisWindow, slotToPerasRoundNo', PastHorizonException (PastHorizon)
   )
 import Ouroboros.Consensus.HeaderValidation (HeaderWithTime (..))
 import Ouroboros.Consensus.Ledger.Abstract (EmptyMK)
@@ -84,6 +84,12 @@ import Ouroboros.Consensus.MiniProtocol.ObjectDiffusion.PerasCert
   ( PerasCertDiffusionInboundState
   )
 import qualified Ouroboros.Consensus.Node.GsmState as GSM
+import Ouroboros.Consensus.Peras.Context
+  ( PerasEpochContextResolver
+  , TimeResolutionContext
+  , TimeResolutionContextHandle (..)
+  , runQueryWithContext
+  )
 import Ouroboros.Consensus.Peras.Weight (PerasWeightSnapshot)
 import Ouroboros.Consensus.Storage.ChainDB.API (ChainDB)
 import qualified Ouroboros.Consensus.Storage.ChainDB.API as ChainDB
@@ -152,6 +158,7 @@ gddWatcher cfg tracer chainDb rateLimit getGsmState getCSHandles getCDHandles va
     cdHandles <- getCDHandles
     cdStates <- traverse (readTVar . odihState) cdHandles
     weightSnapshot <- forgetFingerprint <$> ChainDB.getPerasWeightSnapshot chainDb
+    perasTimeResolutionContext <- getTimeResolutionContext . ChainDB.getTimeResolutionContextHandle $ chainDb
     pure
       GDDStateView
         { gddCtxCurChain = curChain
@@ -160,6 +167,7 @@ gddWatcher cfg tracer chainDb rateLimit getGsmState getCSHandles getCDHandles va
         , gddChainSyncStates = csStates
         , gddCertDiffusionStates = cdStates
         , gddPerasWeightSnapshot = weightSnapshot
+        , gddPerasTimeResolutionContext = perasTimeResolutionContext
         }
 
   wFingerprint ::
@@ -223,6 +231,8 @@ data GDDStateView m blk peer = GDDStateView
   -- ^ The current state of the CertDiffusion mini-protocol for each peer
   , gddPerasWeightSnapshot :: PerasWeightSnapshot blk
   -- ^ The Peras certificates that boost blocks newer than the current immutable tip
+  , gddPerasTimeResolutionContext :: TimeResolutionContext blk
+  -- ^ The time resolution context for Peras certificates
   }
 
 -- | Disconnect peers that lose density comparisons and recompute the LoE fragment.
@@ -251,6 +261,7 @@ evaluateGDD cfg tracer stateView = do
         , gddChainSyncStates = csStates
         , gddCertDiffusionStates = cdStates
         , gddPerasWeightSnapshot = weightSnapshot
+        , gddPerasTimeResolutionContext = perasTimeResolutionContext
         } = stateView
 
       (loeFrag, candidateSuffixes) =
@@ -289,6 +300,7 @@ evaluateGDD cfg tracer stateView = do
           csStates
           cdStates
           weightSnapshot
+          perasTimeResolutionContext
           candidateSuffixes
           loeFrag
       loeHead = AF.castAnchor $ AF.headAnchor loeFrag
@@ -406,22 +418,27 @@ deriving stock instance (Show (Header blk), GetHeader blk) => Show (DensityBound
 -- "Ouroboros.Consensus.MiniProtocol.ChainSync.Client.Jumping" for more details.
 densityDisconnect ::
   ( Ord peer
+  , HasHardForkHistory blk
   , LedgerSupportsProtocol blk
   ) =>
   GenesisWindow ->
   SecurityParam ->
+  PerasBlockMaxSlots ->
   Map peer (ChainSyncState blk) ->
   Map peer (PerasCertDiffusionInboundState blk) ->
   PerasWeightSnapshot blk ->
+  TimeResolutionContext blk ->
   [(peer, AnchoredFragment (HeaderWithTime blk))] ->
   AnchoredFragment (HeaderWithTime blk) ->
   ([peer], [(peer, DensityBounds blk)])
 densityDisconnect
   (GenesisWindow sgen)
   (SecurityParam k)
+  (PerasBlockMaxSlots maxSlots)
   csStates
   cdStates
   _weightSnapshot
+  timeResolutionContext
   candidateSuffixes
   loeFrag =
     (losingPeers, densityBounds)
@@ -549,8 +566,17 @@ densityDisconnect
     firstSlotAfterGenesisWindow =
       succWithOrigin loeIntersectionSlot + SlotNo sgen
 
+    firstPerasSlotUnableToBoostInGenesisWindow :: SlotNo
+    firstPerasSlotUnableToBoostInGenesisWindow = firstSlotAfterGenesisWindow + SlotNo maxSlots
+
     firstPerasRoundUnableToBoostInGenesisWindow :: PerasEnabled PerasRoundNo
-    firstPerasRoundUnableToBoostInGenesisWindow = undefined
+    firstPerasRoundUnableToBoostInGenesisWindow = case
+      runQueryWithContext
+        timeResolutionContext
+        (slotToPerasRoundNo' firstPerasSlotUnableToBoostInGenesisWindow)
+        of
+          Left PastHorizon{} -> error "TODO"
+          Right foo -> fst <$> foo
 
 -- Note [Chain disagreement]
 -- ~~~~~~~~~~~~~~~~~~~~~~~~~
