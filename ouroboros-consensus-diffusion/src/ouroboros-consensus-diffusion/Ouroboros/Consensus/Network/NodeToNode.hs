@@ -109,7 +109,6 @@ import Ouroboros.Consensus.MiniProtocol.ObjectDiffusion.ObjectPool.PerasVote
 import Ouroboros.Consensus.MiniProtocol.ObjectDiffusion.Outbound (objectDiffusionOutbound)
 import Ouroboros.Consensus.MiniProtocol.ObjectDiffusion.PerasCert
 import Ouroboros.Consensus.MiniProtocol.ObjectDiffusion.PerasVote
-import qualified Ouroboros.Consensus.MiniProtocol.Util.Idling as Idling
 import Ouroboros.Consensus.Network.LeiosNotify (runLookaheadFixedSenderPeerWithLimits)
 import Ouroboros.Consensus.Network.NodeToNode.LeiosNotify
   ( leiosNotifyClient
@@ -1166,7 +1165,7 @@ mkApps kernel rng Tracers{..} mkCodecs ByteLimits{..} chainSyncTimeouts lopBucke
       -- Votes must not register in or remove entries from the certificate handles.
       let state =
             ObjectDiffusionInboundStateView
-              { odisvIdling = Idling.noIdling
+              { odisvSignalCaughtUp = pure ()
               , odisvSetNextOutstandingObjectId = \_ -> pure ()
               }
       ((), trailing) <-
