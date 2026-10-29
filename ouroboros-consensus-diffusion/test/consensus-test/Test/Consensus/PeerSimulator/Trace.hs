@@ -657,11 +657,12 @@ prettyDensityBounds bounds =
   showBounds
     DensityBounds
       { clippedFragment
-      , offersMoreThanK
+      , isDenseEnough
       , lowerBound
       , upperBound
       , hasBlockAfter
-      , latestSlot
+      , latestHeaderSlot
+      , latestInboundCertState
       , idling
       } =
       show lowerBound
@@ -671,12 +672,14 @@ prettyDensityBounds bounds =
         ++ more
         ++ "], "
         ++ lastPoint
-        ++ "latest: "
-        ++ showLatestSlot latestSlot
+        ++ "latest header: "
+        ++ showLatestSlot latestHeaderSlot
+        ++ "latest cert: "
+        ++ show latestInboundCertState
         ++ block
         ++ showIdling
      where
-      more = if offersMoreThanK then "+" else " "
+      more = if isDenseEnough then "+" else " "
 
       block = if hasBlockAfter then ", has header after sgen" else " "
 

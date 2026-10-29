@@ -1059,11 +1059,12 @@ instance
     mconcat
       [ "kind" .= String "DensityBounds"
       , "clippedFragment" .= forMachine dtal clippedFragment
-      , "offersMoreThanK" .= toJSON offersMoreThanK
+      , "isDenseEnough" .= toJSON isDenseEnough
       , "lowerBound" .= toJSON lowerBound
       , "upperBound" .= toJSON upperBound
       , "hasBlockAfter" .= toJSON hasBlockAfter
-      , "latestSlot" .= toJSON (unSlotNo <$> withOriginToMaybe latestSlot)
+      , "latestInboundCertState" .= toJSON latestInboundCertState
+      , "latestHeaderSlot" .= toJSON (unSlotNo <$> withOriginToMaybe latestHeaderSlot)
       , "idling" .= toJSON idling
       ]
 

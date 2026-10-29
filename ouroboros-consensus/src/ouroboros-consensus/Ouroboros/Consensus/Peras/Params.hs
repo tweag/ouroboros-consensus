@@ -17,6 +17,7 @@ module Ouroboros.Consensus.Peras.Params
     PerasIgnoranceRounds (..)
   , PerasCooldownRounds (..)
   , PerasBlockMinSlots (..)
+  , PerasBlockMaxSlots (..)
   , PerasCertMaxRounds (..)
   , PerasCertArrivalThreshold (..)
   , PerasRoundLength (..)
@@ -91,6 +92,13 @@ newtype PerasBlockMinSlots
   deriving stock Generic
   deriving newtype (Enum, Eq, Ord, NoThunks, Condense, FromCBOR, ToCBOR)
 
+-- | Maximum age in slots for a block to be voted for
+newtype PerasBlockMaxSlots
+  = PerasBlockMaxSlots {unPerasBlockMaxSlots :: Word64}
+  deriving Show via Quiet PerasBlockMaxSlots
+  deriving stock Generic
+  deriving newtype (Enum, Eq, Ord, NoThunks, Condense, FromCBOR, ToCBOR)
+
 -- | Maximum age for a certificate to be included in a block, in rounds.
 newtype PerasCertMaxRounds
   = PerasCertMaxRounds {unPerasCertMaxRounds :: Word64}
@@ -153,6 +161,8 @@ data PerasParams blk = PerasParams
   { perasIgnoranceRounds :: !PerasIgnoranceRounds
   , perasCooldownRounds :: !PerasCooldownRounds
   , perasBlockMinSlots :: !PerasBlockMinSlots
+  , perasBlockMaxSlots :: !PerasBlockMaxSlots
+  -- ^ TODO: plug in the voting rules
   , perasCertMaxRounds :: !PerasCertMaxRounds
   , perasCertArrivalThreshold :: !PerasCertArrivalThreshold
   , perasWeight :: !PerasWeight
@@ -164,9 +174,10 @@ data PerasParams blk = PerasParams
 
 instance Typeable blk => FromCBOR (PerasParams blk) where
   fromCBOR = do
-    decodeListLenOf 9
+    decodeListLenOf 10
     PerasParams
       <$> fromCBOR
+      <*> fromCBOR
       <*> fromCBOR
       <*> fromCBOR
       <*> fromCBOR
@@ -178,10 +189,11 @@ instance Typeable blk => FromCBOR (PerasParams blk) where
 
 instance Typeable blk => ToCBOR (PerasParams blk) where
   toCBOR params =
-    encodeListLen 9
+    encodeListLen 10
       <> toCBOR (perasIgnoranceRounds params)
       <> toCBOR (perasCooldownRounds params)
       <> toCBOR (perasBlockMinSlots params)
+      <> toCBOR (perasBlockMaxSlots params)
       <> toCBOR (perasCertMaxRounds params)
       <> toCBOR (perasCertArrivalThreshold params)
       <> toCBOR (perasWeight params)
@@ -223,6 +235,9 @@ defaultPerasParams =
     , -- must be between 30 and 900 as per the design document
       perasBlockMinSlots =
         PerasBlockMinSlots 90
+    , -- must be between 30 and 900 as per the design document
+      perasBlockMaxSlots =
+        PerasBlockMaxSlots 2160 * 20
     , -- equal to perasIgnoranceRounds as per the design document
       perasCertMaxRounds =
         PerasCertMaxRounds 487
