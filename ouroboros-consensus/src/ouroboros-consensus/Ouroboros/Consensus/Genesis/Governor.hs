@@ -5,6 +5,7 @@
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE UndecidableInstances #-}
 
 -- | Implementation of the GDD governor
@@ -38,6 +39,7 @@ import Control.Tracer (Tracer, traceWith)
 import Data.Bifunctor (second)
 import Data.Containers.ListUtils (nubOrd)
 import Data.Foldable (for_, toList)
+import Data.Function ((&))
 import Data.Functor.Compose (Compose (..))
 import Data.List.NonEmpty (NonEmpty)
 import qualified Data.List.NonEmpty as NE
@@ -45,6 +47,7 @@ import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Maybe (maybeToList)
 import Data.Maybe.Strict (StrictMaybe)
+import Data.Monoid (Sum (..))
 import Data.Typeable (Typeable)
 import Data.Word (Word64)
 import Ouroboros.Consensus.Block
@@ -58,16 +61,19 @@ import Ouroboros.Consensus.Config.SecurityParam
   )
 import Ouroboros.Consensus.HardFork.Abstract (HasHardForkHistory (..))
 import Ouroboros.Consensus.HardFork.History.Qry
-  ( qryFromExpr
+  ( PastHorizonException (..)
+  , qryFromExpr
   , runQuery
-  , slotToGenesisWindow, slotToPerasRoundNo', PastHorizonException (PastHorizon)
+  , slotToGenesisWindow
+  , slotToPerasRoundNo
   )
 import Ouroboros.Consensus.HeaderValidation (HeaderWithTime (..))
-import Ouroboros.Consensus.Ledger.Abstract (EmptyMK)
+import Ouroboros.Consensus.Ledger.Abstract (EmptyMK, LedgerState)
 import Ouroboros.Consensus.Ledger.Extended
   ( ExtLedgerState
   , ledgerState
   )
+import Ouroboros.Consensus.Ledger.SupportsPeras (LedgerStateSupportsPeras, getPerasParams)
 import Ouroboros.Consensus.Ledger.SupportsProtocol
   ( LedgerSupportsProtocol
   )
@@ -85,12 +91,11 @@ import Ouroboros.Consensus.MiniProtocol.ObjectDiffusion.PerasCert
   )
 import qualified Ouroboros.Consensus.Node.GsmState as GSM
 import Ouroboros.Consensus.Peras.Context
-  ( PerasEpochContextResolver
-  , TimeResolutionContext
+  ( TimeResolutionContext
   , TimeResolutionContextHandle (..)
   , runQueryWithContext
   )
-import Ouroboros.Consensus.Peras.Weight (PerasWeightSnapshot)
+import Ouroboros.Consensus.Peras.Weight (PerasWeightSnapshot, weightBoostOfPoint)
 import Ouroboros.Consensus.Storage.ChainDB.API (ChainDB)
 import qualified Ouroboros.Consensus.Storage.ChainDB.API as ChainDB
 import Ouroboros.Consensus.Util (eitherToMaybe, whenJust)
@@ -110,6 +115,7 @@ gddWatcher ::
   forall m blk peer.
   ( IOLike m
   , Ord peer
+  , LedgerStateSupportsPeras (LedgerState blk)
   , LedgerSupportsProtocol blk
   , HasHardForkHistory blk
   ) =>
@@ -158,7 +164,8 @@ gddWatcher cfg tracer chainDb rateLimit getGsmState getCSHandles getCDHandles va
     cdHandles <- getCDHandles
     cdStates <- traverse (readTVar . odihState) cdHandles
     weightSnapshot <- forgetFingerprint <$> ChainDB.getPerasWeightSnapshot chainDb
-    perasTimeResolutionContext <- getTimeResolutionContext . ChainDB.getTimeResolutionContextHandle $ chainDb
+    perasTimeResolutionContext <-
+      getTimeResolutionContext . ChainDB.getTimeResolutionContextHandle $ chainDb
     pure
       GDDStateView
         { gddCtxCurChain = curChain
@@ -246,6 +253,7 @@ evaluateGDD ::
   forall m blk peer.
   ( IOLike m
   , Ord peer
+  , LedgerStateSupportsPeras (LedgerState blk)
   , LedgerSupportsProtocol blk
   , HasHardForkHistory blk
   ) =>
@@ -291,12 +299,20 @@ evaluateGDD cfg tracer stateView = do
             -- 'Nothing' forever.
             (ledgerState immutableLedgerSt)
 
+      -- REVIEW: should we need to also get the perasParams for the "end" of each
+      -- candidate fragment, instead of just the one at the immutable tip?
+      perasParams =
+        getPerasParams
+          (Proxy @blk)
+          (ledgerState immutableLedgerSt)
+
   whenJust msgen $ \sgen -> do
     let
       (losingPeers, bounds) =
         densityDisconnect
           sgen
           (configSecurityParam cfg)
+          perasParams
           csStates
           cdStates
           weightSnapshot
@@ -423,7 +439,7 @@ densityDisconnect ::
   ) =>
   GenesisWindow ->
   SecurityParam ->
-  PerasBlockMaxSlots ->
+  PerasParams blk ->
   Map peer (ChainSyncState blk) ->
   Map peer (PerasCertDiffusionInboundState blk) ->
   PerasWeightSnapshot blk ->
@@ -434,10 +450,13 @@ densityDisconnect ::
 densityDisconnect
   (GenesisWindow sgen)
   (SecurityParam k)
-  (PerasBlockMaxSlots maxSlots)
+  PerasParams
+    { perasBlockMaxSlots = PerasBlockMaxSlots maxSlots
+    , perasWeight = PerasWeight certWeight
+    }
   csStates
   cdStates
-  _weightSnapshot
+  weightSnapshot
   timeResolutionContext
   candidateSuffixes
   loeFrag =
@@ -475,27 +494,20 @@ densityDisconnect
               -- cannot underflow as the fragment is clipped to the genesis window
               firstSlotAfterGenesisWindow - succWithOrigin (AF.headSlot clippedFragment)
 
-          -- The number of blocks within the Genesis window we know with certainty
-          lowerBoundWithoutPeras = fromIntegral $ AF.length clippedFragment
+          -- The number of blocks within the Genesis window we know with certainty,
+          -- plus the weight of Peras certificates boosting those blocks
+          lowerBound = weightedLength clippedFragment
 
-          upperBoundWithoutPeras = lowerBound + potentialSlots
+          -- The number of yet unknown Peras certificates that could be boosting blocks
+          -- in the Genesis window
+          potentialPerasCertCount = undefined
 
-          -- The number of blocks we know to be on the candidate chain after
-          -- the intersection, not limited to the Genesis window.
-          totalBlockCount = fromIntegral (AF.length candidateSuffix)
+          upperBound =
+            lowerBound
+              + potentialSlots
+              + potentialPerasCertCount * certWeight
 
-          -- Does the peer have more than k known blocks in _total_ after the intersection?
-          -- If not, it is not qualified to compete by density (yet).
-          offersMoreThanKBlocks = totalBlockCount > unNonZero k
-
-          (lowerBound, upperBound, isDenseEnough) = case firstPerasRoundUnableToBoostInGenesisWindow of
-            PerasEnabled _roundNo ->
-              undefined
-            NoPerasEnabled ->
-              ( lowerBoundWithoutPeras
-              , upperBoundWithoutPeras
-              , offersMoreThanKBlocks
-              )
+          isDenseEnough = weightedLength candidateSuffix > unNonZero k
 
       pure
         ( peer
@@ -566,17 +578,34 @@ densityDisconnect
     firstSlotAfterGenesisWindow =
       succWithOrigin loeIntersectionSlot + SlotNo sgen
 
-    firstPerasSlotUnableToBoostInGenesisWindow :: SlotNo
-    firstPerasSlotUnableToBoostInGenesisWindow = firstSlotAfterGenesisWindow + SlotNo maxSlots
+    firstSlotUnableToBoostGenesisWindow =
+      firstSlotAfterGenesisWindow + SlotNo maxSlots
 
-    firstPerasRoundUnableToBoostInGenesisWindow :: PerasEnabled PerasRoundNo
-    firstPerasRoundUnableToBoostInGenesisWindow = case
-      runQueryWithContext
-        timeResolutionContext
-        (slotToPerasRoundNo' firstPerasSlotUnableToBoostInGenesisWindow)
-        of
-          Left PastHorizon{} -> error "TODO"
-          Right foo -> fst <$> foo
+    getPerasRoundSpecs :: SlotNo -> PerasEnabled (PerasRoundNo, Word64)
+    getPerasRoundSpecs slot = case runQueryWithContext
+      timeResolutionContext
+      (slotToPerasRoundNo slot) of
+      -- Should never happen: the last epoch should always be unbounded,
+      -- and we are looking at most an epoch in the future anyway.
+      Left PastHorizon{} -> error "tried to peek beyond the horizon"
+      Right NoPerasEnabled -> NoPerasEnabled
+      Right (PerasEnabled (roundNo, slotInRound, remainingSlots)) ->
+        PerasEnabled (roundNo, slotInRound + remainingSlots)
+
+    weightedLength frag =
+      frag
+        & AF.toOldestFirst
+        & foldMap
+          ( \header ->
+              header
+                & hwtHeader
+                & headerPoint
+                & weightBoostOfPoint weightSnapshot
+                & unPerasWeight
+                & Sum
+                & (+ 1)
+          )
+        & getSum
 
 -- Note [Chain disagreement]
 -- ~~~~~~~~~~~~~~~~~~~~~~~~~

@@ -161,7 +161,8 @@ data PerasParams blk = PerasParams
   { perasIgnoranceRounds :: !PerasIgnoranceRounds
   , perasCooldownRounds :: !PerasCooldownRounds
   , perasBlockMinSlots :: !PerasBlockMinSlots
-  , perasBlockMaxSlots :: !PerasBlockMaxSlots -- ^ TODO: plug in the voting rules
+  , perasBlockMaxSlots :: !PerasBlockMaxSlots
+  -- ^ TODO: plug in the voting rules
   , perasCertMaxRounds :: !PerasCertMaxRounds
   , perasCertArrivalThreshold :: !PerasCertArrivalThreshold
   , perasWeight :: !PerasWeight
