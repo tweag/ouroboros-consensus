@@ -12,9 +12,9 @@ module Ouroboros.Consensus.MiniProtocol.ObjectDiffusion.ObjectPool.PerasVote
   , makeTestPerasVotePoolWriterFromVoteDB
   ) where
 
-import Data.Foldable (traverse_)
 import Data.Map (Map)
 import qualified Data.Map as Map
+import Data.Set (Set)
 import qualified Data.Set as Set
 import Ouroboros.Consensus.Block.SupportsPeras
   ( BlockSupportsPeras (..)
@@ -39,7 +39,8 @@ import Ouroboros.Consensus.Peras.Context
 import Ouroboros.Consensus.Storage.ChainDB.API (ChainDB)
 import qualified Ouroboros.Consensus.Storage.ChainDB.API as ChainDB
 import Ouroboros.Consensus.Storage.PerasVoteDB.API
-  ( PerasVoteDB
+  ( AddPerasVoteResult (PerasVoteAlreadyInDB)
+  , PerasVoteDB
   , PerasVoteTicketNo
   )
 import qualified Ouroboros.Consensus.Storage.PerasVoteDB.API as PerasVoteDB
@@ -99,6 +100,17 @@ makePerasVotePoolReaderFromChainDB chainDB =
 -- Writers
 -------------------------------------------------------------------------------
 
+-- | Internal helper: the ids of the votes that were actually added to the DB.
+addedVoteIds :: [(PerasVoteId, AddPerasVoteResult blk)] -> Set PerasVoteId
+addedVoteIds results =
+  Set.fromList
+    [ voteId
+    | (voteId, result) <- results
+    , case result of
+        PerasVoteAlreadyInDB -> False
+        _ -> True
+    ]
+
 -- | Create a pool writer directly from a 'PerasVoteDB'.
 -- In particular, the result of 'addVote' is ignored, so any produced cert will
 -- have to be handled manually by another mean. This function is mostly meant
@@ -118,16 +130,23 @@ makeTestPerasVotePoolWriterFromVoteDB systemTime perasVoteDB resolverHandle =
     { opwObjectId = getPerasVoteId
     , opwAddObjects = \votes -> do
         now <- systemTimeCurrent systemTime
-        atomically $ do
-          alreadyInDb <- PerasVoteDB.getVoteIds perasVoteDB
-          let votesNotAlreadyInDb = filter ((`Set.notMember` alreadyInDb) . getPerasVoteId) votes
-          validatedVotes <- traverse (verifyPerasVoteWithHandle resolverHandle) votesNotAlreadyInDb
-          -- Some votes are invalid => reject the whole batch
-          --
-          -- NOTE: we could combine the two 'traverse' operations into one in
-          -- which case any validated vote would be immediately added no matter
-          -- what is the validity of the other votes in the batch.
-          traverse_ (PerasVoteDB.addVote perasVoteDB . WithArrivalTime now) validatedVotes
+        results <-
+          sequence
+            =<< atomically
+              ( do
+                  alreadyInDb <- PerasVoteDB.getVoteIds perasVoteDB
+                  let votesNotAlreadyInDb = filter ((`Set.notMember` alreadyInDb) . getPerasVoteId) votes
+                  validatedVotes <- traverse (verifyPerasVoteWithHandle resolverHandle) votesNotAlreadyInDb
+                  -- Some votes are invalid => reject the whole batch
+                  --
+                  -- NOTE: we could combine the two 'traverse' operations into one in
+                  -- which case any validated vote would be immediately added no matter
+                  -- what is the validity of the other votes in the batch.
+                  traverse
+                    (\v -> fmap ((,) (getPerasVoteId v)) <$> PerasVoteDB.addVote perasVoteDB (WithArrivalTime now v))
+                    validatedVotes
+              )
+        pure (addedVoteIds results, Set.empty)
     , opwHasObject = do
         voteIds <- PerasVoteDB.getVoteIds perasVoteDB
         pure $ \voteId -> Set.member voteId voteIds
@@ -159,7 +178,14 @@ makePerasVotePoolWriterFromChainDB systemTime chainDB =
             -- NOTE: we could combine the two 'traverse' operations into one in
             -- which case any validated vote would be immediately added no
             -- matter what is the validity of the other votes in the batch.
-            traverse_ (ChainDB.addPerasVoteWithAsyncCertHandling chainDB . WithArrivalTime now) validatedVotes
+            results <-
+              traverse
+                ( \v ->
+                    (,) (getPerasVoteId v) . fst
+                      <$> ChainDB.addPerasVoteWithAsyncCertHandling chainDB (WithArrivalTime now v)
+                )
+                validatedVotes
+            pure (addedVoteIds results, Set.empty)
         , opwHasObject = do
             voteIds <- ChainDB.getPerasVoteIds chainDB
             pure $ \voteId -> Set.member voteId voteIds
