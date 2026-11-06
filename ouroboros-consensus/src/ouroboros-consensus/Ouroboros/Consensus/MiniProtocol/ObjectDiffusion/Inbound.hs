@@ -514,19 +514,22 @@ objectDiffusionInbound
               catMaybes $
                 (((Map.!) pendingObjects') <$> toList objectIdsToAck)
 
-        (_added, notProcessed) <- opwAddObjects objectsToAck
+        (_successfullyAdded, needRetrying) <- opwAddObjects objectsToAck
 
-        -- Remove the acknowledged entries from 'pendingObjects', except those
-        -- the object pool did not process.
+        -- We also remove from 'pendingObjects' the longest prefix of
+        -- 'outstandingFifo' for which we have all the corresponding IDs in
+        -- 'pendingObjects'.
         --
-        -- Note that unlike in TX-Submission, we made sure the outstanding FIFO
-        -- couldn't have duplicate IDs, so we don't have to worry about re-adding
-        -- the duplicate IDs to 'pendingObjects' for future acknowledgment.
+        -- Note that unlike in TX-Submission, we made sure the outstanding
+        -- FIFO couldn't have duplicate IDs, so we don't have to worry about
+        -- re-adding the duplicate IDs to 'pendingObjects' for future
+        -- acknowledgment.
         let pendingObjects'' =
               Foldable.foldl'
                 (flip Map.delete)
                 pendingObjects'
-                (Seq.filter (`Set.notMember` notProcessed) objectIdsToAck)
+                (Seq.filter (`Set.notMember` needRetrying) objectIdsToAck)
+
         traceWith tracer $
           TraceObjectDiffusionInboundAddedObjects
             (NumObjectsProcessed (fromIntegral $ length objectsToAck))

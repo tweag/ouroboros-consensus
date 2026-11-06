@@ -1,4 +1,6 @@
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE TupleSections #-}
 
 -- | Instantiate 'ObjectPoolReader' and 'ObjectPoolWriter' using Peras
 -- certificates from the 'PerasCertDB' (or the 'ChainDB' which is wrapping the
@@ -39,7 +41,7 @@ import Ouroboros.Consensus.Peras.Context
   )
 import Ouroboros.Consensus.Storage.ChainDB.API
   ( AddPerasCertChainSelOutcome (PerasCertNotProcessedClosing, PerasCertProcessed)
-  , AddPerasCertResult (AddedPerasCertToDB)
+  , AddPerasCertResult (AddedPerasCertToDB, PerasCertAlreadyInDB)
   , ChainDB
   )
 import qualified Ouroboros.Consensus.Storage.ChainDB.API as ChainDB
@@ -122,33 +124,36 @@ makeTestPerasCertPoolWriterFromCertDB systemTime perasCertDB resolverHandle =
     { opwObjectId = getPerasCertRound
     , opwAddObjects = \certs -> do
         now <- systemTimeCurrent systemTime
-        results <-
-          sequence
-            =<< atomically
-              ( do
-                  alreadyInDb <- PerasCertDB.getCertIds perasCertDB
-                  objectIdRequestability <- perasCertRequestability resolverHandle
-                  -- The context may have advanced since these certificates were
-                  -- requested. Certificates that became too old need no validation
-                  -- or insertion, and receiving them must not penalize the peer.
-                  -- We also ignore certs that have been already added to the DB.
-                  let needsProcessing cert =
-                        let roundNo = getPerasCertRound cert
-                         in Set.notMember roundNo alreadyInDb && objectIdRequestability roundNo /= ObjectIdTooOld
-                  validatedCerts <- traverse (verifyPerasCertWithHandle resolverHandle) (filter needsProcessing certs)
-                  -- Some certs are invalid => reject the whole batch
-                  --
-                  -- NOTE: we could combine the two 'traverse' operations into one in
-                  -- which case any validated cert would be immediately added no matter
-                  -- what is the validity of the other certs in the batch.
-                  traverse
-                    (\c -> fmap ((,) (getPerasCertRound c)) <$> PerasCertDB.addCert perasCertDB (WithArrivalTime now c))
-                    validatedCerts
-              )
-        pure
-          ( Set.fromList [roundNo | (roundNo, AddedPerasCertToDB) <- results]
-          , Set.empty
-          )
+        addCertResults <- atomically $ do
+          alreadyInDb <- PerasCertDB.getCertIds perasCertDB
+          objectIdRequestability <- perasCertRequestability resolverHandle
+          -- The context may have advanced since these certificates were
+          -- requested. Certificates that became too old need no validation
+          -- or insertion, and receiving them must not penalize the peer.
+          -- We also ignore certs that have been already added to the DB.
+          let needsProcessing cert =
+                let roundNo = getPerasCertRound cert
+                 in Set.notMember roundNo alreadyInDb && objectIdRequestability roundNo /= ObjectIdTooOld
+          validatedCerts <- traverse (verifyPerasCertWithHandle resolverHandle) (filter needsProcessing certs)
+          -- Some certs are invalid => reject the whole batch
+          --
+          -- NOTE: we could combine the two 'traverse' operations into one in
+          -- which case any validated cert would be immediately added no matter
+          -- what is the validity of the other certs in the batch.
+          traverse
+            (\c -> (,) (getPerasCertRound c) <$> PerasCertDB.addCert perasCertDB (WithArrivalTime now c))
+            validatedCerts
+        fmap (,Set.empty)
+          -- m (Set PerasRoundNo)
+          . fmap Set.fromList
+          -- m [PerasRoundNo]
+          . (fmap . fmap) fst
+          -- m [(PerasRoundNo, AddPerasCertResult)]
+          . fmap (filter $ \case (_, AddedPerasCertToDB) -> True; (_, PerasCertAlreadyInDB) -> False)
+          -- m [(PerasRoundNo, AddPerasCertResult)]
+          . (traverse . traverse) id
+          -- [(PerasRoundNo, m AddPerasCertResult)]
+          $ addCertResults
     , opwHasObject = do
         certIds <- PerasCertDB.getCertIds perasCertDB
         pure $ \roundNo -> Set.member roundNo certIds
