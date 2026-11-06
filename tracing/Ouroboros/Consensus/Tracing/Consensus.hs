@@ -2515,6 +2515,7 @@ perasCertMetricsPrefix = "perasCert"
 perasVoteMetricsPrefix = "perasVote"
 
 forMachineObjectDiffusionInbound ::
+  Show objectId =>
   TraceObjectDiffusionInbound objectId object ->
   Aeson.Object
 forMachineObjectDiffusionInbound = \case
@@ -2546,6 +2547,16 @@ forMachineObjectDiffusionInbound = \case
   TraceObjectDiffusionInboundServerIdle ->
     mconcat
       [ "kind" .= String "TraceObjectDiffusionInboundServerIdle"
+      ]
+  TraceObjectDiffusionInboundBlocked objectId ->
+    mconcat
+      [ "kind" .= String "TraceObjectDiffusionInboundBlocked"
+      , "payload" .= String (Text.pack . show $ objectId)
+      ]
+  TraceObjectDiffusionInboundUnblocked objectId ->
+    mconcat
+      [ "kind" .= String "TraceObjectDiffusionInboundUnblocked"
+      , "payload" .= String (Text.pack . show $ objectId)
       ]
   TraceObjectDiffusionInboundStartedIdling ->
     mconcat
@@ -2602,6 +2613,10 @@ namespaceForObjectDiffusionInbound = \case
     Namespace [] ["TraceObjectDiffusionInboundCannotRequestMoreObjects"]
   TraceObjectDiffusionInboundServerIdle ->
     Namespace [] ["TraceObjectDiffusionInboundServerIdle"]
+  TraceObjectDiffusionInboundBlocked _ ->
+    Namespace [] ["TraceObjectDiffusionInboundBlocked"]
+  TraceObjectDiffusionInboundUnblocked _ ->
+    Namespace [] ["TraceObjectDiffusionInboundUnblocked"]
   TraceObjectDiffusionInboundStartedIdling ->
     Namespace [] ["TraceObjectDiffusionInboundStartedIdling"]
   TraceObjectDiffusionInboundStoppedIdling ->
@@ -2631,14 +2646,19 @@ documentForObjectDiffusionInbound = \case
   Namespace _ ["TraceObjectDiffusionInboundServerIdle"] ->
     Just
       "The server's bounded wait expired without new object IDs, returning agency to the client."
+  Namespace _ ["TraceObjectDiffusionInboundBlocked"] ->
+    Just "The next object ID cannot be requested until the local validation context advances."
+  Namespace _ ["TraceObjectDiffusionInboundUnblocked"] ->
+    Just "The local validation context now permits requesting the previously blocked object ID."
   Namespace _ ["TraceObjectDiffusionInboundStartedIdling"] ->
     Just
-      "The server has no object IDs immediately available after its current cursor and will wait.\
+      "The server confirmed that the client reached its current object-ID front.\
+      \ The server has no object IDs immediately available after its current cursor and will wait.\
       \ All previously advertised objects have been processed before this caught-up event can be emitted.\
       \ The client signals this to the genesis state machine."
   Namespace _ ["TraceObjectDiffusionInboundStoppedIdling"] ->
     Just
-      "The server has new object IDs and is sending them to the client.\
+      "The server supplied new object IDs, ending the client's idling period.\
       \ The client signals this to the genesis state machine."
   _ -> Nothing
 
@@ -2650,6 +2670,8 @@ severityForObjectDiffusionInbound = \case
   Namespace _ ["TraceObjectDiffusionInboundCanRequestMoreObjects"] -> Just Info
   Namespace _ ["TraceObjectDiffusionInboundCannotRequestMoreObjects"] -> Just Info
   Namespace _ ["TraceObjectDiffusionInboundServerIdle"] -> Just Info
+  Namespace _ ["TraceObjectDiffusionInboundBlocked"] -> Just Info
+  Namespace _ ["TraceObjectDiffusionInboundUnblocked"] -> Just Info
   Namespace _ ["TraceObjectDiffusionInboundStartedIdling"] -> Just Info
   Namespace _ ["TraceObjectDiffusionInboundStoppedIdling"] -> Just Info
   _ -> Nothing
@@ -2662,6 +2684,8 @@ allNamespacesObjectDiffusionInbound =
   , Namespace [] ["TraceObjectDiffusionInboundCanRequestMoreObjects"]
   , Namespace [] ["TraceObjectDiffusionInboundCannotRequestMoreObjects"]
   , Namespace [] ["TraceObjectDiffusionInboundServerIdle"]
+  , Namespace [] ["TraceObjectDiffusionInboundBlocked"]
+  , Namespace [] ["TraceObjectDiffusionInboundUnblocked"]
   , Namespace [] ["TraceObjectDiffusionInboundStartedIdling"]
   , Namespace [] ["TraceObjectDiffusionInboundStoppedIdling"]
   ]
@@ -2781,10 +2805,10 @@ documentForObjectDiffusionOutbound = \case
       "The object ids about to be sent to the peer in reply."
   Namespace _ ["TraceObjectDiffusionOutboundSendMsgAwaitReply"] ->
     Just
-      "No IDs are immediately available, so the server will wait."
+      "The server has no new object IDs and will wait for more to become available."
   Namespace _ ["TraceObjectDiffusionOutboundSendMsgServerIdle"] ->
     Just
-      "No IDs became available before the bounded blocking wait expired."
+      "The server's bounded wait expired without new object IDs, returning agency to the client."
   Namespace _ ["TraceObjectDiffusionOutboundRecvMsgRequestObjects"] ->
     Just
       "The peer asked for the objects with these ids."
