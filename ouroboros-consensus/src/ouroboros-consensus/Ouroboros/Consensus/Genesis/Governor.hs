@@ -353,8 +353,11 @@ evaluateGDD cfg tracer stateView = do
           -- check we have received all certificates up to the (over-approximated) last round
           -- of the Peras-enabled era.
           (PerasEnabled (PerasRoundNo firstRoundNo, roundLength), NoPerasEnabled) ->
-            let virtualLastRoundNo = firstRoundNo + (coerce sgen + coerce blockMaxSlots) `div` roundLength
-             in roundNo >= virtualLastRoundNo
+            -- Round numbers are Word32, slot counts Word64: compare in Word64.
+            let virtualLastRoundNo :: Word64
+                virtualLastRoundNo =
+                  fromIntegral firstRoundNo + (coerce sgen + coerce blockMaxSlots) `div` roundLength
+             in fromIntegral roundNo >= virtualLastRoundNo
           -- Peras is disabled: we don't need any certificates.
           (NoPerasEnabled, NoPerasEnabled) -> True
 
