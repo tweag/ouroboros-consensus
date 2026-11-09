@@ -36,7 +36,10 @@ module Ouroboros.Consensus.Peras.Cert.V1
 
 import Cardano.Binary (FromCBOR (..), ToCBOR (..), decodeBytes, decodeListLenOf, encodeBytes, encodeListLen)
 import qualified Cardano.Crypto.Peras.Cert as Base
+import Data.Array.Byte (ByteArray (..))
 import Data.Bitmap (Bitmap (..))
+import Data.ByteString.Short (ShortByteString (SBS))
+import qualified Data.ByteString.Short as SBS
 import Data.Coerce (coerce)
 import Data.Containers.NonEmpty (HasNonEmpty (..))
 import qualified Data.List.NonEmpty as NonEmpty
@@ -94,14 +97,14 @@ instance ToCBOR Base.PerasVotersBitmap where
   toCBOR (Base.UnsafePerasVotersBitmap maxIx bs) =
     encodeListLen 2
       <> toCBOR maxIx
-      <> encodeBytes (bitmapBytes bs)
+      <> encodeBytes (case bitmapBytes bs of ByteArray ba -> SBS.fromShort (SBS ba))
 
 instance FromCBOR Base.PerasVotersBitmap where
   fromCBOR = do
     decodeListLenOf 2
     maxIx <- fromCBOR
     bs <- decodeBytes
-    case Base.mkPerasVotersBitmap maxIx (Bitmap bs) of
+    case Base.mkPerasVotersBitmap maxIx (Bitmap (case SBS.toShort bs of SBS ba -> ByteArray ba)) of
       Nothing ->
         fail "Bitmap: invalid bitmap data or size mismatch"
       Just bitmap ->
