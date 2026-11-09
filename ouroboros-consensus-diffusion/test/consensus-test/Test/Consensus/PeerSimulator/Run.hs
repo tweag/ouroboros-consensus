@@ -31,9 +31,6 @@ import Ouroboros.Consensus.HardFork.Abstract (HasHardForkHistory (..))
 import Ouroboros.Consensus.HeaderValidation (HeaderWithTime)
 import Ouroboros.Consensus.Ledger.Basics (LedgerState)
 import Ouroboros.Consensus.Ledger.Inspect (InspectLedger)
-import Ouroboros.Consensus.Ledger.SupportsPeras
-  ( LedgerStateSupportsPeras
-  )
 import Ouroboros.Consensus.Ledger.SupportsProtocol
   ( LedgerSupportsProtocol
   )
@@ -429,7 +426,6 @@ startNode ::
   , MonadTime m
   , MonadTimer m
   , LedgerSupportsProtocol blk
-  , LedgerStateSupportsPeras (LedgerState blk)
   , BlockSupportsPeras blk
   , ShowProxy blk
   , ShowProxy (Header blk)
