@@ -45,7 +45,7 @@ import Cardano.Binary
   )
 import Codec.Serialise.Class (Serialise (..))
 import Control.DeepSeq (NFData)
-import Data.Aeson (ToJSON)
+import Data.Aeson (ToJSON (..))
 import Data.Coerce (coerce)
 import Cardano.Crypto.Peras
   ( PerasBlockRef (..)
@@ -86,6 +86,9 @@ instance ToCBOR PerasRoundNo where
 
 instance FromCBOR PerasRoundNo where
   fromCBOR = PerasRoundNo <$> fromCBOR
+
+instance ToJSON PerasRoundNo where
+  toJSON = toJSON . unPerasRoundNo
 
 zeroPerasRoundNo :: PerasRoundNo
 zeroPerasRoundNo = PerasRoundNo 0
