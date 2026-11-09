@@ -3114,3 +3114,37 @@ instance MetaTrace (TracePerasVoteForgingEvent blk) where
     , Namespace [] ["CantReadEnv"]
     , Namespace [] ["ViewError"]
     ]
+
+--------------------------------------------------------------------------------
+-- Testnet Tracer
+--------------------------------------------------------------------------------
+
+instance LogFormatting TestnetTrace where
+  forMachine _ (AdvertLog numCerts numVotes chainLen boost slotNo blockHashStr blockNum) =
+    mconcat
+      [ "kind" .= String "AdvertLog"
+      , "numCerts" .= numCerts
+      , "numVotes" .= numVotes
+      , "chainLength" .= chainLen
+      , "perasBoost" .= boost
+      , "slotNo" .= slotNo
+      , "headerHash" .= blockHashStr
+      , "blockNo" .= blockNum
+      ]
+
+instance MetaTrace TestnetTrace where
+  namespaceFor AdvertLog{} =
+    Namespace [] ["AdvertLog"]
+
+  severityFor (Namespace _ ["AdvertLog"]) _ = Just Info
+  severityFor _ _ = Nothing
+
+  documentFor (Namespace _ ["AdvertLog"]) =
+    Just
+      "Advertise to the testnet."
+  documentFor _ = Nothing
+
+  allNamespaces =
+    [ Namespace [] ["AdvertLog"]
+    ]
+
