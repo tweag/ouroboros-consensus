@@ -435,9 +435,10 @@ getPerasVotingView roundNo env = case cdbPerasEpochContextResolverHandle env of
             <$> getCurrentLedger env
         let params = pecParams epochContext
         let blockMinSlots = perasBlockMinSlots params
+        let blockMaxSlots = perasBlockMaxSlots params
         case ( runPerasQry summary $
                  mkPerasVotingView params roundNo latestCertSeen latestCertOnChainRoundNo
-                   =<< perasChainAtCandidateBlock blockMinSlots roundNo currentChain
+                   =<< perasChainAtCandidateBlock blockMinSlots blockMaxSlots roundNo currentChain
              ) of
           Left err ->
             pure $ Left $ PerasVotingViewQryException err
