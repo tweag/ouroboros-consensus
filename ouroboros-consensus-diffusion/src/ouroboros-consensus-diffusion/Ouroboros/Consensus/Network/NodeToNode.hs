@@ -22,6 +22,8 @@ module Ouroboros.Consensus.Network.NodeToNode
   , ByteLimits
   , byteLimits
   , noByteLimits
+  , byteLimitsPerasCertDiffusion
+  , byteLimitsPerasVoteDiffusion
 
     -- * Tracers
   , Tracers
@@ -62,6 +64,7 @@ import Data.Int (Int64)
 import Data.Map.Strict (Map)
 import Data.Set (Set)
 import Data.Void (Void)
+import Data.Word (Word16)
 import qualified Network.Mux as Mux
 import Network.TypedProtocol.Codec
 import Ouroboros.Consensus.Block
@@ -480,8 +483,8 @@ mkHandlers
           objectDiffusionInbound
             (contramap (TraceLabelPeer peer) (Node.perasCertDiffusionInboundTracer tracers))
             ( perasCertDiffusionMaxObjectsUnacknowledged miniProtocolParameters
-            , 10 -- TODO: see https://github.com/tweag/cardano-peras/issues/97
-            , 10 -- TODO: see https://github.com/tweag/cardano-peras/issues/97
+            , fromIntegral perasCertDiffusionMaxBatchSize
+            , fromIntegral perasCertDiffusionMaxBatchSize
             )
             (makePerasCertPoolWriterFromChainDB systemTime getChainDB)
             version
@@ -498,8 +501,8 @@ mkHandlers
           objectDiffusionInbound
             (contramap (TraceLabelPeer peer) (Node.perasVoteDiffusionInboundTracer tracers))
             ( perasVoteDiffusionMaxObjectsUnacknowledged miniProtocolParameters
-            , 50 -- TODO: see https://github.com/tweag/cardano-peras/issues/97
-            , 50 -- TODO: see https://github.com/tweag/cardano-peras/issues/97
+            , fromIntegral perasVoteDiffusionMaxBatchSize
+            , fromIntegral perasVoteDiffusionMaxBatchSize
             )
             (makePerasVotePoolWriterFromChainDB systemTime getChainDB)
             version
@@ -906,14 +909,40 @@ data ByteLimits bCS bBF bTX bPCD bPVD bKA bPS bLN bLF = ByteLimits
         bLF
   }
 
+-- | Maximum request batch sizes. Keep ID and object requests within the same
+-- bounds used by the protocol driver's byte limits.
+-- TODO: see https://github.com/tweag/cardano-peras/issues/97
+perasCertDiffusionMaxBatchSize, perasVoteDiffusionMaxBatchSize :: Word16
+perasCertDiffusionMaxBatchSize = 10
+perasVoteDiffusionMaxBatchSize = 50
+
+-- | Certificate diffusion byte limits for complete batches, including four
+-- CBOR framing bytes. Certificate IDs are round numbers (Word64s, nine bytes).
+byteLimitsPerasCertDiffusion ::
+  (bytes -> Word) -> ProtocolSizeLimits (PerasCertDiffusion blk) bytes
+byteLimitsPerasCertDiffusion =
+  byteLimitsObjectDiffusion
+    (4 + 9 * fromIntegral perasCertDiffusionMaxBatchSize)
+    (4 + maxCertSize * fromIntegral perasCertDiffusionMaxBatchSize)
+
+-- | Vote diffusion byte limits for complete batches, including four CBOR
+-- framing bytes. Vote IDs contain a list header, Word64 round and Word16 seat
+-- index: @1 + 9 + 3 = 13@ bytes.
+byteLimitsPerasVoteDiffusion ::
+  (bytes -> Word) -> ProtocolSizeLimits (PerasVoteDiffusion blk) bytes
+byteLimitsPerasVoteDiffusion =
+  byteLimitsObjectDiffusion
+    (4 + 13 * fromIntegral perasVoteDiffusionMaxBatchSize)
+    (4 + maxVoteSize * fromIntegral perasVoteDiffusionMaxBatchSize)
+
 noByteLimits :: ByteLimits bCS bBF bTX bPCD bPVD bKA bPS bLN bLF
 noByteLimits =
   ByteLimits
     { blChainSync = byteLimitsChainSync (const 0)
     , blBlockFetch = byteLimitsBlockFetch (const 0)
     , blTxSubmission2 = byteLimitsTxSubmission2 (const 0)
-    , blPerasCertDiffusion = byteLimitsObjectDiffusion (const 0)
-    , blPerasVoteDiffusion = byteLimitsObjectDiffusion (const 0)
+    , blPerasCertDiffusion = byteLimitsPerasCertDiffusion (const 0)
+    , blPerasVoteDiffusion = byteLimitsPerasVoteDiffusion (const 0)
     , blKeepAlive = byteLimitsKeepAlive (const 0)
     , blPeerSharing = byteLimitsPeerSharing (const 0)
     , blLeiosNotify = byteLimitsLeiosNotify (const 0)
@@ -936,8 +965,8 @@ byteLimits =
     { blChainSync = byteLimitsChainSync size
     , blBlockFetch = byteLimitsBlockFetch size
     , blTxSubmission2 = byteLimitsTxSubmission2 size
-    , blPerasCertDiffusion = byteLimitsObjectDiffusion size
-    , blPerasVoteDiffusion = byteLimitsObjectDiffusion size
+    , blPerasCertDiffusion = byteLimitsPerasCertDiffusion size
+    , blPerasVoteDiffusion = byteLimitsPerasVoteDiffusion size
     , blKeepAlive = byteLimitsKeepAlive size
     , blPeerSharing = byteLimitsPeerSharing size
     , blLeiosNotify = byteLimitsLeiosNotify size

@@ -73,8 +73,9 @@ import Ouroboros.Consensus.Ledger.Abstract (EmptyMK, LedgerState)
 import Ouroboros.Consensus.Ledger.Extended
   ( ExtLedgerState
   , ledgerState
+  , perasState
   )
-import Ouroboros.Consensus.Ledger.SupportsPeras (LedgerStateSupportsPeras, getPerasParams)
+import Ouroboros.Consensus.Ledger.Peras (perasEpochContextResolver)
 import Ouroboros.Consensus.Ledger.SupportsProtocol (LedgerSupportsProtocol)
 import Ouroboros.Consensus.MiniProtocol.ChainSync.Client
   ( ChainSyncClientHandle (..)
@@ -90,7 +91,9 @@ import Ouroboros.Consensus.MiniProtocol.ObjectDiffusion.PerasCert
   )
 import qualified Ouroboros.Consensus.Node.GsmState as GSM
 import Ouroboros.Consensus.Peras.Context
-  ( TimeResolutionContext
+  ( BoundedPerasEpochContext (..)
+  , PerasEpochContextResolver (..)
+  , TimeResolutionContext
   , TimeResolutionContextHandle (..)
   , runQueryWithContext
   )
@@ -114,7 +117,6 @@ gddWatcher ::
   forall m blk peer.
   ( IOLike m
   , Ord peer
-  , LedgerStateSupportsPeras (LedgerState blk)
   , LedgerSupportsProtocol blk
   , HasHardForkHistory blk
   ) =>
@@ -252,7 +254,6 @@ evaluateGDD ::
   forall m blk peer.
   ( IOLike m
   , Ord peer
-  , LedgerStateSupportsPeras (LedgerState blk)
   , LedgerSupportsProtocol blk
   , HasHardForkHistory blk
   ) =>
@@ -301,14 +302,15 @@ evaluateGDD cfg tracer stateView = do
 
       -- The value of perasBlockMaxSlots cannot change through era boundaries:
       -- its value is k/f, which only depends on the static configuration of the
-      -- node, and not on the ledger state.
-      -- TODO: when that PR is rebased on the-big-pr, perasBlockMaxSlots will probably
-      -- be derived from a `HasPerasMaxBlockSlots` typeclass, which will return a value
-      -- only for the LedgerConfig of Shelley blocks.
-      PerasParams{perasBlockMaxSlots} =
-        getPerasParams
-          (Proxy @blk)
-          immutableLedger
+      -- node, and not on the ledger state. We read it from the Peras epoch
+      -- context of the immutable ledger state, and fall back to 0 when Peras is
+      -- not enabled there.
+      blockMaxSlots =
+        case perasEpochContextResolver (perasState immutableLedgerSt) of
+          PerasEpochContextResolver (PerasEnabled BoundedPerasEpochContext{epochContext}) _ ->
+            perasBlockMaxSlots (pecParams epochContext)
+          _ ->
+            PerasBlockMaxSlots 0
 
       getPerasRoundSpecs :: SlotNo -> PerasEnabled (PerasRoundNo, Word64)
       getPerasRoundSpecs slot = case runQueryWithContext
@@ -326,7 +328,7 @@ evaluateGDD cfg tracer stateView = do
       firstSlotAfterLoEIntersection = succWithOrigin $ AF.headSlot loeFrag
 
       firstSlotUnableToBoostGenesisWindow =
-        firstSlotAfterLoEIntersection + coerce sgen + coerce perasBlockMaxSlots
+        firstSlotAfterLoEIntersection + coerce sgen + coerce blockMaxSlots
       minCertDiffusionState = Map.foldr' min CaughtUp $ nextOutstandingRoundNumber <$> cdStates
 
       -- Specs for the (potential) Peras round that contains the successor of
@@ -351,8 +353,11 @@ evaluateGDD cfg tracer stateView = do
           -- check we have received all certificates up to the (over-approximated) last round
           -- of the Peras-enabled era.
           (PerasEnabled (PerasRoundNo firstRoundNo, roundLength), NoPerasEnabled) ->
-            let virtualLastRoundNo = firstRoundNo + (coerce sgen + coerce perasBlockMaxSlots) `div` roundLength
-             in roundNo >= virtualLastRoundNo
+            -- Round numbers are Word32, slot counts Word64: compare in Word64.
+            let virtualLastRoundNo :: Word64
+                virtualLastRoundNo =
+                  fromIntegral firstRoundNo + (coerce sgen + coerce blockMaxSlots) `div` roundLength
+             in fromIntegral roundNo >= virtualLastRoundNo
           -- Peras is disabled: we don't need any certificates.
           (NoPerasEnabled, NoPerasEnabled) -> True
 
