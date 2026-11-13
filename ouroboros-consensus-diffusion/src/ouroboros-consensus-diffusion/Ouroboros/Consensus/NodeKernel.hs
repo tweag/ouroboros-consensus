@@ -268,10 +268,6 @@ data NodeKernelArgs m addrNTN addrNTC blk = NodeKernelArgs
   , getDiffusionPipeliningSupport :: DiffusionPipeliningSupport
   }
 
-debugLog :: IOLike m => Tracer m TestnetTrace -> String -> m ()
-debugLog tracer logMsg = do
-  traceWith tracer $ DebugLog $ Text.pack logMsg
-
 advertController ::
   (IOLike m, StandardHash blk, HasHeader (Header blk)) =>
   Tracer m TestnetTrace -> ChainDB m blk -> m b
@@ -334,7 +330,6 @@ initNodeKernel
     , miniProtocolParameters
     , systemTime
     } = do
-    debugLog (testnetTracer tracers) "Initialized the Node Kernal"
 
     -- using a lazy 'TVar', 'BlockForging' does not have a 'NoThunks' instance.
     blockForgingVar :: LazySTM.TMVar m [MkBlockForging m blk] <- LazySTM.newTMVarIO []

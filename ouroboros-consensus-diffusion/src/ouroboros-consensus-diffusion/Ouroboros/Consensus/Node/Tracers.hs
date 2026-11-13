@@ -121,10 +121,7 @@ data Tracers' remotePeer localPeer blk f = Tracers
   }
 
 data TestnetTrace
-  = -- | log message
-    DebugLog
-      Text
-  | AdvertLog
+  = AdvertLog
       -- | number of certs
       Int
       -- | number of votes
