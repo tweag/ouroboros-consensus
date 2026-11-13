@@ -1,11 +1,14 @@
+{-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
 
@@ -14,20 +17,28 @@
 -- NOTE: this module exists solely because the orphan module
 -- 'Ouroboros.Consensus.Shelley.Node.Serialisation' needs some of these
 -- instances, but defining them there would be too confusing.
-module Ouroboros.Consensus.Shelley.Node.Peras () where
+module Ouroboros.Consensus.Shelley.Node.Peras
+  ( -- * Peras certificates in block bodies
+    shelleyBlockBodyPerasCert
+  , setShelleyBlockBodyPerasCert
+  ) where
 
 import Cardano.Binary (serialize)
 import Cardano.Ledger.Api
 import Cardano.Ledger.BaseTypes (Nonce (..))
+import qualified Cardano.Ledger.Core as SL (BlockBody)
+import qualified Cardano.Ledger.Dijkstra.BlockBody as SL
 import qualified Cardano.Ledger.Dijkstra.Forecast as Dijkstra
 import qualified Cardano.Ledger.Shelley.API as SL
 import qualified Cardano.Ledger.Shelley.LedgerState as SL
 import Control.Monad (when)
 import qualified Data.ByteString.Lazy as LazyByteString
+import Data.Maybe.Strict (maybeToStrictMaybe, strictMaybeToMaybe)
 import qualified Data.Measure as Measure
 import Data.Proxy (Proxy (..))
-import Data.Typeable (Typeable)
-import Lens.Micro ((^.))
+import Data.Type.Equality ((:~:) (..))
+import Data.Typeable (Typeable, eqT)
+import Lens.Micro ((.~), (^.))
 import Ouroboros.Consensus.Block.SupportsPeras
   ( BlockSupportsPeras (..)
   , ValidatedPerasCert (..)
@@ -77,6 +88,7 @@ import Ouroboros.Consensus.Protocol.PolyPraos
 import qualified Ouroboros.Consensus.Protocol.PolyPraos as PolyPraos
 import qualified Ouroboros.Consensus.Protocol.Praos.Views as Praos
 import Ouroboros.Consensus.Protocol.Praos2 (LeiosCrypto, Praos2)
+import Ouroboros.Consensus.Shelley.Eras (ShelleyBasedEra)
 import Ouroboros.Consensus.Shelley.Ledger.Block (ShelleyBlock (..))
 import Ouroboros.Consensus.Shelley.Ledger.Ledger
   ( LedgerState (..)
@@ -293,7 +305,7 @@ instance
   verifyPerasVote = defaultVerifyPerasVote
   forgePerasCert = defaultForgePerasCert
   verifyPerasCert = defaultVerifyPerasCert
-  getPerasCertInBlock _ = Right Nothing
+  getPerasCertInBlock _ = Nothing
 
 instance
   ( Typeable proto
@@ -310,7 +322,7 @@ instance
   verifyPerasVote = defaultVerifyPerasVote
   forgePerasCert = defaultForgePerasCert
   verifyPerasCert = defaultVerifyPerasCert
-  getPerasCertInBlock _ = Right Nothing
+  getPerasCertInBlock _ = Nothing
 
 instance
   ( Typeable proto
@@ -327,7 +339,7 @@ instance
   verifyPerasVote = defaultVerifyPerasVote
   forgePerasCert = defaultForgePerasCert
   verifyPerasCert = defaultVerifyPerasCert
-  getPerasCertInBlock _ = Right Nothing
+  getPerasCertInBlock _ = Nothing
 
 instance
   ( Typeable proto
@@ -344,7 +356,7 @@ instance
   verifyPerasVote = defaultVerifyPerasVote
   forgePerasCert = defaultForgePerasCert
   verifyPerasCert = defaultVerifyPerasCert
-  getPerasCertInBlock _ = Right Nothing
+  getPerasCertInBlock _ = Nothing
 
 instance
   ( Typeable proto
@@ -361,7 +373,7 @@ instance
   verifyPerasVote = defaultVerifyPerasVote
   forgePerasCert = defaultForgePerasCert
   verifyPerasCert = defaultVerifyPerasCert
-  getPerasCertInBlock _ = Right Nothing
+  getPerasCertInBlock _ = Nothing
 
 instance
   ( Typeable proto
@@ -378,7 +390,7 @@ instance
   verifyPerasVote = defaultVerifyPerasVote
   forgePerasCert = defaultForgePerasCert
   verifyPerasCert = defaultVerifyPerasCert
-  getPerasCertInBlock _ = Right Nothing
+  getPerasCertInBlock _ = Nothing
 
 instance
   ( Typeable proto
@@ -398,7 +410,47 @@ instance
     let sizeUpperBound = V1.perasCertSizeUpperBound $ vpcCert cert
     when (sizeUpperBound > dijkstraPerasMaxCertSize) $
       Left $
-        V1.PerasCertTooLargeError sizeUpperBound dijkstraPerasMaxCertSize
+        V1.PerasCertTooLargeError dijkstraPerasMaxCertSize sizeUpperBound
     pure cert
   verifyPerasCert = defaultVerifyPerasCert
-  getPerasCertInBlock _ = Right Nothing
+  getPerasCertInBlock =
+    shelleyBlockBodyPerasCert @proto
+      . SL.blockBody
+      . shelleyBlockRaw
+
+{-------------------------------------------------------------------------------
+  Peras certificates in block bodies
+-------------------------------------------------------------------------------}
+
+-- | The Peras certificate in a Shelley block body, if any.
+--
+-- Only Dijkstra block bodies have a Peras certificate field; the eras before
+-- it have no certificates.
+shelleyBlockBodyPerasCert ::
+  forall proto era.
+  ShelleyBasedEra era =>
+  SL.BlockBody era ->
+  Maybe (PerasCert (ShelleyBlock proto era))
+shelleyBlockBodyPerasCert blockBody =
+  case eqT @era @DijkstraEra of
+    Just Refl ->
+      V1.PerasCert <$> strictMaybeToMaybe (blockBody ^. SL.perasCertBlockBodyL)
+    Nothing ->
+      Nothing
+
+-- | Set the Peras certificate of a Shelley block body.
+--
+-- Only Dijkstra block bodies have a Peras certificate field. In the eras
+-- before it, 'PerasCert' is void, so there is never a certificate to set.
+setShelleyBlockBodyPerasCert ::
+  forall proto era.
+  ShelleyBasedEra era =>
+  Maybe (PerasCert (ShelleyBlock proto era)) ->
+  SL.BlockBody era ->
+  SL.BlockBody era
+setShelleyBlockBodyPerasCert mbCert =
+  case eqT @era @DijkstraEra of
+    Just Refl ->
+      SL.perasCertBlockBodyL .~ maybeToStrictMaybe (V1.unPerasCert <$> mbCert)
+    Nothing ->
+      id
