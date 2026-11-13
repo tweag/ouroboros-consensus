@@ -17,6 +17,7 @@ module Ouroboros.Consensus.Peras.Params
   ( -- * Protocol parameters
     PerasIgnoranceRounds (..)
   , PerasCooldownRounds (..)
+  , PerasBlockMaxSlots (..)
   , PerasBlockMinSlots (..)
   , PerasCertMaxRounds (..)
   , PerasCertArrivalThreshold (..)
@@ -113,6 +114,14 @@ newtype PerasCooldownRounds
 newtype PerasBlockMinSlots
   = PerasBlockMinSlots {unPerasBlockMinSlots :: Word64}
   deriving Show via Quiet PerasBlockMinSlots
+  deriving stock Generic
+  deriving newtype (Enum, Eq, Ord, NoThunks, Condense, FromCBOR, ToCBOR)
+
+-- | Maximum age in slots of a block after which it can no longer be voted for
+-- in order to get a boost.
+newtype PerasBlockMaxSlots
+  = PerasBlockMaxSlots {unPerasBlockMaxSlots :: Word64}
+  deriving Show via Quiet PerasBlockMaxSlots
   deriving stock Generic
   deriving newtype (Enum, Eq, Ord, NoThunks, Condense, FromCBOR, ToCBOR)
 
@@ -214,6 +223,7 @@ data PerasParams blk = PerasParams
   { perasIgnoranceRounds :: !PerasIgnoranceRounds
   , perasCooldownRounds :: !PerasCooldownRounds
   , perasBlockMinSlots :: !PerasBlockMinSlots
+  , perasBlockMaxSlots :: !PerasBlockMaxSlots
   , perasCertMaxRounds :: !PerasCertMaxRounds
   , perasCertArrivalThreshold :: !PerasCertArrivalThreshold
   , perasWeight :: !PerasWeight
@@ -226,9 +236,10 @@ data PerasParams blk = PerasParams
 
 instance Typeable blk => FromCBOR (PerasParams blk) where
   fromCBOR = do
-    decodeListLenOf 10
+    decodeListLenOf 11
     PerasParams
       <$> fromCBOR
+      <*> fromCBOR
       <*> fromCBOR
       <*> fromCBOR
       <*> fromCBOR
@@ -241,10 +252,11 @@ instance Typeable blk => FromCBOR (PerasParams blk) where
 
 instance Typeable blk => ToCBOR (PerasParams blk) where
   toCBOR params =
-    encodeListLen 10
+    encodeListLen 11
       <> toCBOR (perasIgnoranceRounds params)
       <> toCBOR (perasCooldownRounds params)
       <> toCBOR (perasBlockMinSlots params)
+      <> toCBOR (perasBlockMaxSlots params)
       <> toCBOR (perasCertMaxRounds params)
       <> toCBOR (perasCertArrivalThreshold params)
       <> toCBOR (perasWeight params)
@@ -283,6 +295,10 @@ mkPerasParams securityParam activeSlotCoeff plv =
         PerasBlockMinSlots $
           blockMinSlots
             `orUnsafeEnv` "PERAS_BLOCK_MIN_SLOTS"
+    , perasBlockMaxSlots =
+        PerasBlockMaxSlots $
+          blockMaxSlots
+            `orUnsafeEnv` "PERAS_BLOCK_MAX_SLOTS"
     , perasCertMaxRounds =
         PerasCertMaxRounds $
           certMaxRounds
@@ -346,6 +362,10 @@ mkPerasParams securityParam activeSlotCoeff plv =
 
   blockMinSlots :: Word64
   blockMinSlots = fromIntegral @Word32 @Word64 (unSlotInterval (plvMinCandidateBlockAge plv))
+
+  -- k/f, in order to limit the needed forecast horizon to 4k/f in Genesis
+  blockMaxSlots :: Word64
+  blockMaxSlots = ceiling tCQ
 
   certMaxRounds :: Word64
   certMaxRounds = ceiling ((tHeal + tCQ) / roundLength)
