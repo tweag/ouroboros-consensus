@@ -80,7 +80,6 @@ import Data.Semigroup (Sum (..))
 import Data.Typeable (Typeable)
 import Data.Word (Word16, Word32, Word64)
 import GHC.Generics (Generic)
-import GHC.IO.Unsafe (unsafePerformIO)
 import qualified Ouroboros.Consensus.Committee.Types as Committee
 import Ouroboros.Consensus.Config.SecurityParam (SecurityParam (..))
 import Ouroboros.Consensus.Peras.Protocol (PerasLedgerView (..))
@@ -88,8 +87,6 @@ import Ouroboros.Consensus.Peras.Types (PerasCertSize (..), PerasRoundNo (..))
 import Ouroboros.Consensus.Util.Condense (Condense (..))
 import Ouroboros.Consensus.Util.IOLike (NoThunks)
 import Quiet (Quiet (..))
-import System.Environment (lookupEnv)
-import Text.Read (readMaybe)
 
 -- * Protocol parameters
 
@@ -189,15 +186,6 @@ data PerasBootstrapStatus
   deriving stock (Show, Eq, Ord, Generic)
   deriving anyclass NoThunks
 
--- | This instance is mainly used to allow `orUnsafeEnv` to parse
--- `PerasBootstrapStatus` from environment variables.
-instance Read PerasBootstrapStatus where
-  readsPrec d s =
-    [(PerasBootstrapDisabled, rest) | ("PerasBootstrapDisabled", rest) <- lex s]
-      ++ [ (PerasBootstrapEnabled (PerasRoundNo r), rest)
-         | ("PerasBootstrapEnabled", rest1) <- lex s
-         , (r, rest) <- readsPrec d rest1
-         ]
 instance ToCBOR PerasBootstrapStatus where
   toCBOR bootstrap = toCBOR (perasBootstrapStatusToMaybe bootstrap)
 instance FromCBOR PerasBootstrapStatus where
@@ -286,46 +274,35 @@ mkPerasParams securityParam activeSlotCoeff plv =
     { perasIgnoranceRounds =
         PerasIgnoranceRounds $
           ignoranceRounds
-            `orUnsafeEnv` "PERAS_IGNORANCE_ROUNDS"
     , perasCooldownRounds =
         PerasCooldownRounds $
           cooldownRounds
-            `orUnsafeEnv` "PERAS_COOLDOWN_ROUNDS"
     , perasBlockMinSlots =
         PerasBlockMinSlots $
           blockMinSlots
-            `orUnsafeEnv` "PERAS_BLOCK_MIN_SLOTS"
     , perasBlockMaxSlots =
         PerasBlockMaxSlots $
           blockMaxSlots
-            `orUnsafeEnv` "PERAS_BLOCK_MAX_SLOTS"
     , perasCertMaxRounds =
         PerasCertMaxRounds $
           certMaxRounds
-            `orUnsafeEnv` "PERAS_CERT_MAX_ROUNDS"
     , perasCertArrivalThreshold =
         PerasCertArrivalThreshold $
           certArrivalThreshold
-            `orUnsafeEnv` "PERAS_CERT_ARRIVAL_THRESHOLD"
     , perasWeight =
         PerasWeight $
           weight
-            `orUnsafeEnv` "PERAS_WEIGHT"
     , perasQuorumWeightThreshold =
         PerasQuorumWeightThreshold $
           quorumWeightThreshold
-            `orUnsafeEnv` "PERAS_QUORUM_WEIGHT_THRESHOLD"
     , perasQuorumWeightThresholdSafetyMargin =
         PerasQuorumWeightThresholdSafetyMargin $
           quorumWeightThresholdSafetyMargin
-            `orUnsafeEnv` "PERAS_QUORUM_WEIGHT_THRESHOLD_SAFETY_MARGIN"
     , perasTargetCommitteeSize =
         Committee.TargetCommitteeSize $
           targetCommitteeSize
-            `orUnsafeEnv` "PERAS_TARGET_COMMITTEE_SIZE"
     , perasBootstrapStatus =
-        (perasBootstrapStatusFromMaybe maybeBootstrapRound)
-          `orUnsafeEnv` "PERAS_BOOTSTRAP_STATUS"
+        perasBootstrapStatusFromMaybe maybeBootstrapRound
     }
  where
   k :: Word64
@@ -384,18 +361,6 @@ mkPerasParams securityParam activeSlotCoeff plv =
 
   maybeBootstrapRound :: Maybe Word32
   maybeBootstrapRound = strictMaybeToMaybe (plvBootstrapRound plv)
-
--- | Temporary hack to allow overriding default Peras parameters via env vars.
-orUnsafeEnv :: Read a => a -> String -> a
-orUnsafeEnv def var =
-  unsafePerformIO $
-    lookupEnv var >>= \case
-      Nothing -> pure def
-      Just str ->
-        case readMaybe str of
-          Nothing -> pure def
-          Just x -> pure x
-{-# NOINLINE orUnsafeEnv #-}
 
 -- | Instantiate default Peras protocol parameters.
 --
