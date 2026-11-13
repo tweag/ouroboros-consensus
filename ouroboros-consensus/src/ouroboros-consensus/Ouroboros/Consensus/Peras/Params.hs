@@ -203,12 +203,12 @@ instance ToCBOR PerasBootstrapStatus where
 instance FromCBOR PerasBootstrapStatus where
   fromCBOR = perasBootstrapStatusFromMaybe <$> fromCBOR
 
-perasBootstrapStatusFromMaybe :: Maybe Word64 -> PerasBootstrapStatus
+perasBootstrapStatusFromMaybe :: Maybe Word32 -> PerasBootstrapStatus
 perasBootstrapStatusFromMaybe = \case
   Nothing -> PerasBootstrapDisabled
   Just r -> PerasBootstrapEnabled (PerasRoundNo r)
 
-perasBootstrapStatusToMaybe :: PerasBootstrapStatus -> Maybe Word64
+perasBootstrapStatusToMaybe :: PerasBootstrapStatus -> Maybe Word32
 perasBootstrapStatusToMaybe = \case
   PerasBootstrapDisabled -> Nothing
   PerasBootstrapEnabled (PerasRoundNo r) -> Just r
@@ -382,8 +382,8 @@ mkPerasParams securityParam activeSlotCoeff plv =
   targetCommitteeSize :: Word64
   targetCommitteeSize = fromIntegral @Word16 @Word64 (plvTargetCommitteeSize plv)
 
-  maybeBootstrapRound :: Maybe Word64
-  maybeBootstrapRound = fromIntegral @Word32 @Word64 <$> strictMaybeToMaybe (plvBootstrapRound plv)
+  maybeBootstrapRound :: Maybe Word32
+  maybeBootstrapRound = strictMaybeToMaybe (plvBootstrapRound plv)
 
 -- | Temporary hack to allow overriding default Peras parameters via env vars.
 orUnsafeEnv :: Read a => a -> String -> a

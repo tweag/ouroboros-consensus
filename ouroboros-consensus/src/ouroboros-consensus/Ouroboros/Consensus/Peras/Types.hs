@@ -10,6 +10,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
+{-# OPTIONS_GHC -Wno-orphans #-}
 
 -- | Base Peras types used throughout the codebase.
 module Ouroboros.Consensus.Peras.Types
@@ -37,29 +38,39 @@ where
 import Cardano.Binary
   ( FromCBOR (..)
   , ToCBOR (..)
+  , decodeBytes
   , decodeListLenOf
+  , encodeBytes
   , encodeListLen
   )
 import Codec.Serialise.Class (Serialise (..))
 import Control.DeepSeq (NFData)
-import Data.Aeson (ToJSON)
+import Data.Aeson (ToJSON (..))
 import Data.Coerce (coerce)
+import Cardano.Crypto.Peras
+  ( PerasBlockRef (..)
+  , PerasBoostedBlock (..)
+  , PerasRoundNo (..)
+  , PerasSeatIndex (..)
+  , PerasSignature (..)
+  , PerasVRFOutput (..)
+  , mkPerasBlockRef
+  , onPerasRoundNo
+  , perasBlockHashSize
+  )
+import Cardano.Crypto.Peras.Cert (PerasCertSize (..))
+import qualified Data.ByteString.Short as SBS
 import Data.Kind (Type)
-import Data.Word (Word16, Word32, Word64)
 import GHC.Generics (Generic)
 import NoThunks.Class (NoThunks)
 import Ouroboros.Consensus.Block.Abstract
   ( ConvertRawHash (..)
   , Point
-  , WithOrigin
   )
 import Ouroboros.Consensus.Block.RealPoint
-  ( Bytes32RealPoint
-  , decodeBytes32RealPoint
-  , encodeBytes32RealPoint
-  , fromBytes32RealPoint
+  ( fromPerasBlockRef
   , pointToWithOriginRealPoint
-  , toBytes32RealPoint
+  , toPerasBlockRef
   , withOriginRealPointToPoint
   )
 import Ouroboros.Consensus.BlockchainTime.WallClock.Types (WithArrivalTime)
@@ -67,30 +78,17 @@ import Ouroboros.Consensus.Committee.Types (VoteWeight (..))
 import Ouroboros.Consensus.Util (ShowProxy (..))
 import Ouroboros.Consensus.Util.CBOR (decodeWithOrigin, encodeWithOrigin)
 import Ouroboros.Consensus.Util.Condense (Condense (..))
-import Quiet (Quiet (..))
 
 -- * Peras Round numbers
 
--- | Round number in a Peras election.
-newtype PerasRoundNo
-  = PerasRoundNo
-  { unPerasRoundNo :: Word64
-  }
-  deriving Show via Quiet PerasRoundNo
-  deriving stock Generic
-  deriving newtype
-    ( Enum
-    , Eq
-    , Ord
-    , Num
-    , Bounded
-    , NoThunks
-    , NFData
-    , Serialise
-    , ToCBOR
-    , FromCBOR
-    , ToJSON
-    )
+instance ToCBOR PerasRoundNo where
+  toCBOR = toCBOR . unPerasRoundNo
+
+instance FromCBOR PerasRoundNo where
+  fromCBOR = PerasRoundNo <$> fromCBOR
+
+instance ToJSON PerasRoundNo where
+  toJSON = toJSON . unPerasRoundNo
 
 zeroPerasRoundNo :: PerasRoundNo
 zeroPerasRoundNo = PerasRoundNo 0
@@ -101,11 +99,57 @@ instance Condense PerasRoundNo where
 instance ShowProxy PerasRoundNo where
   showProxy _ = "PerasRoundNo"
 
--- | Lift a binary operation on 'Word64' to 'PerasRoundNo'
-onPerasRoundNo ::
-  (Word64 -> Word64 -> Word64) ->
-  (PerasRoundNo -> PerasRoundNo -> PerasRoundNo)
-onPerasRoundNo = coerce
+-- * Peras seat indices
+
+instance ToCBOR PerasSeatIndex where
+  toCBOR = toCBOR . unPerasSeatIndex
+
+instance FromCBOR PerasSeatIndex where
+  fromCBOR = PerasSeatIndex <$> fromCBOR
+
+-- * Peras block references and boosted blocks
+
+instance ToCBOR PerasBlockRef where
+  toCBOR (PerasBlockRef s h) =
+    mconcat
+      [ encodeListLen 2
+      , toCBOR s
+      , encodeBytes (SBS.fromShort h)
+      ]
+
+instance FromCBOR PerasBlockRef where
+  fromCBOR = do
+    decodeListLenOf 2
+    s <- fromCBOR
+    h <- SBS.toShort <$> decodeBytes
+    case mkPerasBlockRef s h of
+      Just ref -> pure ref
+      Nothing ->
+        fail $
+          "PerasBlockRef: expected a hash of "
+            <> show perasBlockHashSize
+            <> " bytes, got "
+            <> show (SBS.length h)
+
+instance ToCBOR PerasBoostedBlock where
+  toCBOR = encodeWithOrigin toCBOR . unPerasBoostedBlock
+
+instance FromCBOR PerasBoostedBlock where
+  fromCBOR = PerasBoostedBlock <$> decodeWithOrigin fromCBOR
+
+-- * Peras signatures and VRF outputs
+
+instance ToCBOR PerasSignature where
+  toCBOR = toCBOR . unPerasSignature
+
+instance FromCBOR PerasSignature where
+  fromCBOR = PerasSignature <$> fromCBOR
+
+instance ToCBOR PerasVRFOutput where
+  toCBOR = toCBOR . unPerasVRFOutput
+
+instance FromCBOR PerasVRFOutput where
+  fromCBOR = PerasVRFOutput <$> fromCBOR
 
 -- ** Peras boosted blocks
 
@@ -122,17 +166,6 @@ instance BoostedBlockCompatibleWithPoint (Point blk) blk where
 
 type instance BoostedBlock (WithArrivalTime voteOrCert) = BoostedBlock voteOrCert
 
--- | The slot number and 32-byte hash of the block being voted for.
---
--- NOTE: this type is mostly used in production votes and certificates, while
--- mocked votes and certificates generally use the more abstract 'Point blk'.
-newtype PerasBoostedBlock
-  = PerasBoostedBlock
-  { unPerasBoostedBlock :: WithOrigin Bytes32RealPoint
-  }
-  deriving stock (Show, Eq, Generic)
-  deriving anyclass NoThunks
-
 instance
   ( ConvertRawHash blk
   , HashSize blk ~ 32
@@ -141,29 +174,12 @@ instance
   where
   boostedBlockToPoint =
     withOriginRealPointToPoint
-      . fmap fromBytes32RealPoint
+      . fmap fromPerasBlockRef
       . unPerasBoostedBlock
   pointToBoostedBlock =
     PerasBoostedBlock
-      . fmap toBytes32RealPoint
+      . fmap toPerasBlockRef
       . pointToWithOriginRealPoint
-
-instance FromCBOR PerasBoostedBlock where
-  fromCBOR = PerasBoostedBlock <$> decodeWithOrigin decodeBytes32RealPoint
-
-instance ToCBOR PerasBoostedBlock where
-  toCBOR = encodeWithOrigin encodeBytes32RealPoint . unPerasBoostedBlock
-
--- * Peras seat indices
-
--- | Seat index in the voting committee used for Peras
-newtype PerasSeatIndex
-  = PerasSeatIndex
-  { unPerasSeatIndex :: Word16
-  }
-  deriving stock (Show, Eq, Ord, Generic)
-  deriving newtype (FromCBOR, ToCBOR, Enum, Bounded, NFData)
-  deriving anyclass NoThunks
 
 -- * Peras vote parameters
 
@@ -208,13 +224,3 @@ instance ToCBOR PerasVoteId where
       encodeListLen 2
         <> toCBOR pviRoundNo
         <> toCBOR pviSeatIndex
-
--- | Size of a Peras certificates in bytes.
---
--- We use this to ensure that the maximum block size is not exceeded
--- when including a Peras certificate in a block.
-newtype PerasCertSize
-  = PerasCertSize {unPerasCertSize :: Word32}
-  deriving stock (Show, Eq, Ord, Generic)
-  deriving anyclass NoThunks
-  deriving (Enum, Real, Integral, Num) via Word32

@@ -280,7 +280,7 @@ class
   -- if the block is from an era that does not support Peras certificates.
   getPerasCertInBlock ::
     blk ->
-    Either (PerasError blk) (Maybe (PerasCert blk))
+    Maybe (PerasCert blk)
 
 -- | Forge a Peras vote if the given pool is eligible to vote in the given round.
 defaultForgePerasVoteIfEligible ::
