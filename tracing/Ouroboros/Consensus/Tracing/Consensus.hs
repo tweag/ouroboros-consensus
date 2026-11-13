@@ -1048,6 +1048,11 @@ instance
       [ "kind" .= String "TraceGDDDisconnected"
       , "peers" .= toJSON (map (forMachine dtal) (toList peers))
       ]
+  forMachine _dtal (TraceGDDWaitingForPerasCerts minCertDiffusionState) =
+    mconcat
+      [ "kind" .= String "TraceGDDWaitingForPerasCerts"
+      , "minCertDiffusionState" .= toJSON minCertDiffusionState
+      ]
 
 instance MetaTrace (TraceGDDEvent peer blk) where
   namespaceFor _ = Namespace [] ["TraceGDDEvent"]
@@ -1068,11 +1073,12 @@ instance
     mconcat
       [ "kind" .= String "DensityBounds"
       , "clippedFragment" .= forMachine dtal clippedFragment
-      , "offersMoreThanK" .= toJSON offersMoreThanK
+      , "isDenseEnough" .= toJSON isDenseEnough
       , "lowerBound" .= toJSON lowerBound
       , "upperBound" .= toJSON upperBound
       , "hasBlockAfter" .= toJSON hasBlockAfter
-      , "latestSlot" .= toJSON (unSlotNo <$> withOriginToMaybe latestSlot)
+      , "latestInboundCertState" .= toJSON latestInboundCertState
+      , "latestHeaderSlot" .= toJSON (unSlotNo <$> withOriginToMaybe latestHeaderSlot)
       , "idling" .= toJSON idling
       ]
 

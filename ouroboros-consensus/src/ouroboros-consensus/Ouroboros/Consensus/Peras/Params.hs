@@ -17,8 +17,8 @@ module Ouroboros.Consensus.Peras.Params
   ( -- * Protocol parameters
     PerasIgnoranceRounds (..)
   , PerasCooldownRounds (..)
-  , PerasBlockMaxSlots (..)
   , PerasBlockMinSlots (..)
+  , PerasBlockMaxSlots (..)
   , PerasCertMaxRounds (..)
   , PerasCertArrivalThreshold (..)
   , PerasRoundLength (..)
