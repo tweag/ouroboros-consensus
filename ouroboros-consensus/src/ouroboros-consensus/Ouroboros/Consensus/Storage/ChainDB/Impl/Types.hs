@@ -17,6 +17,7 @@
 -- types, trace types, etc.
 module Ouroboros.Consensus.Storage.ChainDB.Impl.Types
   ( ChainDbEnv (..)
+  , ChainClock (..)
   , ChainDbHandle (..)
   , ChainDbState (..)
   , ChainSelectionPromise (..)
@@ -94,6 +95,7 @@ import Data.Word (Word64)
 import GHC.Generics (Generic)
 import NoThunks.Class (OnlyCheckWhnfNamed (..))
 import Ouroboros.Consensus.Block
+import Ouroboros.Consensus.BlockchainTime.API (CurrentSlot)
 import Ouroboros.Consensus.BlockchainTime.WallClock.Types (WithArrivalTime)
 import Ouroboros.Consensus.Config
 import Ouroboros.Consensus.Fragment.Diff (ChainDiff)
@@ -103,6 +105,7 @@ import Ouroboros.Consensus.Ledger.Inspect
 import Ouroboros.Consensus.Ledger.SupportsProtocol
 import Ouroboros.Consensus.Leios.Protocol (LeiosLedgerView)
 import Ouroboros.Consensus.Leios.Types (EndorserBlockHash)
+import Ouroboros.Consensus.Peras.Context (PerasEpochContextResolverHandle)
 import Ouroboros.Consensus.Peras.SelectView (WeightedSelectView, WithEmptyFragment)
 import Ouroboros.Consensus.Protocol.Abstract
 import Ouroboros.Consensus.Storage.ChainDB.API
@@ -297,6 +300,12 @@ checkInternalChain (InternalChain cur curWithTime) =
     , (headerPoint . f) `map` AF.toNewestFirst af
     )
 
+-- | The settable source of the current wall-clock slot backing the ChainDB's
+-- slot clock (see 'cdbGetCurrentSlot'). Wraps an 'STM' action, so its
+-- 'NoThunks' invariant only checks WHNF.
+newtype ChainClock m = ChainClock (STM m CurrentSlot)
+  deriving NoThunks via OnlyCheckWhnfNamed "ChainClock" (ChainClock m)
+
 data ChainDbEnv m blk = CDB
   { cdbImmutableDB :: !(ImmutableDB m blk)
   , cdbImmutableDBLock :: !(RAWLock m ())
@@ -396,8 +405,17 @@ data ChainDbEnv m blk = CDB
   , cdbSnapshotDelayRNG :: !(StrictTVar m StdGen)
   -- ^ PRNG for determining the random delay we'll wait before actually
   -- performing the snapshot when one has been requested.
+  , cdbGetCurrentSlot :: !(StrictTVar m (ChainClock m))
+  -- ^ Settable source for the current wall-clock slot. Defaults to a
+  -- placeholder reporting the slot as unknown, and is populated via
+  -- 'Ouroboros.Consensus.Storage.ChainDB.API.setChainClock' (by the node
+  -- kernel) with an action that yields the wall-clock slot only while the node
+  -- is caught up. Used to implement the ChainDB's slot clock.
   , cdbPerasCertDB :: !(PerasCertDB m blk)
   , cdbPerasVoteDB :: !(PerasVoteDB m blk)
+  , cdbPerasEpochContextResolverHandle :: !(PerasEpochContextResolverHandle m blk)
+  -- ^ Shared handle resolving a Peras round to its epoch context; also handed
+  -- to the VoteDB and exposed via the ChainDB API.
   , cdbLeiosDb :: !(LeiosDbHandle m)
   -- ^ The node's LeiosDB. Whoever opened it closes it, not the ChainDB.
   , cdbAcquiredLeiosEbs :: !(StrictTVar m AcquiredLeiosEbs)
