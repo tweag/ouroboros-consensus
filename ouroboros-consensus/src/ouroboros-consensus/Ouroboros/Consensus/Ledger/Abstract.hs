@@ -51,6 +51,7 @@ import Ouroboros.Consensus.Ledger.Basics
 import Ouroboros.Consensus.Ledger.Tables
 import Ouroboros.Consensus.Ledger.Tables.MapKind
 import Ouroboros.Consensus.Ledger.Tables.Utils
+import Ouroboros.Consensus.Peras.ApplyContext (PerasApplyContext)
 import Ouroboros.Consensus.Ticked
 import Ouroboros.Consensus.Util
 
@@ -110,6 +111,24 @@ class
     blk ->
     Ticked l blk ValuesMK ->
     Except (LedgerErr l blk) (LedgerResult blk (l blk DiffMK))
+
+  -- | Same as 'applyBlockLedgerResultWithValidation', with what the ledger
+  -- needs to validate the Peras certificate of the block (see
+  -- 'PerasApplyContext'). 'Nothing' when Peras is not enabled in the epoch of
+  -- the block.
+  --
+  -- Ledgers that do not validate Peras certificates ignore it, which is the
+  -- default.
+  applyBlockLedgerResultWithPerasContext ::
+    HasCallStack =>
+    Maybe PerasApplyContext ->
+    STS.ValidationPolicy ->
+    ComputeLedgerEvents ->
+    LedgerCfg l blk ->
+    blk ->
+    Ticked l blk ValuesMK ->
+    Except (LedgerErr l blk) (LedgerResult blk (l blk DiffMK))
+  applyBlockLedgerResultWithPerasContext _ = applyBlockLedgerResultWithValidation
 
   -- | Apply a block to the ledger state.
   --

@@ -109,6 +109,7 @@ import Ouroboros.Consensus.Ledger.Abstract
 import Ouroboros.Consensus.Ledger.Inspect
 import Ouroboros.Consensus.Ledger.SupportsProtocol
 import Ouroboros.Consensus.Ledger.Tables.Utils
+import Ouroboros.Consensus.Peras.ApplyContext (PerasApplyContext)
 import Ouroboros.Consensus.Peras.Context (StateSupportsPerasEpochContext (..))
 import Ouroboros.Consensus.TypeFamilyWrappers
 import Ouroboros.Consensus.Util.Condense
@@ -251,7 +252,10 @@ instance
   ) =>
   ApplyBlock LedgerState (HardForkBlock xs)
   where
-  applyBlockLedgerResultWithValidation
+  applyBlockLedgerResultWithValidation = applyBlockLedgerResultWithPerasContext Nothing
+
+  applyBlockLedgerResultWithPerasContext
+    perasContext
     doValidate
     opts
     cfg
@@ -267,7 +271,7 @@ instance
         Right matched ->
           fmap (fmap HardForkLedgerState . sequenceHardForkState) $
             hsequence' $
-              hcizipWith proxySingle (apply doValidate opts) cfgs matched
+              hcizipWith proxySingle (apply perasContext doValidate opts) cfgs matched
      where
       cfgs = distribLedgerConfig ei cfg
       ei =
@@ -300,6 +304,8 @@ instance (HasCanonicalTxIn xs, HasHardForkTxOut xs, CanHardFork xs) => GetBlockK
 
 apply ::
   (SListI xs, SingleEraBlock blk) =>
+  -- | The context is the same in every era: only the era of the block uses it
+  Maybe PerasApplyContext ->
   STS.ValidationPolicy ->
   ComputeLedgerEvents ->
   Index xs blk ->
@@ -310,11 +316,11 @@ apply ::
       :.: Flip LedgerState DiffMK
   )
     blk
-apply doValidate opts index (WrapLedgerConfig cfg) (Pair (I block) (FlipTickedLedgerState st)) =
+apply perasContext doValidate opts index (WrapLedgerConfig cfg) (Pair (I block) (FlipTickedLedgerState st)) =
   Comp $
     withExcept (injectLedgerError index) $
       fmap (Comp . fmap Flip . embedLedgerResult (injectLedgerEvent index)) $
-        applyBlockLedgerResultWithValidation doValidate opts cfg block st
+        applyBlockLedgerResultWithPerasContext perasContext doValidate opts cfg block st
 
 {-------------------------------------------------------------------------------
   UpdateLedger
@@ -377,6 +383,17 @@ instance
     getNonce :: forall blk. SingleEraBlock blk => (Ticked :.: WrapChainDepState) blk -> K Nonce blk
     getNonce (Comp (WrapTickedChainDepState st)) =
       K (getPerasNonceFromTickedHeaderState @blk (TickedHeaderState Origin st))
+
+  getPerasPrevNonceFromTickedHeaderState TickedHeaderState{tickedHeaderStateChainDep} =
+    hcollapse $
+      hcmap
+        proxySingle
+        getNonce
+        (State.tip (tickedHardForkChainDepStatePerEra tickedHeaderStateChainDep))
+   where
+    getNonce :: forall blk. SingleEraBlock blk => (Ticked :.: WrapChainDepState) blk -> K Nonce blk
+    getNonce (Comp (WrapTickedChainDepState st)) =
+      K (getPerasPrevNonceFromTickedHeaderState @blk (TickedHeaderState Origin st))
 
   mkPerasParamsFromLedger cfg (HardForkLedgerState st) =
     derivePerasParamsFromLedger

@@ -122,6 +122,7 @@ import Ouroboros.Consensus.Ledger.Abstract
 import Ouroboros.Consensus.Ledger.CommonProtocolParams
 import Ouroboros.Consensus.Ledger.Extended
 import Ouroboros.Consensus.Ledger.Tables.Utils
+import Ouroboros.Consensus.Peras.ApplyContext (PerasApplyContext (..), PerasApplyEpoch (..))
 import Ouroboros.Consensus.Protocol.Ledger.Util (isNewEpoch)
 import Ouroboros.Consensus.Shelley.Eras (ShelleyBasedEra (..))
 import Ouroboros.Consensus.Shelley.Ledger.Block
@@ -594,18 +595,22 @@ instance
   --    - 'updateChainDepState': executes the @PRTCL@ transition
   -- + 'applyBlockLedgerResult': executes the @BBODY@ transition
   --
-  applyBlockLedgerResultWithValidation doValidate evs =
+  applyBlockLedgerResultWithValidation = applyBlockLedgerResultWithPerasContext Nothing
+
+  applyBlockLedgerResultWithPerasContext perasContext doValidate evs =
     liftEither ..: applyHelper appBlk
    where
+    ledgerPerasContext = toLedgerPerasBlockContext <$> perasContext
+
     -- Apply the BBODY transition using the ticked state
     appBlk =
       fmap (uncurry (flip LedgerResult)) ..: case evs of
         ComputeLedgerEvents ->
           fmap (second (map ShelleyLedgerEventBBODY))
-            ..: SL.applyBlockEither STS.EPReturn doValidate
+            ..: SL.applyBlockEitherWithPerasContext ledgerPerasContext STS.EPReturn doValidate
         OmitLedgerEvents ->
           fmap (,[])
-            ..: SL.applyBlockEitherNoEvents doValidate
+            ..: SL.applyBlockEitherNoEventsWithPerasContext ledgerPerasContext doValidate
 
   applyBlockLedgerResult = defaultApplyBlockLedgerResult
 
@@ -622,6 +627,21 @@ instance
       . coerceSet
       . Core.neededTxInsForBlock
       . shelleyBlockRaw
+
+-- | The ledger's view of 'PerasApplyContext'.
+toLedgerPerasBlockContext :: PerasApplyContext -> SL.PerasBlockContext
+toLedgerPerasBlockContext PerasApplyContext{pacEpoch, pacPrevEpoch} =
+  SL.PerasBlockContext
+    { SL.pbcEpoch = toLedgerEpoch pacEpoch
+    , SL.pbcPrevEpoch = toLedgerEpoch <$> pacPrevEpoch
+    }
+ where
+  toLedgerEpoch PerasApplyEpoch{paeNonce, paeStartRound, paeEndRound} =
+    SL.PerasEpochInfo
+      { SL.peiNonce = paeNonce
+      , SL.peiStartRound = paeStartRound
+      , SL.peiEndRound = paeEndRound
+      }
 
 data ShelleyReapplyException
   = forall era.

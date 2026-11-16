@@ -83,7 +83,7 @@ import Ouroboros.Consensus.Peras.Protocol (PerasProtocol (..))
 import qualified Ouroboros.Consensus.Peras.Vote.V1 as V1
 import qualified Ouroboros.Consensus.Peras.Voting.V1 as V1
 import Ouroboros.Consensus.Protocol.PolyPraos
-  ( PolyPraosState (praosStateEpochNonce)
+  ( PolyPraosState (praosStateEpochNonce, praosStatePreviousEpochNonce)
   )
 import qualified Ouroboros.Consensus.Protocol.PolyPraos as PolyPraos
 import qualified Ouroboros.Consensus.Protocol.Praos.Views as Praos
@@ -227,6 +227,10 @@ instance
       . headerStateChainDep
   getPerasNonceFromTickedHeaderState =
     praosStateEpochNonce
+      . PolyPraos.tickedPraosStateChainDepState
+      . tickedHeaderStateChainDep
+  getPerasPrevNonceFromTickedHeaderState =
+    praosStatePreviousEpochNonce
       . PolyPraos.tickedPraosStateChainDepState
       . tickedHeaderStateChainDep
   mkBoundedPerasEpochContext =
