@@ -62,7 +62,14 @@ module Test.Consensus.Leios.TestBlock
   , singleNodeLeiosTestConfig
   ) where
 
-import Cardano.Binary (DecoderError, decodeMaybe, encodeMaybe, enforceSize, fromCBOR, toCBOR)
+import Cardano.Binary
+  ( DecoderError
+  , FromCBOR (..)
+  , ToCBOR (..)
+  , decodeMaybe
+  , encodeMaybe
+  , enforceSize
+  )
 import qualified Cardano.Crypto.Hash as Hash
 import Cardano.Crypto.Leios (LeiosCert)
 import Cardano.Ledger.BaseTypes (BoundedRational (..), Milliseconds32 (..), Nonce (NeutralNonce))
@@ -159,7 +166,7 @@ import Ouroboros.Consensus.Util (ShowProxy (..))
 import Ouroboros.Consensus.Util.Condense
 import Ouroboros.Consensus.Util.IndexedMemPack
 import Ouroboros.Consensus.Util.Orphans ()
-import Ouroboros.Network.Block (Serialised)
+import Ouroboros.Network.Block (Serialised, decodePoint, encodePoint)
 import Ouroboros.Network.Magic (NetworkMagic (..))
 import Ouroboros.Network.Tx (HasRawTxId (..))
 import Test.Util.Orphans.ToExpr ()
@@ -757,6 +764,12 @@ instance Serialise (ExtLedgerState LeiosTestBlock EmptyMK) where
 instance Serialise (RealPoint LeiosTestBlock) where
   encode = encodeRealPoint encode
   decode = decodeRealPoint decode
+
+instance ToCBOR (Point LeiosTestBlock) where
+  toCBOR = encodePoint encode
+
+instance FromCBOR (Point LeiosTestBlock) where
+  fromCBOR = decodePoint decode
 
 instance EncodeDisk LeiosTestBlock LeiosTestBlock
 instance DecodeDisk LeiosTestBlock (BL.ByteString -> Either DecoderError LeiosTestBlock) where
