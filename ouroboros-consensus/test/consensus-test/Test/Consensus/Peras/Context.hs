@@ -8,7 +8,7 @@ import Ouroboros.Consensus.Peras.Context
   ( BoundedPerasEpochContext (..)
   , PerasEpochContextResolver (..)
   , perasEpochContextResolverBounds
-  , resolveRoundNo
+  , unsafeResolveRoundNo
   )
 import Ouroboros.Consensus.Peras.Params
   ( pattern NoPerasEnabled
@@ -50,7 +50,7 @@ prop_boundsAgreeWithResolution =
                    in counterexample
                         (caseName <> ": round " <> show roundNo <> ", bounds " <> show (lowerBound, upperBound))
                         $ (lowerBound <= roundNo && roundNo < upperBound)
-                          === isRight (resolveRoundNo resolver roundNo)
+                          === isRight (unsafeResolveRoundNo resolver roundNo)
                 | (caseName, resolver) <- resolverCases
                 , roundNo <- roundNumbers
                 ]
