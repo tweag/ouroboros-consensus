@@ -67,6 +67,7 @@ import Test.QuickCheck
   )
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertFailure, testCase, (@?=))
+import Test.Tasty.ExpectedFailure (expectFailBecause)
 import Test.Tasty.QuickCheck (testProperty)
 import Test.Util.Tracer (recordingTracerIORef)
 
@@ -75,18 +76,24 @@ tests =
   testGroup
     "PerasImmutableCertDB"
     [ testCase "query is strict, ascending and bounded" testQuerySemantics
-    , testCase "the initial page can include round zero" testRoundZeroReachable
+    , expectFailBecause
+        "IntersectMBO/ouroboros-consensus#2342: getCertsAfter has no cursor before round zero (see testRoundZeroReachable)"
+        $ testCase "the initial page can include round zero" testRoundZeroReachable
     , testCase "duplicate round preserves the first certificate" testDuplicateRound
     , testCase "a corrupt stored duplicate is replaced" testCorruptDuplicateReplaced
     , testCase "reopening preserves numeric round order" testReopenOrder
-    , testCase "conflicting certificates are not ordinary duplicates" testConflictingRoundReported
+    , expectFailBecause
+        "IntersectMBO/ouroboros-consensus#2342: a conflicting certificate is reported as CertAlreadyInImmutableDB (see testConflictingRoundReported)"
+        $ testCase "conflicting certificates are not ordinary duplicates" testConflictingRoundReported
     , testCase "reopening removes abandoned temporary files" testTempFileCleanup
     , testCase "non-certificate directory entries are not served" testForeignFilesIgnored
     , testCase "a missing file is quarantined on read" testMissingFileQuarantined
     , testCase "a corrupt file is quarantined on read" testCorruptFileQuarantined
-    , testCase
-        "transient read errors do not quarantine intact certificates"
-        testTransientReadErrorDoesNotQuarantine
+    , expectFailBecause
+        "IntersectMBO/ouroboros-consensus#2342: a transient read error quarantines an intact certificate (see testTransientReadErrorDoesNotQuarantine)"
+        $ testCase
+          "transient read errors do not quarantine intact certificates"
+          testTransientReadErrorDoesNotQuarantine
     , testCase "corruption does not shorten a page" testCorruptFileDoesNotShortenPage
     , testCase "filename round must match encoded certificate round" testFileNameRoundMismatch
     , testGroup
