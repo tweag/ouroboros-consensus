@@ -220,9 +220,15 @@ tests :: TestTree
 tests =
   testGroup
     "cardano-tools"
-    [ testCaseSteps "synthesize and analyse: blockCount\n" blockCountTest
+    [ -- Both tests synthesize into the same ChainDB directory, so they must not
+      -- run concurrently.
+      sequentialTestGroup
+        "synthesis"
+        AllFinish
+        [ testCaseSteps "synthesize and analyse: blockCount\n" blockCountTest
+        , testCaseSteps "synthesize, analyse and truncate\n" blockCountTest
+        ]
     , Test.Cardano.Tools.DBAnalyser.NodeConfig.tests
-    , testCaseSteps "synthesize, analyse and truncate\n" blockCountTest
     , Test.Cardano.Tools.Headers.tests
     ]
 
