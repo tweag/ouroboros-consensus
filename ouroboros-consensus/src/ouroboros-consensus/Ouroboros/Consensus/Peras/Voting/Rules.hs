@@ -52,6 +52,8 @@ import Ouroboros.Consensus.Block.SupportsPeras
   )
 import Ouroboros.Consensus.Peras.Voting.View
   ( LatestCertSeenView (..)
+  , PerasCandidate (..)
+  , PerasCandidateAge (..)
   , PerasVotingView (..)
   )
 import Ouroboros.Consensus.Util.Pred
@@ -89,7 +91,7 @@ isPerasVotingAllowed ::
 isPerasVotingAllowed pvv =
   evalPred (perasVotingRules pvv) $ \e ->
     case e of
-      ETrue{} -> Vote e (candidateBlock pvv)
+      ETrue{} -> Vote e (pcCandidate $ candidateBlock pvv)
       EFalse{} -> NoVote e
 
 -- | Voting rules
@@ -113,6 +115,9 @@ data PerasVotingRule
     -- perasBootstrapRound taking precedence if specified and larger than the
     -- former) is from a round exactly c⋅K rounds ago for some c ∈ ℕ with c ≥ 0.
     VR2B PerasBootstrapAndRecoveryInteractionOutcome
+  | -- | Checks the age of the candidate block relative to the current slot,
+    -- perasBlockMinSLots, and perasBlockMaxSlots.
+    VR3
   deriving (Show, Eq)
 
 -- | As per revised CIP-0140,
@@ -174,6 +179,7 @@ instance Explainable PerasVotingRule where
     VR1B -> "VR-1B"
     VR2A -> "VR-2A"
     VR2B _ -> "VR-2B"
+    VR3 -> "VR-3"
   explain Deep = \case
     VR1A ->
       "voter has seen the certificate for the previous round in time"
@@ -199,6 +205,8 @@ instance Explainable PerasVotingRule where
         ++ ") exactly c cooldown periods old for c ∈ ℕ with c ≥ 0"
     VR2B PerasBootstrapDisabledAndNoLatestCertOnChain ->
       "the perasBootstrapRound is disabled, and there is no certificate on the preferred chain at all"
+    VR3 ->
+      "the block being voted upon is within the allowed age range"
 
 -- | VR-1A: the voter has seen the certificate for the previous round, and the
 -- certificate was received in the first X slots after the start of the round.
@@ -381,10 +389,21 @@ perasVR2 ::
 perasVR2 pvv =
   perasVR2A pvv :/\: perasVR2B pvv
 
+perasVR3 ::
+  PerasVotingView cert blk ->
+  Pred PerasVotingRule
+perasVR3 PerasVotingView{candidateBlock} =
+  VR3 := vr3
+ where
+  vr3 = case pcCandidateAge candidateBlock of
+    PerasCandidateTooYoung -> Bool False
+    PerasCandidateTooOld -> Bool False
+    PerasCandidateWithRightAge -> Bool True
+
 -- | Voting is allowed if either VR-1A and VR-1B hold, or VR-2A and VR-2B hold.
 perasVotingRules ::
   IsPerasCert cert blk =>
   PerasVotingView cert blk ->
   Pred PerasVotingRule
 perasVotingRules pvv =
-  perasVR1 pvv :\/: perasVR2 pvv
+  (perasVR1 pvv :\/: perasVR2 pvv) :/\: perasVR3 pvv
