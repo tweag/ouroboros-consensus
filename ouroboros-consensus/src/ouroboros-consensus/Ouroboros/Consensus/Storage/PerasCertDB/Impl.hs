@@ -193,11 +193,11 @@ implGetCertsBoosting ::
   Point blk ->
   STM m [WithArrivalTime (ValidatedPerasCert blk)]
 implGetCertsBoosting PerasCertDbEnv{pcdbState} pt = do
-  PerasCertDbState{pcdsCertsByTicket} <-
+  PerasCertDbState{pcdsCerts} <-
     forgetFingerprint <$> readTVar pcdbState
   pure
     [ cert
-    | cert <- Map.elems pcdsCertsByTicket
+    | cert <- Map.elems pcdsCerts
     , getPerasCertPoint cert == pt
     ]
 
@@ -255,17 +255,17 @@ implGarbageCollect ::
   SlotNo ->
   STM m (m [WithArrivalTime (ValidatedPerasCert blk)])
 implGarbageCollect PerasCertDbEnv{pcdbTracer, pcdbState} slotNo = do
-  WithFingerprint (pcdbState', removedCertsByTicket) fp <- fmap gc <$> readTVar pcdbState
+  WithFingerprint (pcdbState', removedCerts) fp <- fmap gc <$> readTVar pcdbState
   -- No need to update the 'Fingerprint' as we only remove certificates that do
   -- not matter for comparing interesting chains.
   writeTVar pcdbState (WithFingerprint pcdbState' fp)
   pure $ do
     traceWith pcdbTracer (GarbageCollected slotNo)
-    pure (Map.elems removedCertsByTicket)
+    pure (Map.elems removedCerts)
  where
   gc ::
     PerasCertDbState blk ->
-    (PerasCertDbState blk, Map PerasCertTicketNo (WithArrivalTime (ValidatedPerasCert blk)))
+    (PerasCertDbState blk, Map PerasRoundNo (WithArrivalTime (ValidatedPerasCert blk)))
   gc
     PerasCertDbState
       { pcdsCerts
