@@ -51,19 +51,19 @@ import Data.Typeable (Proxy (..), Typeable)
 import GHC.Generics (Generic)
 import NoThunks.Class (NoThunks)
 import Ouroboros.Consensus.Block.Abstract (ConvertRawHash (..))
-import Ouroboros.Consensus.Committee.Crypto
+import Cardano.Crypto.Peras.Committee.Crypto
   ( CryptoSupportsAggregateVoteSigning (..)
   , CryptoSupportsVRF (..)
   )
-import qualified Ouroboros.Consensus.Committee.Crypto.BLS as BLS
-import Ouroboros.Consensus.Committee.EveryoneVotes
+import qualified Cardano.Crypto.Peras.Committee.Crypto.BLS as BLS
+import Cardano.Crypto.Peras.Committee.EveryoneVotes
   ( Cert (..)
   , EveryoneVotes
   )
-import Ouroboros.Consensus.Committee.WFA (SeatIndex (..))
-import Ouroboros.Consensus.Committee.WFALS (Cert (..), WFALS)
+import Cardano.Crypto.Peras.Committee.WFA (SeatIndex (..))
+import Cardano.Crypto.Peras.Committee.WFALS (Cert (..), WFALS)
 import Ouroboros.Consensus.Peras.Cert.Class (IsPerasCert (..))
-import Ouroboros.Consensus.Peras.Crypto.BLS
+import Cardano.Crypto.Peras.Crypto.BLS
   ( PerasBLSCrypto
   , PerasBLSCryptoAggregateVoteSignature (..)
   , VRFOutput (..)

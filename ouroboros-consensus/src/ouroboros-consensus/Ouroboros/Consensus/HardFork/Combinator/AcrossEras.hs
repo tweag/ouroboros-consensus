@@ -106,8 +106,8 @@ import GHC.Generics (Generic)
 import GHC.Stack
 import NoThunks.Class (NoThunks)
 import Ouroboros.Consensus.Block.Abstract
-import Ouroboros.Consensus.Committee.Class (VotingCommittee)
-import Ouroboros.Consensus.Committee.Crypto (PrivateKey)
+import Cardano.Crypto.Peras.Committee.Class (VotingCommittee)
+import Cardano.Crypto.Peras.Committee.Crypto (PrivateKey)
 import Ouroboros.Consensus.HardFork.Combinator.Abstract
 import Ouroboros.Consensus.HardFork.Combinator.Info
 import Ouroboros.Consensus.HardFork.Combinator.Lifting

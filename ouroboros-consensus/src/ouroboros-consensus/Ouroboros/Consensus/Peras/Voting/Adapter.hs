@@ -17,8 +17,8 @@ import Data.Containers.NonEmpty (HasNonEmpty (..))
 import GHC.Generics (Generic)
 import GHC.Word (Word16, Word64)
 import NoThunks.Class (NoThunks)
-import qualified Ouroboros.Consensus.Committee.Class as Committee
-import Ouroboros.Consensus.Committee.WFA (SeatIndex (..))
+import qualified Cardano.Crypto.Peras.Committee.Class as Committee
+import Cardano.Crypto.Peras.Committee.WFA (SeatIndex (..))
 import Ouroboros.Consensus.Peras.Types (PerasSeatIndex (..))
 
 -- | Conversion between (concrete) Peras votes and (abstract) committee votes.

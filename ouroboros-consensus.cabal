@@ -114,14 +114,6 @@ library
     Ouroboros.Consensus.BlockchainTime.WallClock.Simple
     Ouroboros.Consensus.BlockchainTime.WallClock.Types
     Ouroboros.Consensus.BlockchainTime.WallClock.Util
-    Ouroboros.Consensus.Committee.Class
-    Ouroboros.Consensus.Committee.Crypto
-    Ouroboros.Consensus.Committee.Crypto.BLS
-    Ouroboros.Consensus.Committee.EveryoneVotes
-    Ouroboros.Consensus.Committee.LS
-    Ouroboros.Consensus.Committee.Types
-    Ouroboros.Consensus.Committee.WFA
-    Ouroboros.Consensus.Committee.WFALS
     Ouroboros.Consensus.Config
     Ouroboros.Consensus.Config.SecurityParam
     Ouroboros.Consensus.Config.SupportsNode
@@ -258,10 +250,10 @@ library
     Ouroboros.Consensus.Peras.Cert.Mock
     Ouroboros.Consensus.Peras.Cert.V1
     Ouroboros.Consensus.Peras.Context
-    Ouroboros.Consensus.Peras.Crypto.BLS
     Ouroboros.Consensus.Peras.Crypto.Mock
     Ouroboros.Consensus.Peras.Error.Mock
     Ouroboros.Consensus.Peras.Error.V1
+    Ouroboros.Consensus.Peras.LedgerConversions
     Ouroboros.Consensus.Peras.Params
     Ouroboros.Consensus.Peras.Protocol
     Ouroboros.Consensus.Peras.SelectView
@@ -398,7 +390,6 @@ library
 
   build-depends:
     aeson,
-    array,
     base >=4.14 && <4.23,
     base-deriving-via,
     base16-bytestring >=1.0,
@@ -496,6 +487,7 @@ library tracing
     bech32,
     bytestring,
     cardano-crypto-class,
+    cardano-crypto-peras,
     cardano-crypto-wrapper,
     cardano-data,
     cardano-ledger-allegra,
@@ -665,6 +657,7 @@ library unstable-consensus-testlib
     bytestring,
     cardano-binary:{cardano-binary, testlib},
     cardano-crypto-class,
+    cardano-crypto-peras,
     cardano-crypto-peras:testlib,
     cardano-ledger-binary:testlib,
     cardano-ledger-core,
@@ -1712,6 +1705,7 @@ library cardano
     cardano-crypto,
     cardano-crypto-class:cardano-crypto-class,
     cardano-crypto-leios,
+    cardano-crypto-peras,
     cardano-crypto-wrapper,
     cardano-ledger-allegra ^>=1.11,
     cardano-ledger-alonzo ^>=1.19,

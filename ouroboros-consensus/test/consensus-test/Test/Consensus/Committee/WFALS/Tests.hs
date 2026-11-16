@@ -6,7 +6,7 @@
 -- | Test properties for the weighted Fait-Accompli implementation using TestCrypto.
 module Test.Consensus.Committee.WFALS.Tests (tests) where
 
-import Cardano.Ledger.BaseTypes
+import Cardano.Crypto.Peras.Committee.Base
 import Data.Function (on)
 import Data.List (intercalate, sortOn)
 import Data.List.NonEmpty (NonEmpty ((:|)))
@@ -14,12 +14,12 @@ import qualified Data.List.NonEmpty as NonEmpty
 import Data.Map (Map)
 import qualified Data.Map.Strict as Map
 import Data.Proxy (Proxy (..))
-import Ouroboros.Consensus.Committee.Class
+import Cardano.Crypto.Peras.Committee.Class
   ( CryptoSupportsVotingCommittee (..)
   , VotingCommittee
   , ensureUniqueVotesWithSameTarget
   )
-import Ouroboros.Consensus.Committee.Crypto
+import Cardano.Crypto.Peras.Committee.Crypto
   ( CryptoSupportsVRF (..)
   , ElectionId
   , PrivateKey
@@ -28,20 +28,20 @@ import Ouroboros.Consensus.Committee.Crypto
   , evalVRF
   , mkVRFElectionInput
   )
-import Ouroboros.Consensus.Committee.LS (LocalSortitionNumSeats (..))
-import qualified Ouroboros.Consensus.Committee.LS as LS
-import Ouroboros.Consensus.Committee.Types
+import Cardano.Crypto.Peras.Committee.LS (LocalSortitionNumSeats (..))
+import qualified Cardano.Crypto.Peras.Committee.LS as LS
+import Cardano.Crypto.Peras.Committee.Types
   ( LedgerStake (..)
   , PoolId
   , TargetCommitteeSize (..)
   )
-import Ouroboros.Consensus.Committee.WFA
+import Cardano.Crypto.Peras.Committee.WFA
   ( NonPersistentCommitteeSize (..)
   , PersistentCommitteeSize (..)
   , SeatIndex (..)
   , mkExtWFAStakeDistr
   )
-import Ouroboros.Consensus.Committee.WFALS
+import Cardano.Crypto.Peras.Committee.WFALS
   ( EligibilityWitness (..)
   , Vote (..)
   , VotingCommitteeInput (..)

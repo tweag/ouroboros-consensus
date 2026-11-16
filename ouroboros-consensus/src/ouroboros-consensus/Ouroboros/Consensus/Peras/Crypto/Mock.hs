@@ -55,14 +55,14 @@ import Data.Word (Word16)
 import GHC.Generics (Generic)
 import NoThunks.Class (NoThunks)
 import Ouroboros.Consensus.Block.Abstract (Point, StandardHash)
-import Ouroboros.Consensus.Committee.Class
+import Cardano.Crypto.Peras.Committee.Class
   ( CryptoSupportsVotingCommittee (..)
   , VotingCommittee
   , getElectionIdFromVotes
   , getRawVotes
   , getVoteCandidateFromVotes
   )
-import Ouroboros.Consensus.Committee.Crypto
+import Cardano.Crypto.Peras.Committee.Crypto
   ( CryptoSupportsAggregateVoteSigning (..)
   , CryptoSupportsVoteSigning (..)
   , ElectionId
@@ -70,7 +70,7 @@ import Ouroboros.Consensus.Committee.Crypto
   , PublicKey
   , VoteCandidate
   )
-import Ouroboros.Consensus.Committee.Types (LedgerStake (..), PoolId)
+import Cardano.Crypto.Peras.Committee.Types (LedgerStake (..), PoolId)
 import Ouroboros.Consensus.Peras.Cert.Mock (MockPerasCert (..))
 import Ouroboros.Consensus.Peras.Types
   ( PerasRoundNo

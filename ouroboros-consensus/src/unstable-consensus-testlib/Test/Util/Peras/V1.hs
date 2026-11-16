@@ -23,9 +23,9 @@ import Data.Maybe (fromMaybe)
 import Data.Proxy (Proxy (..))
 import Data.String (IsString (..))
 import Data.Word (Word8)
-import qualified Ouroboros.Consensus.Committee.Crypto.BLS as BLS
+import qualified Cardano.Crypto.Peras.Committee.Crypto.BLS as BLS
 import qualified Ouroboros.Consensus.Peras.Cert.V1 as V1
-import Ouroboros.Consensus.Peras.Crypto.BLS
+import Cardano.Crypto.Peras.Crypto.BLS
   ( VRFOutput (..)
   , VoteSignature (..)
   )

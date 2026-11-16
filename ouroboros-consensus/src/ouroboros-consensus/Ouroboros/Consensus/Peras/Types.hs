@@ -74,7 +74,7 @@ import Ouroboros.Consensus.Block.RealPoint
   , withOriginRealPointToPoint
   )
 import Ouroboros.Consensus.BlockchainTime.WallClock.Types (WithArrivalTime)
-import Ouroboros.Consensus.Committee.Types (VoteWeight (..))
+import Cardano.Crypto.Peras.Committee.Types (VoteWeight (..))
 import Ouroboros.Consensus.Util (ShowProxy (..))
 import Ouroboros.Consensus.Util.CBOR (decodeWithOrigin, encodeWithOrigin)
 import Ouroboros.Consensus.Util.Condense (Condense (..))

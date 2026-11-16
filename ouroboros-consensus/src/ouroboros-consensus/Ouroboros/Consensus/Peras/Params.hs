@@ -79,7 +79,7 @@ import Data.Ratio ((%))
 import Data.Typeable (Typeable)
 import Data.Word (Word16, Word32, Word64)
 import GHC.Generics (Generic)
-import qualified Ouroboros.Consensus.Committee.Types as Committee
+import qualified Cardano.Crypto.Peras.Committee.Types as Committee
 import Ouroboros.Consensus.Config.SecurityParam (SecurityParam (..))
 import Ouroboros.Consensus.Peras.Protocol (PerasLedgerView (..))
 import Ouroboros.Consensus.Peras.Types (PerasCertSize (..), PerasRoundNo (..))

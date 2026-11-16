@@ -38,7 +38,7 @@ import Ouroboros.Consensus.BlockchainTime
   , SystemTime (..)
   , WithArrivalTime (..)
   )
-import Ouroboros.Consensus.Committee.Types (LedgerStake (..), PoolId)
+import Cardano.Crypto.Peras.Committee.Types (LedgerStake (..), PoolId)
 import Ouroboros.Consensus.Peras.Types (PerasSeatIndex (..))
 import Ouroboros.Consensus.Peras.Voting.View
   ( PerasCandidate (..)

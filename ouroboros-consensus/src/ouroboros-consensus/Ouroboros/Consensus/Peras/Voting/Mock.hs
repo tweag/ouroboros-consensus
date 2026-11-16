@@ -13,10 +13,9 @@ import Data.Bifunctor (Bifunctor (..))
 import Data.List.NonEmpty (nonEmpty)
 import qualified Data.Map as Map
 import Ouroboros.Consensus.Block.SupportsPeras (BlockSupportsPeras (..))
-import Ouroboros.Consensus.Committee.Class (CryptoSupportsVotingCommittee (..))
-import Ouroboros.Consensus.Committee.Types
+import Cardano.Crypto.Peras.Committee.Class (CryptoSupportsVotingCommittee (..))
+import Cardano.Crypto.Peras.Committee.Types
   ( LedgerStake (..)
-  , PoolId (..)
   , TargetCommitteeSize
   )
 import Ouroboros.Consensus.Peras.Crypto.Mock
@@ -25,6 +24,7 @@ import Ouroboros.Consensus.Peras.Crypto.Mock
   , VotingCommitteeInput (..)
   )
 import Ouroboros.Consensus.Peras.Error.Mock (MockPerasError (..))
+import Ouroboros.Consensus.Peras.LedgerConversions (toCommitteePoolId)
 
 mkMockPerasVotingCommitteeInput ::
   forall blk.
@@ -41,7 +41,7 @@ mkMockPerasVotingCommitteeInput poolDistr _epochNonce _targetCommitteeSize = do
  where
   stakeDistr =
     nonEmpty
-      . fmap (bimap PoolId (LedgerStake . individualPoolStake))
+      . fmap (bimap toCommitteePoolId (LedgerStake . individualPoolStake))
       . Map.toList
       . unPoolDistr
       $ poolDistr

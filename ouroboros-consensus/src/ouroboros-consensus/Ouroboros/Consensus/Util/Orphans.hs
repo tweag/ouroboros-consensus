@@ -26,8 +26,6 @@ import Cardano.Ledger.Genesis (NoGenesis (..))
 import Codec.CBOR.Decoding (Decoder)
 import Codec.Serialise (Serialise (..))
 import Control.Tracer (Tracer)
-import Data.Array (Array)
-import qualified Data.Array as Array
 import Data.IntPSQ (IntPSQ)
 import qualified Data.IntPSQ as PSQ
 import Data.Map.NonEmpty (NEMap)
@@ -128,10 +126,6 @@ instance (NoThunks a, NoThunks b) => NoThunks (Strict.Either a b) where
   showTypeOf _ = "Strict.Either"
   wNoThunks ctxt (Strict.Left a) = noThunks ctxt a
   wNoThunks ctxt (Strict.Right b) = noThunks ctxt b
-
-instance NoThunks a => NoThunks (Array i a) where
-  showTypeOf _ = "Array"
-  wNoThunks ctxt = wNoThunks ctxt . Array.elems
 
 instance NoThunks StdGen where
   showTypeOf _ = "StdGen"

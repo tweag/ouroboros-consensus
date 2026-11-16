@@ -10,7 +10,7 @@ import Data.Aeson (Value (..), (.=))
 import qualified Data.List.NonEmpty as NonEmpty
 import Data.Void (absurd)
 import Ouroboros.Consensus.Block.SupportsPeras (PerasVotingCommitteeError)
-import Ouroboros.Consensus.Committee.WFA (SeatIndex (..))
+import Cardano.Crypto.Peras.Committee.WFA (SeatIndex (..))
 import qualified Ouroboros.Consensus.Peras.Error.V1 as V1
 import Ouroboros.Consensus.Peras.Types (PerasCertSize (..), VoteWeight (..))
 import Ouroboros.Consensus.Peras.Void (VoidPerasError (..))

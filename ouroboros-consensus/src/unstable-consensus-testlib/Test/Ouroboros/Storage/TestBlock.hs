@@ -96,7 +96,7 @@ import GHC.Stack (HasCallStack)
 import NoThunks.Class (NoThunks)
 import Ouroboros.Consensus.Block
 import Ouroboros.Consensus.BlockchainTime
-import Ouroboros.Consensus.Committee.Class (CryptoSupportsVotingCommittee (..))
+import Cardano.Crypto.Peras.Committee.Class (CryptoSupportsVotingCommittee (..))
 import Ouroboros.Consensus.Config
 import Ouroboros.Consensus.Forecast
 import Ouroboros.Consensus.HardFork.Abstract

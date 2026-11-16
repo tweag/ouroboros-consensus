@@ -12,7 +12,7 @@ import qualified Data.ByteString.Lazy as LazyByteString
 import qualified Data.List.NonEmpty as NonEmpty
 import Data.Maybe (fromMaybe)
 import Data.Proxy (Proxy (..))
-import qualified Ouroboros.Consensus.Committee.Crypto.BLS as BLS
+import qualified Cardano.Crypto.Peras.Committee.Crypto.BLS as BLS
 import Ouroboros.Consensus.Peras.Cert.V1
   ( PerasCert (..)
   , perasCertNumberOfNonPersistentVoters

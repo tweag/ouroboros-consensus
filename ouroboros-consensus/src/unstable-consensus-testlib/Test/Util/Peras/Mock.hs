@@ -29,7 +29,7 @@ import Ouroboros.Consensus.Block.SupportsPeras
   , ValidatedPerasCert (..)
   , ValidatedPerasVote (..)
   )
-import Ouroboros.Consensus.Committee.Class
+import Cardano.Crypto.Peras.Committee.Class
 import Ouroboros.Consensus.Peras.Cert.Mock (MockPerasCert (..))
 import Ouroboros.Consensus.Peras.Crypto.Mock
   ( MockPerasCrypto

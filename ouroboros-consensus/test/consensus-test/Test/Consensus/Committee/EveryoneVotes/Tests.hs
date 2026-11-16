@@ -6,23 +6,23 @@
 -- | Test properties for the EveryoneVotes implementation using TestCrypto.
 module Test.Consensus.Committee.EveryoneVotes.Tests (tests) where
 
-import Cardano.Ledger.BaseTypes
+import Cardano.Crypto.Peras.Committee.Base
 import Data.Function (on)
 import Data.List (intercalate, sortOn)
 import Data.List.NonEmpty (NonEmpty ((:|)))
 import qualified Data.List.NonEmpty as NonEmpty
 import Data.Map (Map)
 import qualified Data.Map.Strict as Map
-import Ouroboros.Consensus.Committee.Class
+import Cardano.Crypto.Peras.Committee.Class
   ( CryptoSupportsVotingCommittee (..)
   , VotingCommittee
   , ensureUniqueVotesWithSameTarget
   )
-import Ouroboros.Consensus.Committee.Crypto
+import Cardano.Crypto.Peras.Committee.Crypto
   ( PrivateKey
   , PublicKey
   )
-import Ouroboros.Consensus.Committee.EveryoneVotes
+import Cardano.Crypto.Peras.Committee.EveryoneVotes
   ( EligibilityWitness (..)
   , EveryoneVotes
   , Vote (..)
@@ -30,11 +30,11 @@ import Ouroboros.Consensus.Committee.EveryoneVotes
   , candidateSeats
   , numActiveVoters
   )
-import Ouroboros.Consensus.Committee.Types
+import Cardano.Crypto.Peras.Committee.Types
   ( LedgerStake (..)
   , PoolId
   )
-import Ouroboros.Consensus.Committee.WFA
+import Cardano.Crypto.Peras.Committee.WFA
   ( NumPoolsWithPositiveStake (..)
   , SeatIndex (..)
   , mkExtWFAStakeDistr

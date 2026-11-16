@@ -10,7 +10,7 @@ module Test.Consensus.Peras.Serialisation
 import Cardano.Binary (FromCBOR (..), ToCBOR (..), decodeFull, serialize)
 import qualified Data.ByteString.Lazy as LazyByteString
 import Data.Word (Word64)
-import qualified Ouroboros.Consensus.Committee.Types as Committee
+import qualified Cardano.Crypto.Peras.Committee.Types as Committee
 import qualified Ouroboros.Consensus.Peras.Cert.V1 as V1
 import Ouroboros.Consensus.Peras.Params
   ( PerasBlockMaxSlots (..)

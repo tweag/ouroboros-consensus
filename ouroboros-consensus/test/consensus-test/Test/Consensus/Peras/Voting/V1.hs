@@ -15,9 +15,10 @@ import qualified Data.Map.Strict as Map
 import Data.Maybe.Strict (StrictMaybe (..))
 import Data.Proxy (Proxy (..))
 import qualified Data.Set as Set
-import Ouroboros.Consensus.Committee.Crypto.BLS (KeyRole (..))
-import qualified Ouroboros.Consensus.Committee.Crypto.BLS as BLS
-import Ouroboros.Consensus.Committee.Types (PoolId (..))
+import Cardano.Crypto.Peras.Committee.Crypto.BLS (KeyRole (..))
+import qualified Cardano.Crypto.Peras.Committee.Crypto.BLS as BLS
+import Cardano.Crypto.Peras.Committee.Types (PoolId (..))
+import Ouroboros.Consensus.Peras.LedgerConversions (fromCommitteePoolId)
 import Ouroboros.Consensus.Peras.Voting.V1 (extractPerasStakeDistrAndPublicKeys)
 import Test.QuickCheck
   ( Gen
@@ -83,7 +84,7 @@ prop_extractPerasStakeDistrAndPublicKeys =
       let entries = NonEmpty.toList entries'
       let poolDistr =
             PoolDistr
-              { unPoolDistr = Map.fromList [(unPoolId poolId, stake) | (poolId, _, stake) <- entries]
+              { unPoolDistr = Map.fromList [(fromCommitteePoolId poolId, stake) | (poolId, _, stake) <- entries]
               , pdTotalActiveStake = knownNonZeroCoin @1
               }
       let expectedPoolIds =

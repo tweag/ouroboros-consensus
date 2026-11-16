@@ -31,12 +31,12 @@ import Data.Void (Void, absurd)
 import GHC.Generics (Generic)
 import NoThunks.Class (NoThunks)
 import Ouroboros.Consensus.Block.Abstract (Point)
-import Ouroboros.Consensus.Committee.Class
+import Cardano.Crypto.Peras.Committee.Class
   ( CryptoSupportsVotingCommittee (..)
   , VotingCommittee
   , getRawVotes
   )
-import Ouroboros.Consensus.Committee.Crypto
+import Cardano.Crypto.Peras.Committee.Crypto
   ( CryptoSupportsVoteSigning (..)
   , ElectionId
   , PrivateKey

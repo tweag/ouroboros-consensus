@@ -23,7 +23,7 @@ import Ouroboros.Consensus.Block.SupportsPeras
   , PerasVotingCommitteeError
   , VoteWeight
   )
-import Ouroboros.Consensus.Committee.WFA (WFAError)
+import Cardano.Crypto.Peras.Committee.WFA (WFAError)
 import Ouroboros.Consensus.Peras.Voting.Adapter (PerasConversionError)
 
 -- | Collection of voting-related errors for Peras

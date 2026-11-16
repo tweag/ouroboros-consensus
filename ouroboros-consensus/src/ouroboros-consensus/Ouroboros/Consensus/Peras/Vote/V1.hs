@@ -35,13 +35,13 @@ import Data.Word (Word8)
 import GHC.Generics (Generic)
 import NoThunks.Class (NoThunks)
 import Ouroboros.Consensus.Block.Abstract (ConvertRawHash (..))
-import Ouroboros.Consensus.Committee.Crypto (CryptoSupportsVoteSigning (..))
-import Ouroboros.Consensus.Committee.EveryoneVotes
+import Cardano.Crypto.Peras.Committee.Crypto (CryptoSupportsVoteSigning (..))
+import Cardano.Crypto.Peras.Committee.EveryoneVotes
   ( EveryoneVotes
   , Vote (..)
   )
-import Ouroboros.Consensus.Committee.WFALS (Vote (..), WFALS)
-import Ouroboros.Consensus.Peras.Crypto.BLS
+import Cardano.Crypto.Peras.Committee.WFALS (Vote (..), WFALS)
+import Cardano.Crypto.Peras.Crypto.BLS
   ( PerasBLSCrypto
   , VRFOutput
   )

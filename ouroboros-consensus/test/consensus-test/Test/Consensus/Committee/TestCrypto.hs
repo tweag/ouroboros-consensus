@@ -34,7 +34,7 @@ import Cardano.Crypto.DSIGN
   )
 import Cardano.Crypto.Hash (ByteString, Hash)
 import qualified Cardano.Crypto.Hash as Hash
-import Cardano.Ledger.BaseTypes (Nonce (..))
+import Cardano.Crypto.Peras.Committee.Base (Nonce (..))
 import Cardano.Ledger.Binary (runByteBuilder)
 import Cardano.Ledger.Hashes (HASH)
 import Control.Monad (when)
@@ -50,7 +50,7 @@ import Data.Maybe (fromMaybe)
 import Data.Proxy (Proxy (..))
 import Data.Word (Word64)
 import GHC.Word (Word8)
-import Ouroboros.Consensus.Committee.Crypto
+import Cardano.Crypto.Peras.Committee.Crypto
   ( CryptoSupportsAggregateVoteSigning (..)
   , CryptoSupportsBatchVRFVerification (..)
   , CryptoSupportsVRF (..)
@@ -61,8 +61,8 @@ import Ouroboros.Consensus.Committee.Crypto
   , VRFPoolContext (..)
   , VoteCandidate
   )
-import Ouroboros.Consensus.Committee.Crypto.BLS (KeyRole (..))
-import qualified Ouroboros.Consensus.Committee.Crypto.BLS as BLS
+import Cardano.Crypto.Peras.Committee.Crypto.BLS (KeyRole (..))
+import qualified Cardano.Crypto.Peras.Committee.Crypto.BLS as BLS
 import Test.QuickCheck
   ( Arbitrary (..)
   , Gen
