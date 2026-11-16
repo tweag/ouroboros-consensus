@@ -33,7 +33,7 @@ import Control.ResourceRegistry (closeRegistry, unsafeNewRegistry)
 import Data.List.NonEmpty (NonEmpty ((:|)))
 import Data.Maybe (isJust)
 import qualified Data.Set.NonEmpty as NESet
-import Data.Word (Word64)
+import Data.Word (Word32, Word64)
 import Ouroboros.Consensus.Block (WithOrigin (..))
 import Ouroboros.Consensus.Block.RealPoint
   ( RealPoint (..)
@@ -710,7 +710,7 @@ perasSparseMultiBlockHandoff (firstCount : remainingCounts) = do
     SystemM TestBlock IO ([ValidatedPerasCert TestBlock], Word64)
   addCerts target firstRound count = do
     let certs =
-          [ mkMockPerasCert roundNo target 1
+          [ mkMockPerasCert (fromIntegral roundNo) target 1
           | roundNo <- take count [firstRound ..]
           ]
     mapM_ (void . addTestPerasCert) certs
@@ -1079,7 +1079,7 @@ getHistoricalCertsAfter roundNo maxCerts = do
     intGetPerasImmutableCertsAfter chainDbInternal roundNo maxCerts
 
 mkMockPerasCert ::
-  Word64 ->
+  Word32 ->
   TestBlock ->
   Word64 ->
   ValidatedPerasCert TestBlock

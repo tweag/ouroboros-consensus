@@ -464,7 +464,7 @@ testQuarantinedRoundCanBeRepaired policy damage =
 damageCertFile ::
   StrictTMVar IO MockFS.MockFS ->
   CertFileDamage ->
-  Word64 ->
+  Word32 ->
   IO ()
 damageCertFile fs damage roundNo =
   case damage of
@@ -1049,11 +1049,11 @@ withReopenedDB args current action = do
   DB.closeDB current
   withOpenDB args action
 
-certPath :: Word64 -> FsPath
+certPath :: Word32 -> FsPath
 certPath roundNo =
   mkFsPath [show roundNo <> ".cert"]
 
-certTempPath :: Word64 -> FsPath
+certTempPath :: Word32 -> FsPath
 certTempPath roundNo =
   mkFsPath [show roundNo <> ".cert.tmp"]
 
