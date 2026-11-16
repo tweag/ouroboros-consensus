@@ -37,6 +37,7 @@ import Ouroboros.Consensus.Block.SupportsPeras
 import Ouroboros.Consensus.BlockchainTime
   ( RelativeTime (..)
   )
+import Ouroboros.Consensus.Peras.Params (PerasBootstrapStatus (..))
 import Ouroboros.Consensus.Peras.Voting.Rules
   ( PerasVotingRulesDecision (..)
   , isPerasVotingAllowed
@@ -126,34 +127,47 @@ isPerasVotingAllowedModel
         NotOrigin cert ->
           currRoundNo == getPerasCertRound (lcsCert cert) + 1
         Origin ->
-          currRoundNo == PerasRoundNo 0
+          False
     vr1a2 =
       case latestCertSeen of
         NotOrigin cert ->
           lcsArrivalSlot cert <= lcsRoundStartSlot cert + _X
         Origin ->
-          True
+          False
     vr1b =
       case latestCertSeen of
         NotOrigin cert ->
           lcsCandidateBlockExtendsCert cert
         Origin ->
-          True
+          False
     vr2a =
       case latestCertSeen of
         NotOrigin cert ->
           getPerasCertRound (lcsCert cert) + _R <= currRoundNo
         Origin ->
-          _R <= currRoundNo
+          True
     vr2b =
-      case latestCertOnChainRound of
-        NotOrigin certRoundNo ->
-          (currRoundNo > certRoundNo)
+      case referenceRoundNo of
+        Just refRoundNo ->
+          (currRoundNo >= refRoundNo)
             && ( (currRoundNo `rmod` _K)
-                   == (certRoundNo `rmod` _K)
+                   == (refRoundNo `rmod` _K)
                )
-        Origin ->
-          currRoundNo `rmod` _K == _K - 1
+        Nothing ->
+          False
+
+    -- The bootstrap round, when enabled, takes precedence over the round of the
+    -- latest certificate on chain if it is larger (revised CIP-0140).
+    referenceRoundNo =
+      case (perasBootstrapStatus perasParams, latestCertOnChainRound) of
+        (PerasBootstrapEnabled bootstrapRoundNo, NotOrigin certRoundNo) ->
+          Just (max bootstrapRoundNo certRoundNo)
+        (PerasBootstrapEnabled bootstrapRoundNo, Origin) ->
+          Just bootstrapRoundNo
+        (PerasBootstrapDisabled, NotOrigin certRoundNo) ->
+          Just certRoundNo
+        (PerasBootstrapDisabled, Origin) ->
+          Nothing
 
     _X =
       SlotNo $
@@ -323,8 +337,14 @@ genLatestCertOnChainRound roundNo = do
 
 genPerasVotingView :: Gen (PerasVotingView TestCert TestBlock)
 genPerasVotingView = do
-  perasParams <- genPerasParams
+  perasParams0 <- genPerasParams
   currRoundNo <- genPerasRoundNo
+  bootstrapStatus <-
+    frequency
+      [ (1, pure PerasBootstrapDisabled)
+      , (1, PerasBootstrapEnabled <$> genLatestCertOnChainRound currRoundNo)
+      ]
+  let perasParams = perasParams0{perasBootstrapStatus = bootstrapStatus}
   latestCertSeen <- genWithOrigin (genLatestCertSeenView currRoundNo)
   latestCertOnChainRound <- genWithOrigin (genLatestCertOnChainRound currRoundNo)
   candidateBlock <- genPointTestBlock
