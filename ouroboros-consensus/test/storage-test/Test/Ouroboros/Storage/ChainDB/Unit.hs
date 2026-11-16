@@ -443,11 +443,11 @@ updateLedgerSnapshots_WipeVolatileDB_withoutSnapshot = do
 -- garbage collection advances past its canonical immutable block.
 perasImmutableCertArchived :: SystemM TestBlock IO ()
 perasImmutableCertArchived = do
-  b1 <- addBlock $ firstBlock 0 (body 0)
-  b2 <- addBlock $ mkNextBlock b1 1 (body 0)
+  b1 <- addBlock Origin $ firstBlock 0 (body 0)
+  b2 <- addBlock (NotOrigin (blockSlot b1)) $ mkNextBlock b1 1 (body 0)
   let cert = mkMockPerasCert 1 b1 1
   void $ addTestPerasCert cert
-  b3 <- addBlock $ mkNextBlock b2 2 (body 0)
+  b3 <- addBlock (NotOrigin (blockSlot b2)) $ mkNextBlock b2 2 (body 0)
 
   before <- getHistoricalCertsAfter (PerasRoundNo 0) 10
   assertEqual [] before "Certificate was archived before the block was copied"
@@ -456,7 +456,7 @@ perasImmutableCertArchived = do
   atBoundary <- getHistoricalCertsAfter (PerasRoundNo 0) 10
   assertEqual [] atBoundary "Certificate was archived before its target was garbage-collected"
 
-  _b4 <- addBlock $ mkNextBlock b3 3 (body 0)
+  _b4 <- addBlock (NotOrigin (blockSlot b3)) $ mkNextBlock b3 3 (body 0)
   persistBlksThenGC
 
   after <- getHistoricalCertsAfter (PerasRoundNo 0) 10
@@ -468,14 +468,14 @@ perasImmutableCertArchived = do
 -- must survive the handoff.
 perasAllCertsForBlockArchived :: SystemM TestBlock IO ()
 perasAllCertsForBlockArchived = do
-  b1 <- addBlock $ firstBlock 0 (body 0)
+  b1 <- addBlock Origin $ firstBlock 0 (body 0)
   let cert1 = mkMockPerasCert 1 b1 1
       cert2 = mkMockPerasCert 2 b1 1
   void $ addTestPerasCert cert1
   void $ addTestPerasCert cert2
-  b2 <- addBlock $ mkNextBlock b1 1 (body 0)
-  b3 <- addBlock $ mkNextBlock b2 2 (body 0)
-  _b4 <- addBlock $ mkNextBlock b3 3 (body 0)
+  b2 <- addBlock (NotOrigin (blockSlot b1)) $ mkNextBlock b1 1 (body 0)
+  b3 <- addBlock (NotOrigin (blockSlot b2)) $ mkNextBlock b2 2 (body 0)
+  _b4 <- addBlock (NotOrigin (blockSlot b3)) $ mkNextBlock b3 3 (body 0)
 
   persistBlksThenGC
 
@@ -488,13 +488,13 @@ perasAllCertsForBlockArchived = do
 -- because some other block became immutable.
 perasLosingForkCertNotArchived :: SystemM TestBlock IO ()
 perasLosingForkCertNotArchived = do
-  common <- addBlock $ firstBlock 0 (body 0)
+  common <- addBlock Origin $ firstBlock 0 (body 0)
 
   -- Fork #1: Add a block and boost it with a peras certificate. The
   -- rollback window is 2, so adding another block to this fork would
   -- advance the immutable tip past common. (Fork weight would be 2
   -- blocks plus 1 cert; 3 > k.) For this test we want to avoid that.
-  losing <- addBlock $ mkNextBlock common 1 (body 1)
+  losing <- addBlock (NotOrigin (blockSlot common)) $ mkNextBlock common 1 (body 1)
   outcome <- addTestPerasCert (mkMockPerasCert 1 losing 1)
   assertEqual
     (API.PerasCertProcessed PerasCertDB.AddedPerasCertToDB)
@@ -508,9 +508,9 @@ perasLosingForkCertNotArchived = do
 
   -- Fork #2: Add enough blocks to outweigh fork #1, even with the
   -- boost.
-  h1 <- addBlock $ mkNextBlock common 2 (body 2)
-  h2 <- addBlock $ mkNextBlock h1 3 (body 2)
-  h3 <- addBlock $ mkNextBlock h2 4 (body 2)
+  h1 <- addBlock (NotOrigin (blockSlot common)) $ mkNextBlock common 2 (body 2)
+  h2 <- addBlock (NotOrigin (blockSlot h1)) $ mkNextBlock h1 3 (body 2)
+  h3 <- addBlock (NotOrigin (blockSlot h2)) $ mkNextBlock h2 4 (body 2)
   getSelectedTip >>= \tip ->
     assertEqual
       (blockPoint h3)
@@ -521,7 +521,7 @@ perasLosingForkCertNotArchived = do
   -- past h1 so garbage collection can archive the selected fork's cert.
   let honestCert = mkMockPerasCert 2 h1 0
   void $ addTestPerasCert honestCert
-  _h4 <- addBlock $ mkNextBlock h3 5 (body 2)
+  _h4 <- addBlock (NotOrigin (blockSlot h3)) $ mkNextBlock h3 5 (body 2)
   persistBlksThenGC
 
   archived <- getHistoricalCertsAfter (PerasRoundNo 0) 10
@@ -536,12 +536,12 @@ perasLosingForkCertNotArchived = do
 -- the immutable tip.
 perasCertPersistsGC :: SystemM TestBlock IO ()
 perasCertPersistsGC = do
-  b1 <- addBlock $ firstBlock 0 (body 0)
-  b2 <- addBlock $ mkNextBlock b1 1 (body 0)
+  b1 <- addBlock Origin $ firstBlock 0 (body 0)
+  b2 <- addBlock (NotOrigin (blockSlot b1)) $ mkNextBlock b1 1 (body 0)
   let cert = mkMockPerasCert 1 b1 1
   void $ addTestPerasCert cert
-  b3 <- addBlock $ mkNextBlock b2 2 (body 0)
-  _b4 <- addBlock $ mkNextBlock b3 3 (body 0)
+  b3 <- addBlock (NotOrigin (blockSlot b2)) $ mkNextBlock b2 2 (body 0)
+  _b4 <- addBlock (NotOrigin (blockSlot b3)) $ mkNextBlock b3 3 (body 0)
 
   persistBlksThenGC
 
@@ -555,10 +555,10 @@ perasCertPersistsGC = do
 -- not persisted to the 'PerasImmutableCertDB'.
 perasLateCertIgnored :: SystemM TestBlock IO ()
 perasLateCertIgnored = do
-  b1 <- addBlock $ firstBlock 0 (body 0)
-  b2 <- addBlock $ mkNextBlock b1 1 (body 0)
-  b3 <- addBlock $ mkNextBlock b2 2 (body 0)
-  _b4 <- addBlock $ mkNextBlock b3 3 (body 0)
+  b1 <- addBlock Origin $ firstBlock 0 (body 0)
+  b2 <- addBlock (NotOrigin (blockSlot b1)) $ mkNextBlock b1 1 (body 0)
+  b3 <- addBlock (NotOrigin (blockSlot b2)) $ mkNextBlock b2 2 (body 0)
+  _b4 <- addBlock (NotOrigin (blockSlot b3)) $ mkNextBlock b3 3 (body 0)
   persistBlks
 
   outcome <- addTestPerasCert (mkMockPerasCert 1 b1 1)
@@ -576,15 +576,15 @@ perasLateCertIgnored = do
 -- archived if accepted and later garbage-collected from the volatile DB.
 perasHandoffBoundaryCertNotLost :: SystemM TestBlock IO ()
 perasHandoffBoundaryCertNotLost = do
-  b1 <- addBlock $ firstBlock 0 (body 0)
-  b2 <- addBlock $ mkNextBlock b1 1 (body 0)
-  b3 <- addBlock $ mkNextBlock b2 2 (body 0)
+  b1 <- addBlock Origin $ firstBlock 0 (body 0)
+  b2 <- addBlock (NotOrigin (blockSlot b1)) $ mkNextBlock b1 1 (body 0)
+  b3 <- addBlock (NotOrigin (blockSlot b2)) $ mkNextBlock b2 2 (body 0)
   persistBlks
 
   let cert = mkMockPerasCert 1 b1 1
   outcome <- addTestPerasCert cert
 
-  _b4 <- addBlock $ mkNextBlock b3 3 (body 0)
+  _b4 <- addBlock (NotOrigin (blockSlot b3)) $ mkNextBlock b3 3 (body 0)
   persistBlksThenGC
   archived <- getHistoricalCertsAfter (PerasRoundNo 0) 10
 
@@ -607,10 +607,10 @@ perasHandoffBoundaryCertNotLost = do
 -- unselectable fork, even though its slot is not strictly older.
 perasConflictingCertAtImmutableTipSlotIgnored :: SystemM TestBlock IO ()
 perasConflictingCertAtImmutableTipSlotIgnored = do
-  b1 <- addBlock $ firstBlock 0 (body 0)
-  b2 <- addBlock $ mkNextBlock b1 1 (body 0)
-  b3 <- addBlock $ mkNextBlock b2 2 (body 0)
-  _b4 <- addBlock $ mkNextBlock b3 3 (body 0)
+  b1 <- addBlock Origin $ firstBlock 0 (body 0)
+  b2 <- addBlock (NotOrigin (blockSlot b1)) $ mkNextBlock b1 1 (body 0)
+  b3 <- addBlock (NotOrigin (blockSlot b2)) $ mkNextBlock b2 2 (body 0)
+  _b4 <- addBlock (NotOrigin (blockSlot b3)) $ mkNextBlock b3 3 (body 0)
   persistBlks
 
   -- With k=2, b2 is now the immutable tip. This block has the same slot and
@@ -634,7 +634,7 @@ perasConflictingCertAtImmutableTipSlotIgnored = do
 -- by the handoff and archived.
 perasCertBeforeTargetArchived :: SystemM TestBlock IO ()
 perasCertBeforeTargetArchived = do
-  parent <- addBlock $ firstBlock 0 (body 0)
+  parent <- addBlock Origin $ firstBlock 0 (body 0)
   let target = mkNextBlock parent 1 (body 0)
       cert = mkMockPerasCert 1 target 1
 
@@ -647,10 +647,10 @@ perasCertBeforeTargetArchived = do
   before <- getHistoricalCertsAfter (PerasRoundNo 0) 10
   assertEqual [] before "Certificate was archived before its target block"
 
-  target' <- addBlock target
-  b2 <- addBlock $ mkNextBlock target' 2 (body 0)
-  b3 <- addBlock $ mkNextBlock b2 3 (body 0)
-  _b4 <- addBlock $ mkNextBlock b3 4 (body 0)
+  target' <- addBlock (NotOrigin (blockSlot parent)) target
+  b2 <- addBlock (NotOrigin (blockSlot target')) $ mkNextBlock target' 2 (body 0)
+  b3 <- addBlock (NotOrigin (blockSlot b2)) $ mkNextBlock b2 3 (body 0)
+  _b4 <- addBlock (NotOrigin (blockSlot b3)) $ mkNextBlock b3 4 (body 0)
   persistBlksThenGC
 
   archived <- getHistoricalCertsAfter (PerasRoundNo 0) 10
@@ -681,14 +681,14 @@ perasSparseMultiBlockHandoff :: [Int] -> SystemM TestBlock IO ()
 perasSparseMultiBlockHandoff [] =
   failWith "perasSparseMultiBlockHandoff: empty generated layout"
 perasSparseMultiBlockHandoff (firstCount : remainingCounts) = do
-  first <- addBlock $ firstBlock 0 (body 0)
+  first <- addBlock Origin $ firstBlock 0 (body 0)
   (firstCerts, nextRound) <- addCerts first 1 firstCount
   (tip, expected, nextSlot) <-
     go first firstCerts 1 nextRound remainingCounts
 
-  tail1 <- addBlock $ mkNextBlock tip (fromIntegral nextSlot) (body 0)
-  tail2 <- addBlock $ mkNextBlock tail1 (fromIntegral $ nextSlot + 1) (body 0)
-  _tail3 <- addBlock $ mkNextBlock tail2 (fromIntegral $ nextSlot + 2) (body 0)
+  tail1 <- addBlock (NotOrigin (blockSlot tip)) $ mkNextBlock tip (fromIntegral nextSlot) (body 0)
+  tail2 <- addBlock (NotOrigin (blockSlot tail1)) $ mkNextBlock tail1 (fromIntegral $ nextSlot + 1) (body 0)
+  _tail3 <- addBlock (NotOrigin (blockSlot tail2)) $ mkNextBlock tail2 (fromIntegral $ nextSlot + 2) (body 0)
 
   before <- getHistoricalCertsAfter (PerasRoundNo 0) maxBound
   assertEqual [] before "Certificates were archived before persistence"
@@ -729,7 +729,7 @@ perasSparseMultiBlockHandoff (firstCount : remainingCounts) = do
   go tip expected nextSlot _nextRound [] =
     pure (tip, expected, nextSlot)
   go tip expected nextSlot nextRound (count : counts) = do
-    block <- addBlock $ mkNextBlock tip (fromIntegral nextSlot) (body 0)
+    block <- addBlock (NotOrigin (blockSlot tip)) $ mkNextBlock tip (fromIntegral nextSlot) (body 0)
     (certs, nextRound') <- addCerts block nextRound count
     go
       block
@@ -745,8 +745,8 @@ perasGarbageCollectedCertLostOnArchiveFailure ::
   Strict.StrictTVar IO Errors ->
   SystemM TestBlock IO ()
 perasGarbageCollectedCertLostOnArchiveFailure errorsVar = do
-  b1 <- addBlock $ firstBlock 0 (body 0)
-  b2 <- addBlock $ mkNextBlock b1 1 (body 0)
+  b1 <- addBlock Origin $ firstBlock 0 (body 0)
+  b2 <- addBlock (NotOrigin (blockSlot b1)) $ mkNextBlock b1 1 (body 0)
   let cert = mkMockPerasCert 1 b1 1
   addTestPerasCert cert
     >>= \outcome ->
@@ -754,8 +754,8 @@ perasGarbageCollectedCertLostOnArchiveFailure errorsVar = do
         (API.PerasCertProcessed PerasCertDB.AddedPerasCertToDB)
         outcome
         "Certificate needed by the failure scenario was not retained"
-  b3 <- addBlock $ mkNextBlock b2 2 (body 0)
-  _b4 <- addBlock $ mkNextBlock b3 3 (body 0)
+  b3 <- addBlock (NotOrigin (blockSlot b2)) $ mkNextBlock b2 2 (body 0)
+  _b4 <- addBlock (NotOrigin (blockSlot b3)) $ mkNextBlock b3 3 (body 0)
 
   expectFsFailureDuring errorsVar (renameFailureAt 1) persistBlksThenGC
   assertBlockImmutable b2
@@ -785,14 +785,14 @@ perasPartialMultiCertHandoff ::
   Strict.StrictTVar IO Errors ->
   SystemM TestBlock IO ()
 perasPartialMultiCertHandoff errorsVar = do
-  b1 <- addBlock $ firstBlock 0 (body 0)
-  b2 <- addBlock $ mkNextBlock b1 1 (body 0)
+  b1 <- addBlock Origin $ firstBlock 0 (body 0)
+  b2 <- addBlock (NotOrigin (blockSlot b1)) $ mkNextBlock b1 1 (body 0)
   let cert1 = mkMockPerasCert 1 b1 1
       cert2 = mkMockPerasCert 2 b1 1
   void $ addTestPerasCert cert1
   void $ addTestPerasCert cert2
-  b3 <- addBlock $ mkNextBlock b2 2 (body 0)
-  _b4 <- addBlock $ mkNextBlock b3 3 (body 0)
+  b3 <- addBlock (NotOrigin (blockSlot b2)) $ mkNextBlock b2 2 (body 0)
+  _b4 <- addBlock (NotOrigin (blockSlot b3)) $ mkNextBlock b3 3 (body 0)
 
   expectFsFailureDuring errorsVar (renameFailureAt 2) persistBlksThenGC
   assertBlockImmutable b1
@@ -816,9 +816,9 @@ perasFailureMidMultiBlockHandoff ::
   Strict.StrictTVar IO Errors ->
   SystemM TestBlock IO ()
 perasFailureMidMultiBlockHandoff errorsVar = do
-  b1 <- addBlock $ firstBlock 0 (body 0)
-  b2 <- addBlock $ mkNextBlock b1 1 (body 0)
-  b3 <- addBlock $ mkNextBlock b2 2 (body 0)
+  b1 <- addBlock Origin $ firstBlock 0 (body 0)
+  b2 <- addBlock (NotOrigin (blockSlot b1)) $ mkNextBlock b1 1 (body 0)
+  b3 <- addBlock (NotOrigin (blockSlot b2)) $ mkNextBlock b2 2 (body 0)
   let cert1 = mkMockPerasCert 1 b1 1
       cert2 = mkMockPerasCert 2 b2 1
       cert3 = mkMockPerasCert 3 b3 1
@@ -837,9 +837,9 @@ perasFailureMidMultiBlockHandoff errorsVar = do
     )
     [cert1, cert2, cert3]
 
-  b4 <- addBlock $ mkNextBlock b3 3 (body 0)
-  b5 <- addBlock $ mkNextBlock b4 4 (body 0)
-  _b6 <- addBlock $ mkNextBlock b5 5 (body 0)
+  b4 <- addBlock (NotOrigin (blockSlot b3)) $ mkNextBlock b3 3 (body 0)
+  b5 <- addBlock (NotOrigin (blockSlot b4)) $ mkNextBlock b4 4 (body 0)
+  _b6 <- addBlock (NotOrigin (blockSlot b5)) $ mkNextBlock b5 5 (body 0)
 
   expectFsFailureDuring errorsVar (renameFailureAt 2) persistBlksThenGC
   assertBlockImmutable b3
@@ -862,7 +862,7 @@ perasFailureMidMultiBlockHandoff errorsVar = do
 -- first certificate during persistence or reopen.
 perasConflictingSameRoundFirstWins :: SystemM TestBlock IO ()
 perasConflictingSameRoundFirstWins = do
-  b1 <- addBlock $ firstBlock 0 (body 0)
+  b1 <- addBlock Origin $ firstBlock 0 (body 0)
   let first = mkMockPerasCert 7 b1 0
       conflicting = mkMockPerasCert 7 (firstBlock 0 $ body 1) 99
 
@@ -879,9 +879,9 @@ perasConflictingSameRoundFirstWins = do
         outcome
         "Conflicting certificate replaced the first certificate"
 
-  b2 <- addBlock $ mkNextBlock b1 1 (body 0)
-  b3 <- addBlock $ mkNextBlock b2 2 (body 0)
-  _b4 <- addBlock $ mkNextBlock b3 3 (body 0)
+  b2 <- addBlock (NotOrigin (blockSlot b1)) $ mkNextBlock b1 1 (body 0)
+  b3 <- addBlock (NotOrigin (blockSlot b2)) $ mkNextBlock b2 2 (body 0)
+  _b4 <- addBlock (NotOrigin (blockSlot b3)) $ mkNextBlock b3 3 (body 0)
   persistBlksThenGC
   getHistoricalCertsAfter (PerasRoundNo 0) 10
     >>= \archived ->
@@ -900,7 +900,7 @@ perasConflictingSameRoundFirstWins = do
 -- fork.
 perasUnknownTargetLoses :: SystemM TestBlock IO ()
 perasUnknownTargetLoses = do
-  common <- addBlock $ firstBlock 0 (body 0)
+  common <- addBlock Origin $ firstBlock 0 (body 0)
   let losing1 = mkNextBlock common 1 (body 1)
       cert = mkMockPerasCert 1 losing1 1
   addTestPerasCert cert
@@ -910,12 +910,12 @@ perasUnknownTargetLoses = do
         outcome
         "Certificate for the unknown target was not retained"
 
-  h1 <- addBlock $ mkNextBlock common 2 (body 0)
-  h2 <- addBlock $ mkNextBlock h1 3 (body 0)
-  h3 <- addBlock $ mkNextBlock h2 4 (body 0)
-  h4 <- addBlock $ mkNextBlock h3 5 (body 0)
-  losing1' <- addBlock losing1
-  _losing2 <- addBlock $ mkNextBlock losing1' 6 (body 1)
+  h1 <- addBlock (NotOrigin (blockSlot common)) $ mkNextBlock common 2 (body 0)
+  h2 <- addBlock (NotOrigin (blockSlot h1)) $ mkNextBlock h1 3 (body 0)
+  h3 <- addBlock (NotOrigin (blockSlot h2)) $ mkNextBlock h2 4 (body 0)
+  h4 <- addBlock (NotOrigin (blockSlot h3)) $ mkNextBlock h3 5 (body 0)
+  losing1' <- addBlock (NotOrigin (blockSlot common)) losing1
+  _losing2 <- addBlock (NotOrigin (blockSlot losing1')) $ mkNextBlock losing1' 6 (body 1)
 
   getSelectedTip
     >>= \tip ->
@@ -938,16 +938,16 @@ perasUnknownTargetLoses = do
 -- historical DB.
 perasRepeatedForkOscillation :: SystemM TestBlock IO ()
 perasRepeatedForkOscillation = do
-  common <- addBlock $ firstBlock 0 (body 0)
+  common <- addBlock Origin $ firstBlock 0 (body 0)
 
-  a1 <- addBlock $ mkNextBlock common 10 (body 1)
-  a2 <- addBlock $ mkNextBlock a1 20 (body 1)
-  a3 <- addBlock $ mkNextBlock a2 30 (body 1)
-  a4 <- addBlock $ mkNextBlock a3 40 (body 1)
+  a1 <- addBlock (NotOrigin (blockSlot common)) $ mkNextBlock common 10 (body 1)
+  a2 <- addBlock (NotOrigin (blockSlot a1)) $ mkNextBlock a1 20 (body 1)
+  a3 <- addBlock (NotOrigin (blockSlot a2)) $ mkNextBlock a2 30 (body 1)
+  a4 <- addBlock (NotOrigin (blockSlot a3)) $ mkNextBlock a3 40 (body 1)
 
-  b1 <- addBlock $ mkNextBlock common 11 (body 2)
-  b2 <- addBlock $ mkNextBlock b1 21 (body 2)
-  b3 <- addBlock $ mkNextBlock b2 31 (body 2)
+  b1 <- addBlock (NotOrigin (blockSlot common)) $ mkNextBlock common 11 (body 2)
+  b2 <- addBlock (NotOrigin (blockSlot b1)) $ mkNextBlock b1 21 (body 2)
+  b3 <- addBlock (NotOrigin (blockSlot b2)) $ mkNextBlock b2 31 (body 2)
 
   getSelectedTip >>= \tip ->
     assertEqual (blockPoint a4) tip "Longer fork A was not initially selected"
@@ -984,10 +984,10 @@ perasRepeatedForkOscillation = do
 -- tiny weight.
 perasWeightAdditionDoesNotWrap :: SystemM TestBlock IO ()
 perasWeightAdditionDoesNotWrap = do
-  common <- addBlock $ firstBlock 0 (body 0)
-  a1 <- addBlock $ mkNextBlock common 1 (body 1)
-  a2 <- addBlock $ mkNextBlock a1 2 (body 1)
-  b1 <- addBlock $ mkNextBlock common 3 (body 2)
+  common <- addBlock Origin $ firstBlock 0 (body 0)
+  a1 <- addBlock (NotOrigin (blockSlot common)) $ mkNextBlock common 1 (body 1)
+  a2 <- addBlock (NotOrigin (blockSlot a1)) $ mkNextBlock a1 2 (body 1)
+  b1 <- addBlock (NotOrigin (blockSlot common)) $ mkNextBlock common 3 (body 2)
 
   getSelectedTip >>= \tip ->
     assertEqual (blockPoint a2) tip "Longer unboosted fork was not selected"
@@ -1013,7 +1013,7 @@ extendChainBy ::
   SystemM TestBlock IO TestBlock
 extendChainBy 0 _ _ tip = pure tip
 extendChainBy count slot body tip = do
-  next <- addBlock $ mkNextBlock tip (fromIntegral slot) body
+  next <- addBlock (NotOrigin (blockSlot tip)) $ mkNextBlock tip (fromIntegral slot) body
   extendChainBy (count - 1) (slot + 1) body next
 
 assertBlockImmutable :: TestBlock -> SystemM TestBlock IO ()
@@ -1109,15 +1109,15 @@ mkMockPerasCert roundNo target boost =
 -- shorter fork heavier, so ChainDB rolls back to the less dense branch.
 perasBoostInducedDensityReduction :: SystemM TestBlock IO ()
 perasBoostInducedDensityReduction = do
-  common <- addBlock $ firstBlock 0 (body 0)
+  common <- addBlock Origin $ firstBlock 0 (body 0)
 
-  h1 <- addBlock $ mkNextBlock common 10 (body 1)
-  h2 <- addBlock $ mkNextBlock h1 30 (body 1)
-  h3 <- addBlock $ mkNextBlock h2 50 (body 1)
-  h4 <- addBlock $ mkNextBlock h3 80 (body 1)
+  h1 <- addBlock (NotOrigin (blockSlot common)) $ mkNextBlock common 10 (body 1)
+  h2 <- addBlock (NotOrigin (blockSlot h1)) $ mkNextBlock h1 30 (body 1)
+  h3 <- addBlock (NotOrigin (blockSlot h2)) $ mkNextBlock h2 50 (body 1)
+  h4 <- addBlock (NotOrigin (blockSlot h3)) $ mkNextBlock h3 80 (body 1)
 
-  a1 <- addBlock $ mkNextBlock common 10 (body 2)
-  a2 <- addBlock $ mkNextBlock a1 20 (body 2)
+  a1 <- addBlock (NotOrigin (blockSlot common)) $ mkNextBlock common 10 (body 2)
+  a2 <- addBlock (NotOrigin (blockSlot a1)) $ mkNextBlock a1 20 (body 2)
 
   getSelectedTip
     >>= \tip ->
@@ -1262,8 +1262,9 @@ withTestChainDbEnvWithPerasImmutableErrors
       varNextId <- uncheckedNewTVarM 0
       varLoEFragment <- newTVarIO $ AF.Empty AF.AnchorGenesis
       nodeDbs <- emptyNodeDBs
+      leiosDb <- newLeiosDBInMemory
       (tracer, getTrace) <- recordingTracerTVar
-      let baseArgs = chainDbArgs threadRegistry nodeDbs tracer
+      let baseArgs = chainDbArgs threadRegistry nodeDbs leiosDb tracer
           perasImmutableArgs =
             (cdbPerasImmutableCertDbArgs baseArgs)
               { PerasImmutableCertDB.picdbaHasFS =
@@ -1293,7 +1294,7 @@ withTestChainDbEnvWithPerasImmutableErrors
       closeRegistry (registry env)
       closeRegistry (cdbsRegistry . cdbsArgs $ args env)
 
-    chainDbArgs registry nodeDbs tracer =
+    chainDbArgs registry nodeDbs leiosDb tracer =
       let args =
             fromMinimalChainDbArgs
               MinimalChainDbArgs
@@ -1302,6 +1303,7 @@ withTestChainDbEnvWithPerasImmutableErrors
                 , mcdbInitLedger = extLedgerState
                 , mcdbRegistry = registry
                 , mcdbNodeDBs = nodeDbs
+                , mcdbLeiosDb = leiosDb
                 }
        in updateTracer tracer args
 

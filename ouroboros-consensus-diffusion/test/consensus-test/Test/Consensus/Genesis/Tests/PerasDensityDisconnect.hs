@@ -16,6 +16,8 @@ import Control.Monad.IOSim (runSimStrictShutdown)
 import Control.ResourceRegistry
 import Control.Tracer (nullTracer)
 import Data.List.NonEmpty (NonEmpty ((:|)))
+import qualified Data.Map.Strict as Map
+import Data.Proxy (Proxy (..))
 import qualified Data.Set.NonEmpty as NESet
 import Ouroboros.Consensus.Block
 import Ouroboros.Consensus.BlockchainTime.WallClock.Types
@@ -25,6 +27,7 @@ import Ouroboros.Consensus.BlockchainTime.WallClock.Types
 import Ouroboros.Consensus.Config
 import Ouroboros.Consensus.Genesis.Governor (gddWatcher)
 import Ouroboros.Consensus.HeaderValidation (HeaderWithTime)
+import Ouroboros.Consensus.Leios.Protocol (trivialLeiosLedgerView)
 import Ouroboros.Consensus.MiniProtocol.ChainSync.Client
   ( ChainSyncClientHandle (..)
   , ChainSyncClientHandleCollection (..)
@@ -42,10 +45,12 @@ import qualified Ouroboros.Consensus.Storage.ChainDB as ChainDB
 import qualified Ouroboros.Consensus.Storage.ChainDB.API.Types.InvalidBlockPunishment as Punishment
 import qualified Ouroboros.Consensus.Storage.ChainDB.Impl as ChainDB.Impl
 import qualified Ouroboros.Consensus.Storage.ChainDB.Impl.Args as ChainDB
+import Ouroboros.Consensus.Storage.LeiosDB (newLeiosDBInMemory)
 import Ouroboros.Consensus.Util.IOLike
 import Ouroboros.Consensus.Util.STM (forkLinkedWatcher)
 import Ouroboros.Network.AnchoredFragment (AnchoredFragment)
 import qualified Ouroboros.Network.AnchoredFragment as AF
+import Ouroboros.Network.PerasSupport (PerasSupport (PerasSupported))
 import Test.Consensus.Genesis.Setup.GenChains (IssueTestBlock (..))
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (testCase, (@?=))
@@ -95,7 +100,8 @@ scenario = do
       cschcAddHandle handles denserPeer denserHandle
       cschcAddHandle handles certifiedPeer certifiedHandle
     void $ forkLinkedWatcher registry "Peras GDD" $
-      gddWatcher cfg nullTracer db 0 (pure Syncing) (cschcMap handles) varLoE
+      -- The certificate is added to the ChainDB directly: no peer diffuses it.
+      gddWatcher cfg nullTracer db 0 (pure Syncing) (cschcMap handles) (pure Map.empty) varLoE
 
     -- Wait until GDD has supplied ChainDB with the peers' shared prefix.
     loeTip <- atomically $ do
@@ -123,7 +129,22 @@ scenario = do
   headers = attachSlotTimeToFragment cfg . foldl (AF.:>) (AF.Empty AF.AnchorGenesis) . map getHeader
 
   addBlocks db =
-    mapM_ (ChainDB.addBlock_ db Punishment.noPunishment)
+    mapM_ $ \blk ->
+      ChainDB.addBlock_
+        db
+        Punishment.noPunishment
+        (predecessorSlot blk)
+        (trivialLeiosLedgerView (Proxy @TestBlock))
+        blk
+
+  -- The scenario's blocks span two forks, so a block's predecessor is found
+  -- among all of them by its previous hash.
+  predecessorSlot blk = case blockPrevHash blk of
+    GenesisHash -> Origin
+    BlockHash prev ->
+      case [blockSlot b | b <- [common, h1, h2, h3, h4, a1, a2], blockHash b == prev] of
+        slot : _ -> NotOrigin slot
+        [] -> error "predecessorSlot: unknown predecessor"
 
 cfg :: TopLevelConfig TestBlock
 cfg =
@@ -169,6 +190,7 @@ mkHandle frag = do
         { csCandidate = frag
         , csIdling = False
         , csLatestSlot = pure $ AF.headSlot frag
+        , csPerasSupport = PerasSupported
         }
   varJumping <- newTVar $ Disengaged DisengagedDone
   varJumpInfo <- newTVar Nothing
@@ -188,6 +210,7 @@ openChainDB ::
   m (ChainDB.ChainDB m TestBlock)
 openChainDB registry getLoEFragment = do
   mcdbNodeDBs <- emptyNodeDBs
+  mcdbLeiosDb <- newLeiosDBInMemory
   let args =
         fromMinimalChainDbArgs
           MinimalChainDbArgs
@@ -196,6 +219,7 @@ openChainDB registry getLoEFragment = do
             , mcdbRegistry = registry
             , mcdbTopLevelConfig = cfg
             , mcdbNodeDBs
+            , mcdbLeiosDb
             }
       chainDbArgs =
         args
