@@ -2324,6 +2324,7 @@ test-suite tools-test
     sop-core,
     strict-sop-core,
     tasty,
+    tasty-expected-failure,
     tasty-hunit,
     tasty-quickcheck,
     temporary,
