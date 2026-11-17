@@ -10,7 +10,7 @@ module Test.Consensus.Leios.LeiosFetch.Node (tests) where
 
 import Cardano.Crypto.Hash (Hash (UnsafeHash), hashToBytes)
 import Cardano.Ledger.Dijkstra (DijkstraEra)
-import Cardano.Network.NodeToNode (defaultMiniProtocolParameters)
+import Ouroboros.Consensus.Node (defaultMiniProtocolParameters)
 import Cardano.Network.NodeToNode.Version (NodeToNodeVersion (..))
 import qualified Codec.CBOR.Encoding as CBOR
 import qualified Codec.CBOR.Write as CBOR
