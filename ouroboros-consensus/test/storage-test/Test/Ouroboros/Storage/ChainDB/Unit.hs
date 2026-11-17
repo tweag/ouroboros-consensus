@@ -95,6 +95,7 @@ import Test.Ouroboros.Storage.TestBlock
 import qualified Test.QuickCheck as QC
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (Assertion, assertFailure, testCase)
+import Test.Tasty.ExpectedFailure (expectFailBecause)
 import Test.Tasty.QuickCheck (testProperty)
 import Test.Util.ChainDB
   ( MinimalChainDbArgs (..)
@@ -186,10 +187,12 @@ tests =
             runSystemIOWithK
               (SecurityParam $ knownNonZeroBounded @20)
               perasBoostInducedDensityReduction
-        , testCase "repeated certificate releases archive only the final canonical fork" $
-            runSystemIOWithK
-              (SecurityParam $ knownNonZeroBounded @10)
-              perasRepeatedForkOscillation
+        , expectFailBecause
+            "IntersectMBO/ouroboros-consensus#2342: certificates are archived only when garbage-collected, so none is archived here (see perasRepeatedForkOscillation)"
+            $ testCase "repeated certificate releases archive only the final canonical fork" $
+              runSystemIOWithK
+                (SecurityParam $ knownNonZeroBounded @10)
+                perasRepeatedForkOscillation
         , testCase "additional positive boosts cannot reduce a chain's weight" $
             runSystemIOWithK
               (SecurityParam $ knownNonZeroBounded @20)

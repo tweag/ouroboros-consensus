@@ -1015,6 +1015,7 @@ test-suite storage-test
     resource-registry,
     serialise,
     tasty,
+    tasty-expected-failure,
     tasty-hunit,
     tasty-quickcheck,
     temporary,
