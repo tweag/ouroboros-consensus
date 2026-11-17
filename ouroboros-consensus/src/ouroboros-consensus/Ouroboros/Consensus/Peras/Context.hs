@@ -463,11 +463,14 @@ perasEpochContextResolverBounds = \case
 
 -- | A handle that resolves a 'PerasRoundNo' into its corresponding
 -- 'PerasEpochContext' (or a 'PerasEpochContextNotFoundForRound' error) in 'STM'.
-newtype PerasEpochContextResolverHandle m blk
+data PerasEpochContextResolverHandle m blk
   = PerasEpochContextResolverHandle
   { resolveRoundNo ::
       PerasRoundNo ->
       STM m (Either PerasEpochContextNotFoundForRound (PerasEpochContext blk))
+  , getPerasEpochContextResolver :: STM m (PerasEpochContextResolver blk)
+  -- ^ The resolver 'resolveRoundNo' resolves with, e.g. to classify round
+  -- numbers against its bounds.
   }
   deriving
     NoThunks
@@ -480,7 +483,14 @@ mockPerasEpochContextResolverHandle ::
   PerasEpochContext blk ->
   PerasEpochContextResolverHandle m blk
 mockPerasEpochContextResolverHandle context =
-  PerasEpochContextResolverHandle $ \_ -> pure (Right context)
+  PerasEpochContextResolverHandle
+    { resolveRoundNo = \_ -> pure (Right context)
+    , getPerasEpochContextResolver =
+        pure $
+          PerasEpochContextResolver
+            (PerasEnabled (BoundedPerasEpochContext minBound maxBound context))
+            NoPerasEnabled
+    }
 
 -- | Helper to resolve the epoch context for a given round a pass it to a
 -- continuation for further processing.

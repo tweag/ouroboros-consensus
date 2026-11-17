@@ -32,6 +32,7 @@ module Ouroboros.Consensus.Ledger.Extended
 
     -- * Peras epoch context resolver helpers
   , initPerasEpochContextResolverFromUntickedState
+  , tickAndGetPerasEpochContextResolver
   , tickAndResolveRoundNo
 
     -- * Type family instances
@@ -176,9 +177,9 @@ instance IsLedger LedgerState blk => GetTip (ExtLedgerState blk) where
   getTip = castPoint . getTip . ledgerState
 
 -- | Read the current ledger state and slot clock, tick the ledger to that slot
--- (or skip ticking when the slot is unknown), and resolve the Peras epoch
--- context for the given round.
-tickAndResolveRoundNo ::
+-- (or skip ticking when the slot is unknown), and return its Peras epoch
+-- context resolver, with a note on how it was obtained.
+tickAndGetPerasEpochContextResolver ::
   ( MonadSTM m
   , LedgerSupportsProtocol blk
   , BlockSupportsPeras blk
@@ -192,27 +193,45 @@ tickAndResolveRoundNo ::
   -- to skip ticking and resolve against the current ledger tip (e.g. while the
   -- node is not caught up, so the current slot is unknown).
   STM m CurrentSlot ->
+  STM m (String, PerasEpochContextResolver blk)
+tickAndGetPerasEpochContextResolver cfg getLedgerState getSlot = do
+  extLedgerState <- getLedgerState
+  currentSlot <- getSlot
+  pure $ case currentSlot of
+    CurrentSlotUnknown ->
+      ( "unticked becase the current slot is unknown"
+      , perasEpochContextResolver (perasState extLedgerState)
+      )
+    CurrentSlot slotNo ->
+      ( "ticked to slot " <> show (unSlotNo slotNo)
+      , perasEpochContextResolver
+          ( tickedPerasState
+              ( applyChainTick
+                  OmitLedgerEvents
+                  (ExtLedgerCfg cfg)
+                  slotNo
+                  extLedgerState
+              )
+          )
+      )
+
+-- | Read the current ledger state and slot clock, tick the ledger to that slot
+-- (or skip ticking when the slot is unknown), and resolve the Peras epoch
+-- context for the given round.
+tickAndResolveRoundNo ::
+  ( MonadSTM m
+  , LedgerSupportsProtocol blk
+  , BlockSupportsPeras blk
+  , StateSupportsPerasEpochContext blk
+  , All Top (HardForkIndices blk)
+  ) =>
+  TopLevelConfig blk ->
+  STM m (ExtLedgerState blk EmptyMK) ->
+  STM m CurrentSlot ->
   PerasRoundNo ->
   STM m (Either PerasEpochContextNotFoundForRound (PerasEpochContext blk))
 tickAndResolveRoundNo cfg getLedgerState getSlot perasRoundNo = do
-  extLedgerState <- getLedgerState
-  currentSlot <- getSlot
-  let (extraInfoMsg, pstate) =
-        case currentSlot of
-          CurrentSlotUnknown ->
-            ( "unticked becase the current slot is unknown"
-            , perasState extLedgerState
-            )
-          CurrentSlot slotNo ->
-            ( "ticked to slot " <> show (unSlotNo slotNo)
-            , tickedPerasState
-                ( applyChainTick
-                    OmitLedgerEvents
-                    (ExtLedgerCfg cfg)
-                    slotNo
-                    extLedgerState
-                )
-            )
+  (extraInfoMsg, resolver) <- tickAndGetPerasEpochContextResolver cfg getLedgerState getSlot
   -- We can call `unsafeResolveRoundNo` here because we have properly ticked the
   -- ExtLedgerState before accessing the resolver
   pure
@@ -223,7 +242,7 @@ tickAndResolveRoundNo cfg getLedgerState getSlot perasRoundNo = do
             (reason <> " (" <> extraInfoMsg <> ")")
       )
       id
-    $ unsafeResolveRoundNo (perasEpochContextResolver pstate) perasRoundNo
+    $ unsafeResolveRoundNo resolver perasRoundNo
 
 {-------------------------------------------------------------------------------
   The extended ledger configuration

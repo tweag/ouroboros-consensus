@@ -27,9 +27,11 @@ import Ouroboros.Consensus.Peras.Context
   , PerasEpochContextResolver (..)
   , PerasEpochContextResolverHandle (..)
   , mockPerasEpochContextResolverHandle
+  , unsafeResolveRoundNo
   )
 import qualified Ouroboros.Consensus.Storage.ChainDB.API as ChainDB
 import qualified Ouroboros.Consensus.Storage.ChainDB.Impl as ChainDBImpl
+import Ouroboros.Consensus.Storage.LeiosDB (newLeiosDBInMemory)
 import Ouroboros.Consensus.Storage.PerasCertDB.API
   ( AddPerasCertResult (..)
   , PerasCertDB
@@ -94,6 +96,7 @@ prop_writer_waits_for_processing =
                   IOSim s (Maybe (), Maybe (), Maybe (Either IOError (Set.Set PerasRoundNo, Set.Set PerasRoundNo)))
                 simulation = withRegistry $ \reg -> do
                   nodeDBs <- emptyNodeDBs
+                  leiosDb <- newLeiosDBInMemory
                   let cfg = singleNodeTestConfig
                       args =
                         fromMinimalChainDbArgs
@@ -103,17 +106,21 @@ prop_writer_waits_for_processing =
                             , mcdbInitLedger = testInitExtLedger
                             , mcdbRegistry = reg
                             , mcdbNodeDBs = nodeDBs
+                            , mcdbLeiosDb = leiosDb
                             }
                   bracket
                     (ChainDBImpl.openDBInternal args False)
                     (ChainDB.closeDB . fst)
                     $ \(db, _) -> do
-                      let resolver =
-                            PerasEpochContextResolverHandle $
-                              pure $
-                                PerasEpochContextResolver
-                                  (PerasEnabled (BoundedPerasEpochContext lowerBound maxBound epochContext))
-                                  NoPerasEnabled
+                      let epochContextResolver =
+                            PerasEpochContextResolver
+                              (PerasEnabled (BoundedPerasEpochContext lowerBound maxBound epochContext))
+                              NoPerasEnabled
+                          resolver =
+                            PerasEpochContextResolverHandle
+                              { resolveRoundNo = pure . unsafeResolveRoundNo epochContextResolver
+                              , getPerasEpochContextResolver = pure epochContextResolver
+                              }
                       queued <- newTVarIO []
                       allowCompletion <- newTVarIO False
                       -- IOException has no NoThunks instance.
