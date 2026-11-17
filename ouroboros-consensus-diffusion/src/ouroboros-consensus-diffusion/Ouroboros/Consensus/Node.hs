@@ -57,6 +57,7 @@ module Ouroboros.Consensus.Node
   , ChainSyncIdleTimeout (..)
 
     -- * Internal helpers
+  , defaultMiniProtocolParameters
   , mkNodeKernelArgs
   , nodeKernelArgsEnforceInvariants
   , openChainDB
@@ -82,7 +83,8 @@ import Cardano.Network.NodeToNode
   , NodeToNodeVersionData (..)
   , RemoteAddress
   , blockFetchPipeliningMax
-  , defaultMiniProtocolParameters
+  , mkDefaultMiniProtocolParameters
+  , txSubmissionLogicVersion
   )
 import Cardano.Network.NodeToNode.Version (getLocalPerasSupport)
 import Cardano.Network.PeerSelection (ChurnMode (ChurnMode), PeerTrustable, UseBootstrapPeers (..))
@@ -188,7 +190,7 @@ import Ouroboros.Network.PeerSelection.PeerSharing.Codec
 import Ouroboros.Network.PerasSupport (PerasSupport (..))
 import Ouroboros.Network.Protocol.Handshake.Version (Versions)
 import Ouroboros.Network.RethrowPolicy
-import Ouroboros.Network.TxSubmission.Inbound.V2 (TxSubmissionLogicVersion)
+import Ouroboros.Network.TxSubmission.Inbound.V2 (TxSubmissionLogicVersion (..))
 import Ouroboros.Network.TxSubmission.Inbound.V2.Types (TxSubmissionInitDelay)
 import qualified SafeWildCards
 import System.Exit (ExitCode (..))
@@ -604,7 +606,12 @@ runWith RunNodeArgs{..} encAddrNtN decAddrNtN LowLevelRunNodeArgs{..} =
                       Nothing -> HistoricityCheck.noCheck
                       Just historicityCutoff ->
                         HistoricityCheck.mkCheck systemTime getGsmState historicityCutoff
-              fmap (nodeKernelArgsEnforceInvariants . llrnCustomiseNodeKernelArgs) $
+              fmap
+                ( withTxSubmissionLogicVersion rnTxSubmissionLogicVersion
+                    . nodeKernelArgsEnforceInvariants
+                    . llrnCustomiseNodeKernelArgs
+                )
+                $
                 mkNodeKernelArgs
                   registry
                   llrnBfcSalt
@@ -1075,7 +1082,8 @@ mkNodeKernelArgs
           , mempoolCapacityOverride = NoMempoolCapacityBytesOverride
           , mempoolTimeoutConfig = mempoolTimeoutConfig
           , miniProtocolParameters = defaultMiniProtocolParameters
-          , blockFetchConfiguration = Diffusion.defaultBlockFetchConfiguration bfcSalt
+          , blockFetchConfiguration =
+              Diffusion.mkDefaultBlockFetchConfiguration defaultMiniProtocolParameters bfcSalt
           , gsmArgs =
               GsmNodeKernelArgs
                 { gsmAntiThunderingHerd
@@ -1097,6 +1105,24 @@ mkNodeKernelArgs
 -- through 'llrnCustomiseNodeKernelArgs', but there are some limits to some
 -- values. This function makes sure we don't exceed those limits and that the
 -- values are consistent.
+-- | The node's default 'MiniProtocolParameters'. Their tx-submission logic
+-- version is replaced by the node's own ('withTxSubmissionLogicVersion').
+defaultMiniProtocolParameters :: MiniProtocolParameters
+defaultMiniProtocolParameters =
+  mkDefaultMiniProtocolParameters TxSubmissionLogicV1 Diffusion.defaultNodeTxSubmissionConfig
+
+-- | Run tx-submission with the node's 'TxSubmissionLogicVersion': it selects
+-- the decision policy and each connection's 'TxSubmissionConfig'.
+withTxSubmissionLogicVersion ::
+  TxSubmissionLogicVersion ->
+  NodeKernelArgs m addrNTN addrNTC blk ->
+  NodeKernelArgs m addrNTN addrNTC blk
+withTxSubmissionLogicVersion logicVersion nodeKernelArgs =
+  nodeKernelArgs
+    { miniProtocolParameters =
+        (miniProtocolParameters nodeKernelArgs){txSubmissionLogicVersion = logicVersion}
+    }
+
 nodeKernelArgsEnforceInvariants ::
   NodeKernelArgs m addrNTN (ConnectionId addrNTC) blk ->
   NodeKernelArgs m addrNTN (ConnectionId addrNTC) blk

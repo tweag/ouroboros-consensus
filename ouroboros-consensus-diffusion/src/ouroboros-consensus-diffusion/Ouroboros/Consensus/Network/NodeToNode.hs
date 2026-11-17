@@ -384,6 +384,8 @@ mkHandlers
     , getMempool
     , getTopLevelConfig
     , getTracers = tracers
+    , getTxDecisionPolicy
+    , getTxSubmissionConfig
     , getPeerSharingAPI
     , getGsmState
     , getBlockchainTime
@@ -424,14 +426,9 @@ mkHandlers
       , hTxSubmissionClient = \version controlMessageSTM peer ->
           txSubmissionOutbound
             (contramap (TraceLabelPeer peer) (Node.txOutboundTracer tracers))
-            ( NumTxIdsToAck $
-                getNumTxIdsToReq $
-                  maxUnacknowledgedTxIds $
-                    txDecisionPolicy $
-                      miniProtocolParameters
-            )
+            (getTxSubmissionConfig version)
             (mapTxSubmissionMempoolReader txForgetValidated $ getMempoolReader getMempool)
-            version
+            (txOutboundVersion version)
             controlMessageSTM
       , hTxSubmissionServer = \version peer ->
           case txSubmissionLogicVersion of
@@ -443,7 +440,7 @@ mkHandlers
                       (Node.txInboundTracer tracers)
                   )
                   txSubmissionInitDelay
-                  (txDecisionPolicy miniProtocolParameters)
+                  getTxDecisionPolicy
                   (getMempoolWriter getMempool)
                   txWireSize
                   api
@@ -452,15 +449,10 @@ mkHandlers
                 txSubmissionInbound
                   (contramap (TraceLabelPeer peer) (Node.txInboundTracer tracers))
                   txSubmissionInitDelay
-                  ( NumTxIdsToAck $
-                      getNumTxIdsToReq $
-                        maxUnacknowledgedTxIds $
-                          txDecisionPolicy $
-                            miniProtocolParameters
-                  )
+                  (getTxSubmissionConfig version)
+                  defaultMaxNumTxsToRequest
                   (mapTxSubmissionMempoolReader txForgetValidated $ getMempoolReader getMempool)
                   (getMempoolWriter getMempool)
-                  version
       , hPerasCertDiffusionClient = \version controlMessageSTM peer ->
           objectDiffusionInbound
             (contramap (TraceLabelPeer peer) (Node.perasCertDiffusionInboundTracer tracers))
@@ -1150,6 +1142,7 @@ mkApps kernel rng Tracers{..} mkCodecs ByteLimits{..} chainSyncTimeouts lopBucke
       Right newTxSubmissionServer ->
         withPeer
           (getTxDecisionPolicy kernel)
+          (getTxSubmissionConfig kernel version)
           ( mapTxSubmissionMempoolReader txForgetValidated $
               getMempoolReader (getMempool kernel)
           )
