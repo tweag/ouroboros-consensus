@@ -606,7 +606,7 @@ instance BlockSupportsPeras LeiosTestBlock where
   verifyPerasVote = defaultVerifyPerasVote
   forgePerasCert = defaultForgePerasCert
   verifyPerasCert = defaultVerifyPerasCert
-  getPerasCertInBlock _ = Right Nothing
+  getPerasCertInBlock _ = Nothing
 
 instance HasHardForkHistory LeiosTestBlock where
   type HardForkIndices LeiosTestBlock = '[LeiosTestBlock]
