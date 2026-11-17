@@ -67,8 +67,8 @@ import Data.Typeable (Typeable)
 import GHC.Generics (Generic)
 import NoThunks.Class (NoThunks)
 import Ouroboros.Consensus.Block
-import Ouroboros.Consensus.Committee.Class (VotingCommittee)
-import Ouroboros.Consensus.Committee.Crypto (PrivateKey)
+import Cardano.Crypto.Peras.Committee.Class (VotingCommittee)
+import Cardano.Crypto.Peras.Committee.Crypto (PrivateKey)
 import Ouroboros.Consensus.HeaderValidation
 import Ouroboros.Consensus.Ledger.Abstract
 import Ouroboros.Consensus.Ledger.Inspect

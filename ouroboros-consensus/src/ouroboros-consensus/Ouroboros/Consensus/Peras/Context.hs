@@ -106,10 +106,10 @@ import Ouroboros.Consensus.Block.SupportsPeras
   , ValidatedPerasCert
   , ValidatedPerasVote
   )
-import Ouroboros.Consensus.Committee.Class (CryptoSupportsVotingCommittee)
-import qualified Ouroboros.Consensus.Committee.Class as Committee
-import Ouroboros.Consensus.Committee.Crypto (PrivateKey)
-import Ouroboros.Consensus.Committee.Types (PoolId, TargetCommitteeSize)
+import Cardano.Crypto.Peras.Committee.Class (CryptoSupportsVotingCommittee)
+import qualified Cardano.Crypto.Peras.Committee.Class as Committee
+import Cardano.Crypto.Peras.Committee.Crypto (PrivateKey)
+import Cardano.Crypto.Peras.Committee.Types (PoolId, TargetCommitteeSize)
 import Ouroboros.Consensus.HardFork.Abstract (HasHardForkHistory (..))
 import Ouroboros.Consensus.HardFork.History.Qry
   ( EpochToPerasRoundInfo (..)

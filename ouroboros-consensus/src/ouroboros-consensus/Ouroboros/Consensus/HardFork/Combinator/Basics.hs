@@ -88,7 +88,7 @@ import Ouroboros.Consensus.Block.SupportsPeras
   , unsafePerasVoteCollection
   )
 import Ouroboros.Consensus.BlockchainTime (WithArrivalTime (..))
-import Ouroboros.Consensus.Committee.Crypto
+import Cardano.Crypto.Peras.Committee.Crypto
   ( ElectionId
   , VoteCandidate
   )

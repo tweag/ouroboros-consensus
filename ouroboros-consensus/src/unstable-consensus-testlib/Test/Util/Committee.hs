@@ -30,8 +30,10 @@ import qualified Cardano.Ledger.Keys as SL
 import Data.Map (Map)
 import qualified Data.Map.Strict as Map
 import Data.String (IsString (..))
-import Ouroboros.Consensus.Committee.Types (LedgerStake (..), PoolId (..))
-import Ouroboros.Consensus.Committee.WFA (WFATiebreaker (..))
+import qualified Cardano.Crypto.Peras.Committee.Base as Committee
+import Cardano.Crypto.Peras.Committee.Types (LedgerStake (..), PoolId (..))
+import Cardano.Crypto.Peras.Committee.WFA (WFATiebreaker (..))
+import Ouroboros.Consensus.Peras.LedgerConversions (toCommitteeNonce, toCommitteePoolId)
 import Test.QuickCheck
   ( Arbitrary (..)
   , Gen
@@ -52,7 +54,7 @@ import Test.Util.QuickCheck (geometric)
 -- NOTE: we are assuming that this function preserves uniqueness.
 mkPoolId :: String -> PoolId
 mkPoolId str =
-  PoolId
+  toCommitteePoolId
     . SL.hashKey
     . SL.VKey
     . SL.deriveVerKeyDSIGN
@@ -75,12 +77,13 @@ unfairWFATiebreaker =
 -- * QuickCheck generators
 
 -- | Generate a random nonce for testing purposes.
-genEpochNonce :: Gen Nonce
+genEpochNonce :: Gen Committee.Nonce
 genEpochNonce =
-  frequency
-    [ (1, pure NeutralNonce)
-    , (9, mkNonceFromNumber <$> arbitrary)
-    ]
+  toCommitteeNonce
+    <$> frequency
+      [ (1, pure NeutralNonce)
+      , (9, mkNonceFromNumber <$> arbitrary)
+      ]
 
 -- | Generate a positive stake value using a geometric distribution.
 genPositiveStake :: Gen LedgerStake

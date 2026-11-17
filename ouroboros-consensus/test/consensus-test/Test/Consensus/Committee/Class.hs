@@ -15,11 +15,11 @@ import Data.List.NonEmpty (NonEmpty ((:|)))
 import qualified Data.List.NonEmpty as NonEmpty
 import Data.Proxy (Proxy (..))
 import GHC.Word (Word64)
-import Ouroboros.Consensus.Committee.Class
+import Cardano.Crypto.Peras.Committee.Class
   ( UniqueVotesWithSameTargetError (..)
   , checkUniqueVotesWithSameTarget
   )
-import Ouroboros.Consensus.Committee.Crypto
+import Cardano.Crypto.Peras.Committee.Crypto
   ( ElectionId
   , VoteCandidate
   )

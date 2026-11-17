@@ -72,7 +72,7 @@ import Ouroboros.Consensus.Peras.Context
   , dummyPoolDistr
   , mkBoundedPerasEpochContextWith
   )
-import qualified Ouroboros.Consensus.Peras.Crypto.BLS as BLS
+import qualified Cardano.Crypto.Peras.Crypto.BLS as BLS
 import qualified Ouroboros.Consensus.Peras.Error.V1 as V1
 import Ouroboros.Consensus.Peras.Params
   ( PerasParams

@@ -79,15 +79,15 @@ import GHC.Generics (Generic)
 import NoThunks.Class (NoThunks)
 import Ouroboros.Consensus.Block.Abstract (Point, StandardHash)
 import Ouroboros.Consensus.BlockchainTime.WallClock.Types (WithArrivalTime (..))
-import Ouroboros.Consensus.Committee.Class
+import Cardano.Crypto.Peras.Committee.Class
   ( CryptoSupportsVotingCommittee (..)
   , UniqueVotesWithSameTarget
   , VotingCommittee
   , unsafeUniqueVotesWithSameTarget
   )
-import qualified Ouroboros.Consensus.Committee.Class as Committee
-import Ouroboros.Consensus.Committee.Crypto (ElectionId, PrivateKey, VoteCandidate)
-import Ouroboros.Consensus.Committee.Types (PoolId (..))
+import qualified Cardano.Crypto.Peras.Committee.Class as Committee
+import Cardano.Crypto.Peras.Committee.Crypto (ElectionId, PrivateKey, VoteCandidate)
+import Cardano.Crypto.Peras.Committee.Types (PoolId (..))
 import Ouroboros.Consensus.Ledger.SupportsMempool (HasSizeForBlockBodyInclusion, TxLimits (..))
 import Ouroboros.Consensus.Peras.Cert.Class
 import Ouroboros.Consensus.Peras.Params

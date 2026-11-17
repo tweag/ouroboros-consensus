@@ -227,7 +227,7 @@ prettyLeiosPoint (MkLeiosPoint (SlotNo slotNo) ebHash) =
 
 -- | A ranking block leadership election: a slot and the pool it elected.
 --
--- This is unrelated to the 'Ouroboros.Consensus.Committee.Crypto.ElectionId'
+-- This is unrelated to the 'Cardano.Crypto.Peras.Committee.Crypto.ElectionId'
 -- type family, which identifies an election of a voting committee. We do not
 -- anticipate a module using both.
 --

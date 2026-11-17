@@ -15,14 +15,14 @@ import Ouroboros.Consensus.Cardano.Block
   , CardanoEras
   )
 import Ouroboros.Consensus.Cardano.CanHardFork (CardanoHardForkConstraints)
-import Ouroboros.Consensus.Committee.Crypto (PrivateKey)
-import Ouroboros.Consensus.Committee.Types (PoolId)
+import Cardano.Crypto.Peras.Committee.Crypto (PrivateKey)
+import Cardano.Crypto.Peras.Committee.Types (PoolId)
 import Ouroboros.Consensus.HardFork.Combinator.AcrossEras
   ( OneEraPerasCrypto
   , PerEraPerasPrivateKey (..)
   )
 import Ouroboros.Consensus.Peras.Context (forgePerasVoteIfEligibleWithHandle)
-import qualified Ouroboros.Consensus.Peras.Crypto.BLS as BLS
+import qualified Cardano.Crypto.Peras.Crypto.BLS as BLS
 import Ouroboros.Consensus.Peras.Vote.Forging (PerasVoteForging (..))
 import Ouroboros.Consensus.TypeFamilyWrappers (WrapPerasPrivateKey (..))
 import Ouroboros.Consensus.Util.IOLike (MonadThrow)

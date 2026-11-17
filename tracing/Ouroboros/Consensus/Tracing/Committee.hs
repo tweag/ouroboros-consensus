@@ -6,17 +6,18 @@ module Ouroboros.Consensus.Tracing.Committee () where
 
 import Cardano.Logging (LogFormatting (..))
 import Data.Aeson (Value (..), (.=))
-import Ouroboros.Consensus.Committee.Class (VotingCommitteeError)
-import Ouroboros.Consensus.Committee.EveryoneVotes (EveryoneVotes)
-import qualified Ouroboros.Consensus.Committee.EveryoneVotes as EveryoneVotes
-import Ouroboros.Consensus.Committee.Types (PoolId (..), TargetCommitteeSize (..))
-import Ouroboros.Consensus.Committee.WFA
+import Cardano.Crypto.Peras.Committee.Class (VotingCommitteeError)
+import Cardano.Crypto.Peras.Committee.EveryoneVotes (EveryoneVotes)
+import qualified Cardano.Crypto.Peras.Committee.EveryoneVotes as EveryoneVotes
+import Cardano.Crypto.Peras.Committee.Types (TargetCommitteeSize (..))
+import Cardano.Crypto.Peras.Committee.WFA
   ( NumPoolsWithPositiveStake (..)
   , SeatIndex (..)
   , WFAError (..)
   )
-import Ouroboros.Consensus.Committee.WFALS (WFALS)
-import qualified Ouroboros.Consensus.Committee.WFALS as WFALS
+import Cardano.Crypto.Peras.Committee.WFALS (WFALS)
+import qualified Cardano.Crypto.Peras.Committee.WFALS as WFALS
+import Ouroboros.Consensus.Peras.LedgerConversions (fromCommitteePoolId)
 
 --
 -- instances for WFAError
@@ -43,7 +44,7 @@ instance LogFormatting (VotingCommitteeError crypto WFALS) where
   forMachine _dtal (WFALS.MissingPoolId poolId) =
     mconcat
       [ "kind" .= String "MissingPoolId"
-      , "poolId" .= unPoolId poolId
+      , "poolId" .= fromCommitteePoolId poolId
       ]
   forMachine _dtal (WFALS.NotAPersistentMember seatIndex) =
     mconcat
@@ -90,7 +91,7 @@ instance LogFormatting (VotingCommitteeError crypto EveryoneVotes) where
   forMachine _dtal (EveryoneVotes.MissingPoolId poolId) =
     mconcat
       [ "kind" .= String "MissingPoolId"
-      , "poolId" .= unPoolId poolId
+      , "poolId" .= fromCommitteePoolId poolId
       ]
   forMachine _dtal (EveryoneVotes.MissingSeatIndex seatIndex) =
     mconcat

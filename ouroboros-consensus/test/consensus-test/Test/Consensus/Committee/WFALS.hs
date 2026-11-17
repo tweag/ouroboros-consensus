@@ -13,9 +13,10 @@ import Data.Function (on)
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Data.String (IsString (..))
-import qualified Ouroboros.Consensus.Committee.Types as WFA
-import Ouroboros.Consensus.Committee.WFA (WFATiebreaker (..))
-import qualified Ouroboros.Consensus.Committee.WFA as WFA
+import qualified Cardano.Crypto.Peras.Committee.Types as WFA
+import Cardano.Crypto.Peras.Committee.WFA (WFATiebreaker (..))
+import qualified Cardano.Crypto.Peras.Committee.WFA as WFA
+import Ouroboros.Consensus.Peras.LedgerConversions (toCommitteePoolId)
 import Test.Consensus.Committee.WFALS.Conformance (conformsToRustImplementation)
 import Test.Consensus.Committee.WFALS.Model
   ( NumSeats
@@ -100,7 +101,7 @@ realImplementationConformsToRustImplementation =
       . WFA.mkExtWFAStakeDistr tiebreaker
       . Map.mapKeys
         ( \str ->
-            WFA.PoolId
+            toCommitteePoolId
               . SL.hashKey
               . SL.VKey
               . SL.deriveVerKeyDSIGN
