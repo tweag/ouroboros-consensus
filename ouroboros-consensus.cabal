@@ -231,6 +231,12 @@ library
     Ouroboros.Consensus.MiniProtocol.LocalTxSubmission.Server
     Ouroboros.Consensus.MiniProtocol.ObjectDiffusion.Inbound
     Ouroboros.Consensus.MiniProtocol.ObjectDiffusion.Inbound.State
+    Ouroboros.Consensus.MiniProtocol.ObjectDiffusion.Inbound.V2
+    Ouroboros.Consensus.MiniProtocol.ObjectDiffusion.Inbound.V2.Decision
+    Ouroboros.Consensus.MiniProtocol.ObjectDiffusion.Inbound.V2.Registry
+    Ouroboros.Consensus.MiniProtocol.ObjectDiffusion.Inbound.V2.State
+    Ouroboros.Consensus.MiniProtocol.ObjectDiffusion.Inbound.V2.TestUtils
+    Ouroboros.Consensus.MiniProtocol.ObjectDiffusion.Inbound.V2.Types
     Ouroboros.Consensus.MiniProtocol.ObjectDiffusion.ObjectPool.API
     Ouroboros.Consensus.MiniProtocol.ObjectDiffusion.ObjectPool.PerasCert
     Ouroboros.Consensus.MiniProtocol.ObjectDiffusion.ObjectPool.PerasVote
@@ -390,6 +396,7 @@ library
     Ouroboros.Consensus.Util.Versioned
 
   build-depends:
+    QuickCheck,
     aeson,
     base >=4.14 && <4.23,
     base-deriving-via,
@@ -432,6 +439,7 @@ library
     psqueues ^>=0.2.3,
     quiet ^>=0.2,
     random,
+    random-shuffle,
     rawlock ^>=0.1.1,
     resource-registry ^>=0.4,
     semialign >=1.1,
@@ -1153,6 +1161,20 @@ benchmark PerasCertDB-bench
     ouroboros-network:api,
     tasty-bench,
     unstable-consensus-testlib,
+
+benchmark ObjectDiffusion-bench
+  import: common-bench
+  type: exitcode-stdio-1.0
+  hs-source-dirs: ouroboros-consensus/bench/ObjectDiffusion-bench
+  main-is: Main.hs
+  other-modules:
+  build-depends:
+    QuickCheck,
+    base,
+    deepseq,
+    hashable,
+    ouroboros-consensus,
+    tasty-bench,
 
 benchmark LeiosDB-bench
   import: common-bench
