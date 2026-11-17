@@ -40,6 +40,10 @@ import Ouroboros.Consensus.MiniProtocol.ChainSync.Client
   ( ChainSyncClientHandleCollection
   , newChainSyncClientHandleCollection
   )
+import Ouroboros.Consensus.MiniProtocol.ObjectDiffusion.Inbound.State
+  ( ObjectDiffusionInboundHandleCollection
+  , newObjectDiffusionInboundHandleCollection
+  )
 import Ouroboros.Consensus.Util.IOLike
   ( IOLike
   , MonadSTM (STM)
@@ -124,9 +128,12 @@ data PeerSimulatorResources m blk
   = PeerSimulatorResources
   { psrPeers :: Map PeerId (PeerResources m blk)
   -- ^ Resources for individual peers.
-  , psrHandles :: ChainSyncClientHandleCollection PeerId m blk
+  , psrCSHandles :: ChainSyncClientHandleCollection PeerId m blk
   -- ^ Handles to interact with the ChainSync client of each peer.
   -- See 'ChainSyncClientHandle' for more details.
+  , psrCDHandles :: ObjectDiffusionInboundHandleCollection PeerId m blk
+  -- ^ Handles to interact with the PerasCertDiffusion client of each peer.
+  -- See 'ObjectDiffusionInboundHandle' for more details.
   }
 
 -- | Create 'ChainSyncServerHandlers' for our default implementation using 'NodeState'.
@@ -267,5 +274,11 @@ makePeerSimulatorResources tracer blockTree peers = do
   resources <- for peers $ \peerId -> do
     peerResources <- makePeerResources tracer blockTree peerId
     pure (peerId, peerResources)
-  psrHandles <- atomically newChainSyncClientHandleCollection
-  pure PeerSimulatorResources{psrPeers = Map.fromList $ toList resources, psrHandles}
+  psrCSHandles <- atomically newChainSyncClientHandleCollection
+  psrCDHandles <- atomically newObjectDiffusionInboundHandleCollection
+  pure
+    PeerSimulatorResources
+      { psrPeers = Map.fromList $ toList resources
+      , psrCSHandles
+      , psrCDHandles
+      }
