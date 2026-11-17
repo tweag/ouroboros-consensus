@@ -79,6 +79,7 @@ module Test.Ouroboros.Storage.ChainDB.StateMachine
   , tests
   ) where
 
+import Cardano.Binary (FromCBOR, ToCBOR)
 import Cardano.Ledger.BaseTypes (NonZero (..), unsafeNonZero)
 import Codec.Serialise (Serialise)
 import Control.Exception (assert)
@@ -150,6 +151,7 @@ import Ouroboros.Consensus.Storage.ImmutableDB.Chunks.Internal
 import qualified Ouroboros.Consensus.Storage.LedgerDB.TraceEvent as LedgerDB
 import Ouroboros.Consensus.Storage.LeiosDB (LeiosDbHandle, newLeiosDBInMemory)
 import qualified Ouroboros.Consensus.Storage.PerasCertDB as PerasCertDB
+import qualified Ouroboros.Consensus.Storage.PerasImmutableCertDB as PerasImmutableCertDB
 import qualified Ouroboros.Consensus.Storage.PerasVoteDB as PerasVoteDB
 import qualified Ouroboros.Consensus.Storage.VolatileDB as VolatileDB
 import Ouroboros.Consensus.Util (split)
@@ -413,6 +415,8 @@ type TestConstraints blk =
   , ImmutableEraParams blk
   , StateSupportsPerasEpochContext blk
   , BlockSupportsPeras blk
+  , FromCBOR (Point blk)
+  , ToCBOR (Point blk)
   , PerasVote blk ~ MockPerasVote blk
   , PerasCert blk ~ MockPerasCert blk
   )
@@ -1828,6 +1832,8 @@ deriving instance SOP.Generic (VolatileDB.TraceEvent blk)
 deriving instance SOP.HasDatatypeInfo (VolatileDB.TraceEvent blk)
 deriving instance SOP.Generic (PerasCertDB.TraceEvent blk)
 deriving instance SOP.HasDatatypeInfo (PerasCertDB.TraceEvent blk)
+deriving instance SOP.Generic (PerasImmutableCertDB.TraceEvent blk)
+deriving instance SOP.HasDatatypeInfo (PerasImmutableCertDB.TraceEvent blk)
 deriving instance SOP.Generic (PerasVoteDB.TraceEvent blk)
 deriving instance SOP.HasDatatypeInfo (PerasVoteDB.TraceEvent blk)
 deriving anyclass instance SOP.Generic (TraceChainSelStarvationEvent blk)
@@ -2652,6 +2658,7 @@ traceEventName = \case
   TraceImmutableDBEvent ev -> "ImmutableDB." <> constrName ev
   TraceVolatileDBEvent ev -> "VolatileDB." <> constrName ev
   TracePerasCertDbEvent ev -> "PerasCertDB." <> constrName ev
+  TracePerasImmutableCertDbEvent ev -> "PerasImmutableCertDB." <> constrName ev
   TracePerasVoteDbEvent ev -> "PerasVoteDB." <> constrName ev
   TraceLastShutdownUnclean -> "LastShutdownUnclean"
   TraceChainSelStarvationEvent ev -> "ChainSelStarvation." <> constrName ev

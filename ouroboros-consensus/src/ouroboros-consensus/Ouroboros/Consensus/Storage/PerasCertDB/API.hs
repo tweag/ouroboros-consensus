@@ -46,6 +46,12 @@ data PerasCertDB m blk = PerasCertDB
   , getCertIds ::
       STM m (Set PerasRoundNo)
   -- ^ Get the set of all cert IDs currently in the database.
+  , getCertsBoosting ::
+      Point blk ->
+      STM m [WithArrivalTime (ValidatedPerasCert blk)]
+  -- ^ Get all certificates known to boost the block at the given point.
+  -- Indeed, there is a non-trivial probability for two consecutive rounds
+  -- to boost the same block.
   , getCertsAfter ::
       PerasRoundNo ->
       STM m (Map PerasRoundNo (m (WithArrivalTime (ValidatedPerasCert blk))))
@@ -69,12 +75,12 @@ data PerasCertDB m blk = PerasCertDB
   -- (at origin).
   , garbageCollect ::
       SlotNo ->
-      STM m (m ())
+      STM m (m [WithArrivalTime (ValidatedPerasCert blk)])
   -- ^ Garbage-collect certificates whose target slot is strictly smaller
   -- than the given slot number.
   -- The STM transaction clears the relevant state from the in-memory index, and
-  -- the resulting 'm' action performs tracing and might perform side-effects in
-  -- implementations with on-disk storage.
+  -- the resulting 'm' action performs tracing, might perform side-effects in
+  -- implementations with on-disk storage and returns the collected certificates.
   --
   -- NOTE: Use the `join . atomically` pattern to consume its output.
   }

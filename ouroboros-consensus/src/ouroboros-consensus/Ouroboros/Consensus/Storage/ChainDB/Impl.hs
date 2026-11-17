@@ -102,6 +102,7 @@ import Ouroboros.Consensus.Storage.LeiosDB.API
   , withReader
   )
 import qualified Ouroboros.Consensus.Storage.PerasCertDB as PerasCertDB
+import qualified Ouroboros.Consensus.Storage.PerasImmutableCertDB as PerasImmutableCertDB
 import qualified Ouroboros.Consensus.Storage.PerasVoteDB as PerasVoteDB
 import qualified Ouroboros.Consensus.Storage.VolatileDB as VolatileDB
 import Ouroboros.Consensus.Util (newFuse, whenJust)
@@ -264,6 +265,7 @@ openDBInternal args launchBgTasks = runWithTempRegistry $ do
             }
     perasCertDB <- PerasCertDB.createDB argsPerasCertDB
     perasVoteDB <- PerasVoteDB.createDB argsPerasVoteDB resolverHandle
+    perasImmutableCertDB <- PerasImmutableCertDB.openDB argsPerasImmutableCertDB
 
     varInvalid <- newTVarIO (WithFingerprint Map.empty (Fingerprint 0))
 
@@ -350,6 +352,7 @@ openDBInternal args launchBgTasks = runWithTempRegistry $ do
             , cdbLoE = Args.cdbsLoE cdbSpecificArgs
             , cdbChainSelStarvation = varChainSelStarvation
             , cdbPerasCertDB = perasCertDB
+            , cdbPerasImmutableCertDB = perasImmutableCertDB
             , cdbPerasVoteDB = perasVoteDB
             , cdbPerasEpochContextResolverHandle = resolverHandle
             , cdbSnapshotDelayRNG = varSnapshotDelayRNG
@@ -426,7 +429,10 @@ openDBInternal args launchBgTasks = runWithTempRegistry $ do
             { intCopyToImmutableDB = getEnv h Background.copyToImmutableDB
             , intGarbageCollect = \slot -> getEnv h $ \e -> do
                 Background.garbageCollectBlocks e slot
+                -- The background 'certStoringRunner' is usually not running
+                -- in the tests using this, so store the certificates directly.
                 Background.garbageCollectPeras e slot
+                  >>= Background.storeImmutableCerts e
                 LedgerDB.garbageCollect (cdbLedgerDB e) slot
             , intTryTakeSnapshot = getEnv h $ \e -> do
                 -- 'tryTakeSnapshot' only enqueues a request for the snapshots;
@@ -469,6 +475,7 @@ openDBInternal args launchBgTasks = runWithTempRegistry $ do
     argsLgrDb
     argsPerasCertDB
     argsPerasVoteDB
+    argsPerasImmutableCertDB
     cdbSpecificArgs = args
 
   -- The LedgerDB requires a criterion ('LedgerDB.GetVolatileSuffix')
@@ -537,6 +544,7 @@ closeDB (CDBHandle varState) = do
     ImmutableDB.closeDB cdbImmutableDB
     VolatileDB.closeDB cdbVolatileDB
     LedgerDB.closeDB cdbLedgerDB
+    PerasImmutableCertDB.closeDB cdbPerasImmutableCertDB
 
     chain <- atomically $ icWithoutTime <$> readTVar cdbChain
 

@@ -130,6 +130,7 @@ createDB args = do
     PerasCertDB
       { addCert = implAddCert env
       , getCertIds = implGetCertIds env
+      , getCertsBoosting = implGetCertsBoosting env
       , getCertsAfter = implGetCertsAfter env
       , getWeightSnapshot = implGetWeightSnapshot env
       , getLatestCertSeen = implGetLatestCertSeen env
@@ -183,6 +184,23 @@ implAddCert PerasCertDbEnv{pcdbTracer, pcdbState} cert = do
     traceWith pcdbTracer (AddCert roundNo cert addPerasCertRes)
     pure addPerasCertRes
 
+implGetCertsBoosting ::
+  ( IOLike m
+  , StandardHash blk
+  , IsPerasCert (PerasCert blk) blk
+  ) =>
+  PerasCertDbEnv m blk ->
+  Point blk ->
+  STM m [WithArrivalTime (ValidatedPerasCert blk)]
+implGetCertsBoosting PerasCertDbEnv{pcdbState} pt = do
+  PerasCertDbState{pcdsCertsByTicket} <-
+    forgetFingerprint <$> readTVar pcdbState
+  pure
+    [ cert
+    | cert <- Map.elems pcdsCertsByTicket
+    , getPerasCertPoint cert == pt
+    ]
+
 implGetWeightSnapshot ::
   ( IOLike m
   , StandardHash blk
@@ -235,24 +253,31 @@ implGarbageCollect ::
   ) =>
   PerasCertDbEnv m blk ->
   SlotNo ->
-  STM m (m ())
+  STM m (m [WithArrivalTime (ValidatedPerasCert blk)])
 implGarbageCollect PerasCertDbEnv{pcdbTracer, pcdbState} slotNo = do
+  WithFingerprint (pcdbState', removedCertsByTicket) fp <- fmap gc <$> readTVar pcdbState
   -- No need to update the 'Fingerprint' as we only remove certificates that do
   -- not matter for comparing interesting chains.
-  modifyTVar pcdbState (fmap gc)
-  pure $ traceWith pcdbTracer (GarbageCollected slotNo)
+  writeTVar pcdbState (WithFingerprint pcdbState' fp)
+  pure $ do
+    traceWith pcdbTracer (GarbageCollected slotNo)
+    pure (Map.elems removedCertsByTicket)
  where
-  gc :: PerasCertDbState blk -> PerasCertDbState blk
+  gc ::
+    PerasCertDbState blk ->
+    (PerasCertDbState blk, Map PerasCertTicketNo (WithArrivalTime (ValidatedPerasCert blk)))
   gc
     PerasCertDbState
       { pcdsCerts
       , pcdsLatestCertSeen
       } =
-      let pcdsCerts' =
-            Map.filter
+      let (pcdsCerts', gcCerts) =
+            Map.partition
               (\cert -> pointSlot (getPerasCertPoint cert) >= NotOrigin slotNo)
               pcdsCerts
-       in PerasCertDbState
-            { pcdsCerts = pcdsCerts'
-            , pcdsLatestCertSeen = pcdsLatestCertSeen
-            }
+       in ( PerasCertDbState
+              { pcdsCerts = pcdsCerts'
+              , pcdsLatestCertSeen = pcdsLatestCertSeen
+              }
+          , gcCerts
+          )
