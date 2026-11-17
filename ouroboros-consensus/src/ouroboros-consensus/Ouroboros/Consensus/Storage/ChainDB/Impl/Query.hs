@@ -65,7 +65,6 @@ import Ouroboros.Consensus.HeaderStateHistory
   )
 import Ouroboros.Consensus.HeaderValidation (HeaderWithTime)
 import Ouroboros.Consensus.Ledger.Abstract (EmptyMK)
-import Ouroboros.Consensus.Ledger.Basics (LedgerConfig)
 import Ouroboros.Consensus.Ledger.Extended
 import Ouroboros.Consensus.Ledger.Peras (PerasState (..))
 import Ouroboros.Consensus.Ledger.SupportsProtocol (LedgerSupportsProtocol)
@@ -480,11 +479,11 @@ getPerasCertInclusionView roundNo env =
 
 getTimeResolutionContext ::
   MonadSTM m =>
-  LedgerConfig blk ->
   ChainDbEnv m blk ->
   STM m (TimeResolutionContext blk)
-getTimeResolutionContext ledgerConfig =
-  fmap (TimeResolutionContext ledgerConfig . ledgerState) . getCurrentLedger
+getTimeResolutionContext env =
+  TimeResolutionContext (configLedger (cdbTopLevelConfig env)) . ledgerState
+    <$> getCurrentLedger env
 
 -- | Wait until the slot of the given point is smaller or equal than the immutable tip slot,
 --   and then return:

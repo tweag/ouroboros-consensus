@@ -406,17 +406,14 @@ openDBInternal args launchBgTasks = runWithTempRegistry $ do
             , getPerasVotingViewHandle =
                 PerasVotingViewHandle $ \roundNo ->
                   getEnvSTM h $
-                    Query.getPerasVotingView
-                      roundNo
+                    Query.getPerasVotingView roundNo
             , getPerasCertInclusionViewHandle =
                 PerasCertInclusionViewHandle $ \roundNo ->
                   getEnvSTM h $
                     Query.getPerasCertInclusionView roundNo
             , getTimeResolutionContextHandle =
                 TimeResolutionContextHandle $
-                  getEnvSTM h $
-                    Query.getTimeResolutionContext
-                      (topLevelConfigLedger (Args.cdbsTopLevelConfig cdbSpecificArgs))
+                  getEnvSTM h Query.getTimeResolutionContext
             , setChainClock = \getSlot ->
                 getEnv h $ \e ->
                   atomically $ writeTVar (cdbGetCurrentSlot e) (ChainClock getSlot)
