@@ -29,6 +29,7 @@ module Ouroboros.Consensus.Peras.Context
   , PerasEpochContextNotFoundForRound (..)
   , unsafeResolveRoundNo
   , perasEpochContextResolverBounds
+  , perasApplyContext
   , PerasEpochContextResolverHandle (..)
   , mockPerasEpochContextResolverHandle
   , withResolvedRoundNo
@@ -65,7 +66,7 @@ import Cardano.Binary
   , encodeListLen
   )
 import qualified Cardano.Crypto.Hash as Hash
-import Cardano.Ledger.BaseTypes (Nonce)
+import Cardano.Ledger.BaseTypes (Nonce (..))
 import Cardano.Ledger.Coin (Coin (..), compactCoinOrError, knownNonZeroCoin)
 import Cardano.Ledger.Keys (KeyHash (..), toVRFVerKeyHash)
 import Cardano.Ledger.State (IndividualPoolStake (..), PoolDistr (..))
@@ -128,6 +129,7 @@ import Ouroboros.Consensus.HeaderValidation
   , headerStateTip
   )
 import Ouroboros.Consensus.Ledger.Abstract (EmptyMK, LedgerConfig, LedgerState)
+import Ouroboros.Consensus.Peras.ApplyContext (PerasApplyContext (..), PerasApplyEpoch (..))
 import Ouroboros.Consensus.Peras.Params
   ( PerasEnabled
   , PerasParams
@@ -326,6 +328,42 @@ data PerasEpochContextNotFoundForRound
       -- | Detailed reason for the failure.
       !String
   deriving (Eq, Show, Generic, NoThunks, Exception)
+
+-- | What the ledger needs to validate the Peras certificate of a block: the
+-- nonces and rounds of the epochs covered by a resolver ticked to the slot of
+-- the block, i.e. the epoch of the block and the one before it. 'Nothing' when
+-- Peras is not enabled in the epoch of the block, or the resolver is in an error
+-- state.
+perasApplyContext ::
+  StateSupportsPerasEpochContext blk =>
+  PerasEpochContextResolver blk ->
+  Ticked (HeaderState blk) ->
+  Maybe PerasApplyContext
+perasApplyContext resolver tickedHeaderState =
+  case resolver of
+    PerasEpochContextResolver (PerasEnabled curr) prev ->
+      Just
+        PerasApplyContext
+          { pacEpoch =
+              applyEpoch (getPerasNonceFromTickedHeaderState tickedHeaderState) curr
+          , pacPrevEpoch = case prev of
+              PerasEnabled prevContext ->
+                SJust $
+                  applyEpoch (getPerasPrevNonceFromTickedHeaderState tickedHeaderState) prevContext
+              NoPerasEnabled ->
+                SNothing
+          }
+    PerasEpochContextResolver NoPerasEnabled _ ->
+      Nothing
+    PerasEpochContextResolverError{} ->
+      Nothing
+ where
+  applyEpoch nonce BoundedPerasEpochContext{startPerasRoundNo, endPerasRoundNo} =
+    PerasApplyEpoch
+      { paeNonce = nonce
+      , paeStartRound = startPerasRoundNo
+      , paeEndRound = endPerasRoundNo
+      }
 
 -- | Initialise a 'PerasEpochContextResolver' using a bounded context.
 --
@@ -627,6 +665,15 @@ class
   getPerasNonceFromTickedHeaderState ::
     Ticked (HeaderState blk) ->
     Nonce
+
+  -- | Extract the nonce of the epoch before the current one from a ticked
+  -- header state, for the ledger to validate a certificate of that epoch.
+  --
+  -- The default is for blocks without Peras certificates in their bodies.
+  getPerasPrevNonceFromTickedHeaderState ::
+    Ticked (HeaderState blk) ->
+    Nonce
+  getPerasPrevNonceFromTickedHeaderState _ = NeutralNonce
 
   -- | Derive parameters from an unticked concrete ledger state.
   mkPerasParamsFromLedger ::

@@ -32,6 +32,7 @@ module Ouroboros.Consensus.Ledger.Extended
 
     -- * Peras epoch context resolver helpers
   , initPerasEpochContextResolverFromUntickedState
+  , perasApplyContext
   , tickAndGetPerasEpochContextResolver
   , tickAndResolveRoundNo
 
@@ -46,6 +47,7 @@ import Codec.CBOR.Encoding (Encoding, encodeListLen)
 import Control.DeepSeq (NFData)
 import Control.Monad.Except
 import Control.Monad.Trans.Except (except)
+import qualified Control.State.Transition.Extended as STS
 import Data.Bifunctor (Bifunctor (..))
 import Data.Functor ((<&>))
 import Data.Maybe.Strict (StrictMaybe (..))
@@ -84,11 +86,13 @@ import Ouroboros.Consensus.Ledger.Peras (PerasState (..))
 import Ouroboros.Consensus.Ledger.SupportsProtocol
 import Ouroboros.Consensus.Ledger.Tables.Utils (forgetLedgerTables)
 import Ouroboros.Consensus.Leios.Cert (LeiosCertRejection)
+import Ouroboros.Consensus.Peras.ApplyContext (PerasApplyContext)
 import Ouroboros.Consensus.Peras.Context
   ( PerasEpochContextNotFoundForRound (..)
   , PerasEpochContextResolver (..)
   , StateSupportsPerasEpochContext (..)
   , initPerasEpochContextResolverFromUntickedState
+  , perasApplyContext
   , tickPerasEpochContextResolver
   , unsafeResolveRoundNo
   )
@@ -336,8 +340,10 @@ applyHelper ::
   ( HasCallStack
   , LedgerSupportsProtocol blk
   , BlockSupportsPeras blk
+  , StateSupportsPerasEpochContext blk
   ) =>
   ( HasCallStack =>
+    Maybe PerasApplyContext ->
     ComputeLedgerEvents ->
     LedgerCfg LedgerState blk ->
     blk ->
@@ -357,6 +363,9 @@ applyHelper f opts cfg blk TickedExtLedgerState{..} = do
   ledgerResult <-
     withExcept ExtValidationErrorLedger $
       f
+        -- What the ledger needs to validate the Peras certificate of the
+        -- block, from the resolver ticked to the slot of the block.
+        (perasApplyContext (perasEpochContextResolver tickedPerasState) tickedHeaderState)
         opts
         (configLedger $ getExtLedgerCfg cfg)
         blk
@@ -440,10 +449,10 @@ instance
   ApplyBlock ExtLedgerState blk
   where
   applyBlockLedgerResultWithValidation doValidate =
-    applyHelper (applyBlockLedgerResultWithValidation doValidate)
+    applyHelper (\perasContext -> applyBlockLedgerResultWithPerasContext perasContext doValidate)
 
   applyBlockLedgerResult =
-    applyHelper applyBlockLedgerResult
+    applyHelper (\perasContext -> applyBlockLedgerResultWithPerasContext perasContext STS.ValidateAll)
 
   reapplyBlockLedgerResult evs cfg blk TickedExtLedgerState{..} =
     (\l -> ExtLedgerState l hdr perasState) <$> castLedgerResult ledgerResult
