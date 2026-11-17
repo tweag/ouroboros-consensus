@@ -5,6 +5,7 @@
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE UndecidableInstances #-}
 
 -- | Implementation of the GDD governor
@@ -36,8 +37,10 @@ import Cardano.Ledger.BaseTypes (unNonZero)
 import Control.Monad (guard, void, when)
 import Control.Tracer (Tracer, traceWith)
 import Data.Bifunctor (second)
+import Data.Coerce (coerce)
 import Data.Containers.ListUtils (nubOrd)
 import Data.Foldable (for_, toList)
+import Data.Function ((&))
 import Data.Functor.Compose (Compose (..))
 import Data.List.NonEmpty (NonEmpty)
 import qualified Data.List.NonEmpty as NE
@@ -45,6 +48,7 @@ import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Maybe (maybeToList)
 import Data.Maybe.Strict (StrictMaybe)
+import Data.Monoid (Sum (..))
 import Data.Typeable (Typeable)
 import Data.Word (Word64)
 import Ouroboros.Consensus.Block
@@ -58,30 +62,45 @@ import Ouroboros.Consensus.Config.SecurityParam
   )
 import Ouroboros.Consensus.HardFork.Abstract (HasHardForkHistory (..))
 import Ouroboros.Consensus.HardFork.History.Qry
-  ( qryFromExpr
+  ( PastHorizonException (..)
+  , qryFromExpr
   , runQuery
   , slotToGenesisWindow
+  , slotToPerasRoundNo
   )
 import Ouroboros.Consensus.HeaderValidation (HeaderWithTime (..))
-import Ouroboros.Consensus.Ledger.Abstract (EmptyMK)
+import Ouroboros.Consensus.Ledger.Abstract (EmptyMK, LedgerState)
 import Ouroboros.Consensus.Ledger.Extended
   ( ExtLedgerState
   , ledgerState
   )
-import Ouroboros.Consensus.Ledger.SupportsProtocol
-  ( LedgerSupportsProtocol
-  )
+import Ouroboros.Consensus.Ledger.SupportsPeras (LedgerStateSupportsPeras, getPerasParams)
+import Ouroboros.Consensus.Ledger.SupportsProtocol (LedgerSupportsProtocol)
 import Ouroboros.Consensus.MiniProtocol.ChainSync.Client
   ( ChainSyncClientHandle (..)
   , ChainSyncState (..)
   )
-import Ouroboros.Consensus.Node.GsmState
+import Ouroboros.Consensus.MiniProtocol.ObjectDiffusion.Inbound.State
+  ( NextOutstandingRoundNumber (..)
+  , ObjectDiffusionInboundHandle (..)
+  , ObjectDiffusionInboundState (..)
+  )
+import Ouroboros.Consensus.MiniProtocol.ObjectDiffusion.PerasCert
+  ( PerasCertDiffusionInboundState
+  )
+import qualified Ouroboros.Consensus.Node.GsmState as GSM
+import Ouroboros.Consensus.Peras.Context
+  ( TimeResolutionContext
+  , TimeResolutionContextHandle (..)
+  , runQueryWithContext
+  )
+import Ouroboros.Consensus.Peras.Weight (PerasWeightSnapshot, weightBoostOfPoint)
 import Ouroboros.Consensus.Storage.ChainDB.API (ChainDB)
 import qualified Ouroboros.Consensus.Storage.ChainDB.API as ChainDB
 import Ouroboros.Consensus.Util (eitherToMaybe, whenJust)
 import Ouroboros.Consensus.Util.AnchoredFragment (stripCommonPrefix)
 import Ouroboros.Consensus.Util.IOLike
-import Ouroboros.Consensus.Util.STM (Watcher (..))
+import Ouroboros.Consensus.Util.STM (Watcher (..), WithFingerprint (..))
 import Ouroboros.Network.AnchoredFragment (AnchoredFragment)
 import qualified Ouroboros.Network.AnchoredFragment as AF
 
@@ -95,6 +114,7 @@ gddWatcher ::
   forall m blk peer.
   ( IOLike m
   , Ord peer
+  , LedgerStateSupportsPeras (LedgerState blk)
   , LedgerSupportsProtocol blk
   , HasHardForkHistory blk
   ) =>
@@ -105,7 +125,7 @@ gddWatcher ::
   -- Otherwise, no faster than once every T seconds, where T is
   -- the provided value.
   DiffTime ->
-  STM m GsmState ->
+  STM m GSM.GsmState ->
   -- | The ChainSync handles. We trigger the GDD whenever our 'GsmState'
   -- changes, and when 'Syncing', whenever any of the candidate fragments
   -- changes. Also, we use this to disconnect from peers with insufficient
@@ -113,12 +133,13 @@ gddWatcher ::
   STM m (Map peer (ChainSyncClientHandle m blk)) ->
   -- | The LoE fragment. It starts at a (recent) immutable tip and ends at
   -- the common intersection of the candidate fragments.
+  STM m (Map peer (ObjectDiffusionInboundHandle m blk)) ->
   StrictTVar m (AnchoredFragment (HeaderWithTime blk)) ->
   Watcher
     m
     (GDDTrigger (GDDStateView m blk peer))
     (GDDTrigger (Map peer (StrictMaybe (WithOrigin SlotNo), Bool)))
-gddWatcher cfg tracer chainDb rateLimit getGsmState getHandles varLoEFrag =
+gddWatcher cfg tracer chainDb rateLimit getGsmState getCSHandles getCDHandles varLoEFrag =
   Watcher
     { wInitial = Nothing
     , wReader
@@ -129,22 +150,30 @@ gddWatcher cfg tracer chainDb rateLimit getGsmState getHandles varLoEFrag =
   wReader :: STM m (GDDTrigger (GDDStateView m blk peer))
   wReader =
     getGsmState >>= \case
-      PreSyncing -> pure GDDPreSyncing
-      Syncing -> GDDSyncing <$> getGDDStateView
-      CaughtUp -> pure GDDCaughtUp
+      GSM.PreSyncing -> pure GDDPreSyncing
+      GSM.Syncing -> GDDSyncing <$> getGDDStateView
+      GSM.CaughtUp -> pure GDDCaughtUp
 
   getGDDStateView :: STM m (GDDStateView m blk peer)
   getGDDStateView = do
     curChain <- ChainDB.getCurrentChainWithTime chainDb
     immutableLedgerSt <- ChainDB.getImmutableLedger chainDb
-    handles <- getHandles
-    states <- traverse (readTVar . cschState) handles
+    csHandles <- getCSHandles
+    csStates <- traverse (readTVar . cschState) csHandles
+    cdHandles <- getCDHandles
+    cdStates <- traverse (readTVar . odihState) cdHandles
+    weightSnapshot <- forgetFingerprint <$> ChainDB.getPerasWeightSnapshot chainDb
+    perasTimeResolutionContext <-
+      getTimeResolutionContext . ChainDB.getTimeResolutionContextHandle $ chainDb
     pure
       GDDStateView
         { gddCtxCurChain = curChain
         , gddCtxImmutableLedgerSt = immutableLedgerSt
-        , gddCtxKillActions = Map.map cschGDDKill handles
-        , gddCtxStates = states
+        , gddCtxKillActions = Map.map cschGDDKill csHandles
+        , gddChainSyncStates = csStates
+        , gddCertDiffusionStates = cdStates
+        , gddPerasWeightSnapshot = weightSnapshot
+        , gddPerasTimeResolutionContext = perasTimeResolutionContext
         }
 
   wFingerprint ::
@@ -160,9 +189,9 @@ gddWatcher cfg tracer chainDb rateLimit getGsmState getHandles varLoEFrag =
     -- it becoming visible to GDD. It will be visible only when csLatestSlot
     -- changes again or when csIdling changes, which is guaranteed to happen
     -- eventually.
-    GDDSyncing GDDStateView{gddCtxStates} ->
+    GDDSyncing GDDStateView{gddChainSyncStates} ->
       GDDSyncing $
-        Map.map (\css -> (csLatestSlot css, csIdling css)) gddCtxStates
+        Map.map (\css -> (csLatestSlot css, csIdling css)) gddChainSyncStates
 
   wNotify :: GDDTrigger (GDDStateView m blk peer) -> m ()
   wNotify = \case
@@ -202,7 +231,14 @@ data GDDStateView m blk peer = GDDStateView
   -- ^ The current ledger state
   , gddCtxKillActions :: Map peer (m ())
   -- ^ Callbacks to disconnect from peers
-  , gddCtxStates :: Map peer (ChainSyncState blk)
+  , gddChainSyncStates :: Map peer (ChainSyncState blk)
+  -- ^ The current state of the ChainSync mini-protocol for each peer
+  , gddCertDiffusionStates :: Map peer (PerasCertDiffusionInboundState blk)
+  -- ^ The current state of the CertDiffusion mini-protocol for each peer
+  , gddPerasWeightSnapshot :: PerasWeightSnapshot blk
+  -- ^ The Peras certificates that boost blocks newer than the current immutable tip
+  , gddPerasTimeResolutionContext :: TimeResolutionContext blk
+  -- ^ The time resolution context for Peras certificates
   }
 
 -- | Disconnect peers that lose density comparisons and recompute the LoE fragment.
@@ -216,6 +252,7 @@ evaluateGDD ::
   forall m blk peer.
   ( IOLike m
   , Ord peer
+  , LedgerStateSupportsPeras (LedgerState blk)
   , LedgerSupportsProtocol blk
   , HasHardForkHistory blk
   ) =>
@@ -228,12 +265,16 @@ evaluateGDD cfg tracer stateView = do
         { gddCtxCurChain = curChain
         , gddCtxImmutableLedgerSt = immutableLedgerSt
         , gddCtxKillActions = killActions
-        , gddCtxStates = states
+        , gddChainSyncStates = csStates
+        , gddCertDiffusionStates = cdStates
+        , gddPerasWeightSnapshot = weightSnapshot
+        , gddPerasTimeResolutionContext = perasTimeResolutionContext
         } = stateView
 
       (loeFrag, candidateSuffixes) =
         sharedCandidatePrefix curChain candidates
-      candidates = Map.toList (csCandidate <$> states)
+      candidates = Map.toList (csCandidate <$> csStates)
+      immutableLedger = ledgerState immutableLedgerSt
 
       msgen :: Maybe GenesisWindow
       -- This could also use 'runWithCachedSummary' if deemed desirable.
@@ -256,31 +297,98 @@ evaluateGDD cfg tracer stateView = do
             -- In any case, the immutable ledger state will also
             -- /eventually/ catch up to the LoE tip, so @msgen@ won't be
             -- 'Nothing' forever.
-            (ledgerState immutableLedgerSt)
+            immutableLedger
+
+      -- The value of perasBlockMaxSlots cannot change through era boundaries:
+      -- its value is k/f, which only depends on the static configuration of the
+      -- node, and not on the ledger state.
+      -- TODO: when that PR is rebased on the-big-pr, perasBlockMaxSlots will probably
+      -- be derived from a `HasPerasMaxBlockSlots` typeclass, which will return a value
+      -- only for the LedgerConfig of Shelley blocks.
+      PerasParams{perasBlockMaxSlots} =
+        getPerasParams
+          (Proxy @blk)
+          immutableLedger
+
+      getPerasRoundSpecs :: SlotNo -> PerasEnabled (PerasRoundNo, Word64)
+      getPerasRoundSpecs slot = case runQueryWithContext
+        perasTimeResolutionContext
+        (slotToPerasRoundNo slot) of
+        -- Should never happen: the last epoch should always be unbounded,
+        -- and we are looking at most an epoch in the future anyway.
+        Left PastHorizon{} -> error "tried to peek beyond the horizon"
+        Right NoPerasEnabled -> NoPerasEnabled
+        Right (PerasEnabled (roundNo, slotInRound, remainingSlots)) ->
+          PerasEnabled (roundNo, slotInRound + remainingSlots)
 
   whenJust msgen $ \sgen -> do
     let
+      firstSlotAfterLoEIntersection = succWithOrigin $ AF.headSlot loeFrag
+
+      firstSlotUnableToBoostGenesisWindow =
+        firstSlotAfterLoEIntersection + coerce sgen + coerce perasBlockMaxSlots
+      minCertDiffusionState = Map.foldr' min CaughtUp $ nextOutstandingRoundNumber <$> cdStates
+
+      -- Specs for the (potential) Peras round that contains the successor of
+      -- the LoE intersection slot.
+      firstRoundSpecs = getPerasRoundSpecs firstSlotAfterLoEIntersection
+
+      -- Specs for the (potential) Peras round that contains the first slot after which
+      -- no certificates can boost a block in the Genesis window.
+      lastRoundSpecs = getPerasRoundSpecs firstSlotUnableToBoostGenesisWindow
+
+      hasSeenEnoughCerts = case minCertDiffusionState of
+        -- We are caught up w.r.t certificates with all peers
+        CaughtUp -> True
+        -- We have a peer who hasn't told us anything about its certificates:
+        -- delay disconnecting until we have more information.
+        Uninitialized -> False
+        NextOutstandingRoundNumber (PerasRoundNo roundNo) -> case (firstRoundSpecs, lastRoundSpecs) of
+          -- Peras is enabled after the Genesis window: check we have received all certificates
+          -- up to the last round that can boost a block in the Genesis window.
+          (_, PerasEnabled (PerasRoundNo lastRoundNo, _)) -> roundNo >= lastRoundNo
+          -- We are crossing from a Peras-enabled era to a non-Peras-enabled era:
+          -- check we have received all certificates up to the (over-approximated) last round
+          -- of the Peras-enabled era.
+          (PerasEnabled (PerasRoundNo firstRoundNo, roundLength), NoPerasEnabled) ->
+            let virtualLastRoundNo = firstRoundNo + (coerce sgen + coerce perasBlockMaxSlots) `div` roundLength
+             in roundNo >= virtualLastRoundNo
+          -- Peras is disabled: we don't need any certificates.
+          (NoPerasEnabled, NoPerasEnabled) -> True
+
       (losingPeers, bounds) =
-        densityDisconnect sgen (configSecurityParam cfg) states candidateSuffixes loeFrag
+        densityDisconnect
+          sgen
+          (configSecurityParam cfg)
+          csStates
+          cdStates
+          weightSnapshot
+          candidateSuffixes
+          loeFrag
+
       loeHead = AF.castAnchor $ AF.headAnchor loeFrag
 
       dropTimes = map (second (AF.mapAnchoredFragment hwtHeader))
 
-    traceWith tracer $
-      TraceGDDDebug $
-        GDDDebugInfo
-          { sgen
-          , curChain = AF.mapAnchoredFragment hwtHeader curChain
-          , bounds
-          , candidates = dropTimes candidates
-          , candidateSuffixes = dropTimes candidateSuffixes
-          , losingPeers
-          , loeHead
-          }
+    if hasSeenEnoughCerts
+      then do
+        traceWith tracer $
+          TraceGDDDebug $
+            GDDDebugInfo
+              { sgen
+              , curChain = AF.mapAnchoredFragment hwtHeader curChain
+              , bounds
+              , candidates = dropTimes candidates
+              , candidateSuffixes = dropTimes candidateSuffixes
+              , losingPeers
+              , loeHead
+              }
 
-    whenJust (NE.nonEmpty losingPeers) $ \losingPeersNE -> do
-      for_ losingPeersNE $ \peer -> killActions Map.! peer
-      traceWith tracer $ TraceGDDDisconnected losingPeersNE
+        whenJust (NE.nonEmpty losingPeers) $ \losingPeersNE -> do
+          for_ losingPeersNE $ \peer -> killActions Map.! peer
+          traceWith tracer $ TraceGDDDisconnected losingPeersNE
+      else
+        traceWith tracer $ TraceGDDWaitingForPerasCerts minCertDiffusionState
 
   pure loeFrag
 
@@ -343,11 +451,12 @@ sharedCandidatePrefix curChain candidates =
 data DensityBounds blk
   = DensityBounds
   { clippedFragment :: AnchoredFragment (Header blk)
-  , offersMoreThanK :: Bool
+  , isDenseEnough :: Bool
   , lowerBound :: Word64
   , upperBound :: Word64
   , hasBlockAfter :: Bool
-  , latestSlot :: WithOrigin SlotNo
+  , latestInboundCertState :: NextOutstandingRoundNumber
+  , latestHeaderSlot :: WithOrigin SlotNo
   , idling :: Bool
   }
 
@@ -362,7 +471,7 @@ deriving stock instance (Show (Header blk), GetHeader blk) => Show (DensityBound
 -- @candidateSuffixes@ tells for every peer what is the fragment that the peer
 -- proposes to use after @loeFrag@.
 --
--- @states@ contains further information for every peer, such as the last
+-- @csStates@ contains further information for every peer, such as the last
 -- ChainSync instruction the peer sent, and whether the peer is idling (i.e. it
 -- sent @MsgAwaitReply@).
 --
@@ -381,124 +490,144 @@ densityDisconnect ::
   GenesisWindow ->
   SecurityParam ->
   Map peer (ChainSyncState blk) ->
+  Map peer (PerasCertDiffusionInboundState blk) ->
+  PerasWeightSnapshot blk ->
   [(peer, AnchoredFragment (HeaderWithTime blk))] ->
   AnchoredFragment (HeaderWithTime blk) ->
   ([peer], [(peer, DensityBounds blk)])
-densityDisconnect (GenesisWindow sgen) (SecurityParam k) states candidateSuffixes loeFrag =
-  (losingPeers, densityBounds)
- where
-  densityBounds = do
-    (peer, candidateSuffix) <- candidateSuffixes
-    let (clippedFragment, _) =
-          AF.splitAtSlot firstSlotAfterGenesisWindow candidateSuffix
-    state <- maybeToList (states Map.!? peer)
-    -- Skip peers that haven't sent any headers yet.
-    -- They should be disconnected by timeouts instead.
-    latestSlot <- toList (csLatestSlot state)
-    let idling = csIdling state
+densityDisconnect
+  (GenesisWindow sgen)
+  (SecurityParam k)
+  csStates
+  cdStates
+  weightSnapshot
+  candidateSuffixes
+  loeFrag =
+    (losingPeers, densityBounds)
+   where
+    densityBounds = do
+      (peer, candidateSuffix) <- candidateSuffixes
+      let (clippedFragment, _) =
+            AF.splitAtSlot firstSlotAfterGenesisWindow candidateSuffix
+      csState <- maybeToList (csStates Map.!? peer)
+      -- Skip peers that haven't sent any headers yet.
+      -- They should be disconnected by timeouts instead.
+      latestHeaderSlot <- toList (csLatestSlot csState)
+      let idling = csIdling csState
+      let latestInboundCertState = maybe Uninitialized nextOutstandingRoundNumber (cdStates Map.!? peer)
+          -- Is there a block after the end of the Genesis window?
+          hasBlockAfter =
+            max (AF.headSlot candidateSuffix) latestHeaderSlot
+              >= NotOrigin firstSlotAfterGenesisWindow
 
-        -- Is there a block after the end of the Genesis window?
-        hasBlockAfter =
-          max (AF.headSlot candidateSuffix) latestSlot
-            >= NotOrigin firstSlotAfterGenesisWindow
+          -- If the slot of the latest header we know of is _after_ the end of
+          -- the Genesis window (either because the candidate fragment extends
+          -- beyond it or because we are waiting to validate a header beyond the
+          -- forecast horizon that we already received), there can be no headers
+          -- in between and 'potentialSlots' is 0.
+          potentialSlots =
+            if hasBlockAfter
+              then 0
+              else unknownTrailingSlots
 
-        -- If the slot of the latest header we know of is _after_ the end of
-        -- the Genesis window (either because the candidate fragment extends
-        -- beyond it or because we are waiting to validate a header beyond the
-        -- forecast horizon that we already received), there can be no headers
-        -- in between and 'potentialSlots' is 0.
-        potentialSlots =
-          if hasBlockAfter
-            then 0
-            else unknownTrailingSlots
+          -- Number of trailing slots in the genesis window that could have
+          -- headers which haven't been sent yet
+          unknownTrailingSlots =
+            unSlotNo $
+              -- cannot underflow as the fragment is clipped to the genesis window
+              firstSlotAfterGenesisWindow - succWithOrigin (AF.headSlot clippedFragment)
 
-        -- Number of trailing slots in the genesis window that could have
-        -- headers which haven't been sent yet
-        unknownTrailingSlots =
-          unSlotNo $
-            -- cannot underflow as the fragment is clipped to the genesis window
-            firstSlotAfterGenesisWindow - succWithOrigin (AF.headSlot clippedFragment)
+          -- The number of blocks within the Genesis window we know with certainty,
+          -- plus the weight of Peras certificates boosting those blocks
+          lowerBound = weightedLength clippedFragment
 
-        -- The number of blocks within the Genesis window we know with certainty
-        lowerBound = fromIntegral $ AF.length clippedFragment
+          upperBound = lowerBound + potentialSlots
 
-        upperBound = lowerBound + potentialSlots
+          isDenseEnough = weightedLength candidateSuffix > unNonZero k
 
-        -- The number of blocks we know to be on the candidate chain after
-        -- the intersection, not limited to the Genesis window.
-        totalBlockCount = fromIntegral (AF.length candidateSuffix)
+      pure
+        ( peer
+        , DensityBounds
+            { clippedFragment = AF.mapAnchoredFragment hwtHeader clippedFragment
+            , isDenseEnough
+            , lowerBound
+            , upperBound
+            , hasBlockAfter
+            , latestInboundCertState
+            , latestHeaderSlot
+            , idling
+            }
+        )
 
-        -- Does the peer have more than k known blocks in _total_ after the intersection?
-        -- If not, it is not qualified to compete by density (yet).
-        offersMoreThanK = totalBlockCount > unNonZero k
+    losingPeers =
+      nubOrd $
+        densityBounds
+          >>= \( peer0
+                 , DensityBounds
+                     { clippedFragment = frag0
+                     , lowerBound = lb0
+                     , upperBound = ub0
+                     , hasBlockAfter = hasBlockAfter0
+                     , idling = idling0
+                     }
+                 ) -> do
+              (_peer1, DensityBounds{clippedFragment = frag1, isDenseEnough, lowerBound = lb1}) <-
+                densityBounds
+              -- Don't disconnect peer0 if it sent no headers after the intersection yet
+              -- and it is not idling.
+              --
+              -- See Note [Chain disagreement]
+              --
+              guard $ idling0 || not (AF.null frag0) || hasBlockAfter0
+              -- ensure that the two peer fragments don't share any
+              -- headers after the LoE
+              guard $ AF.lastPoint frag0 /= AF.lastPoint frag1
+              -- peer1 offers more than k blocks or peer0 has sent all headers in the
+              -- genesis window after the intersection (idling or not)
+              --
+              -- Checking for isDenseEnough is important to avoid disconnecting
+              -- competing honest peers when the syncing node is nearly caught up.
+              guard $ isDenseEnough || lb0 == ub0
+              -- peer1 has the same or better density than peer0
+              -- If peer0 is idling, we assume no more headers will be sent.
+              --
+              -- Having the same density is enough to disconnect peer0, as the honest
+              -- chain is expected to have a strictly higher density than all of the
+              -- other chains.
+              --
+              -- This matters to ChainSync jumping, where adversarial dynamo and
+              -- objector could offer chains of equal density.
+              guard $ lb1 >= (if idling0 then lb0 else ub0)
 
-    pure
-      ( peer
-      , DensityBounds
-          { clippedFragment = AF.mapAnchoredFragment hwtHeader clippedFragment
-          , offersMoreThanK
-          , lowerBound
-          , upperBound
-          , hasBlockAfter
-          , latestSlot
-          , idling
-          }
-      )
+              -- We disconnect peer0 if there is at least another peer peer1 with a
+              -- chain which is at least as good, and peer0 is either idling or there is
+              -- no extension to peer0's chain that can make it better than peer1's, and
+              -- peer1's has more than k headers or peer0 has sent all its headers in
+              -- the genesis window anchored at the intersection.
+              --
+              -- A chain is "as good as another" if it has at least as many headers in
+              -- the genesis window anchored at the intersection.
+              pure peer0
 
-  losingPeers =
-    nubOrd $
-      densityBounds
-        >>= \( peer0
-               , DensityBounds
-                   { clippedFragment = frag0
-                   , lowerBound = lb0
-                   , upperBound = ub0
-                   , hasBlockAfter = hasBlockAfter0
-                   , idling = idling0
-                   }
-               ) -> do
-            (_peer1, DensityBounds{clippedFragment = frag1, offersMoreThanK, lowerBound = lb1}) <-
-              densityBounds
-            -- Don't disconnect peer0 if it sent no headers after the intersection yet
-            -- and it is not idling.
-            --
-            -- See Note [Chain disagreement]
-            --
-            guard $ idling0 || not (AF.null frag0) || hasBlockAfter0
-            -- ensure that the two peer fragments don't share any
-            -- headers after the LoE
-            guard $ AF.lastPoint frag0 /= AF.lastPoint frag1
-            -- peer1 offers more than k blocks or peer0 has sent all headers in the
-            -- genesis window after the intersection (idling or not)
-            --
-            -- Checking for offersMoreThanK is important to avoid disconnecting
-            -- competing honest peers when the syncing node is nearly caught up.
-            guard $ offersMoreThanK || lb0 == ub0
-            -- peer1 has the same or better density than peer0
-            -- If peer0 is idling, we assume no more headers will be sent.
-            --
-            -- Having the same density is enough to disconnect peer0, as the honest
-            -- chain is expected to have a strictly higher density than all of the
-            -- other chains.
-            --
-            -- This matters to ChainSync jumping, where adversarial dynamo and
-            -- objector could offer chains of equal density.
-            guard $ lb1 >= (if idling0 then lb0 else ub0)
+    loeIntersectionSlot = AF.headSlot loeFrag
 
-            -- We disconnect peer0 if there is at least another peer peer1 with a
-            -- chain which is at least as good, and peer0 is either idling or there is
-            -- no extension to peer0's chain that can make it better than peer1's, and
-            -- peer1's has more than k headers or peer0 has sent all its headers in
-            -- the genesis window anchored at the intersection.
-            --
-            -- A chain is "as good as another" if it has at least as many headers in
-            -- the genesis window anchored at the intersection.
-            pure peer0
+    firstSlotAfterGenesisWindow =
+      succWithOrigin loeIntersectionSlot + SlotNo sgen
 
-  loeIntersectionSlot = AF.headSlot loeFrag
-
-  firstSlotAfterGenesisWindow =
-    succWithOrigin loeIntersectionSlot + SlotNo sgen
+    weightedLength frag =
+      frag
+        & AF.toOldestFirst
+        & foldMap
+          ( \header ->
+              header
+                & hwtHeader
+                & headerPoint
+                & weightBoostOfPoint weightSnapshot
+                & unPerasWeight
+                & Sum
+                & (+ 1)
+          )
+        & getSum
 
 -- Note [Chain disagreement]
 -- ~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -545,6 +674,9 @@ data TraceGDDEvent peer blk
   = -- | The GDD disconnected from the given peers due to insufficient density.
     TraceGDDDisconnected (NonEmpty peer)
   | TraceGDDDebug (GDDDebugInfo peer blk)
+  | -- | The GDD is waiting for more Peras certificates to be received before it can
+    -- safely disconnect peers.
+    TraceGDDWaitingForPerasCerts NextOutstandingRoundNumber
 
 deriving stock instance
   ( GetHeader blk
