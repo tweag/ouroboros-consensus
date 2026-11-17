@@ -32,7 +32,7 @@ import Data.Map.Strict (Map)
 import Data.Ratio ((%))
 import Data.Set (Set)
 import qualified Data.Set as Set
-import Data.Word (Word64)
+import Data.Word (Word32, Word64)
 import GHC.Generics (Generic)
 import Ouroboros.Consensus.Block.Abstract (Point (..), SlotNo (..))
 import Ouroboros.Consensus.Block.SupportsPeras
@@ -233,7 +233,7 @@ instance StateModel Model where
         ]
 
     genRoundNo = do
-      n <- choose @Word64 (0, 9)
+      n <- choose @Word32 (0, 9)
       pure (PerasRoundNo n)
 
     genRelativeTime = do

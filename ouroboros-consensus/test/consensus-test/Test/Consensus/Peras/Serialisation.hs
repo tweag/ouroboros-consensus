@@ -124,7 +124,7 @@ genPerasParams = do
   bootstrapStatus <-
     frequency
       [ (1, pure PerasBootstrapDisabled)
-      , (1, PerasBootstrapEnabled . PerasRoundNo <$> genWord64)
+      , (1, PerasBootstrapEnabled . PerasRoundNo <$> arbitrary)
       ]
   pure
     PerasParams

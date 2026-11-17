@@ -231,7 +231,7 @@ instance Arbitrary ArbitrarySummary where
           pastHorizonPerasRound :: Word64 <- choose (0, 1_000)
           pure
             ( Nothing
-            , Just (PerasRoundNo pastHorizonPerasRound)
+            , Just (PerasRoundNo (fromIntegral pastHorizonPerasRound))
             )
         -- Peras is enabled for /at least/ the (last unbounded) era, so there is
         -- no 'PerasRoundNo' that is past the horizon.

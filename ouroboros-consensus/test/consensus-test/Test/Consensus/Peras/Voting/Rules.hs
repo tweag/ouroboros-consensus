@@ -180,12 +180,12 @@ isPerasVotingAllowedModel
           perasCertArrivalThreshold $
             perasParams
     _R =
-      PerasRoundNo $
+      PerasRoundNo . fromIntegral $
         unPerasIgnoranceRounds $
           perasIgnoranceRounds $
             perasParams
     _K =
-      PerasRoundNo $
+      PerasRoundNo . fromIntegral $
         unPerasCooldownRounds $
           perasCooldownRounds $
             perasParams

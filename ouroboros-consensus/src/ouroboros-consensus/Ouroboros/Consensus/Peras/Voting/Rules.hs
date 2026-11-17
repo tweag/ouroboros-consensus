@@ -323,7 +323,7 @@ perasVR2A
           Bool True
 
     _R =
-      PerasRoundNo $
+      PerasRoundNo . fromIntegral $
         unPerasIgnoranceRounds $
           perasIgnoranceRounds $
             perasParams
@@ -393,7 +393,7 @@ perasVR2B
         `divMod` toInteger (unPerasRoundNo _K)
 
     _K =
-      PerasRoundNo $
+      PerasRoundNo . fromIntegral $
         unPerasCooldownRounds $
           perasCooldownRounds $
             perasParams
