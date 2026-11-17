@@ -178,8 +178,14 @@ objectDiffusionInbound
             SendMsgRequestObjectIdsBlocking
               numIdsToAck
               numIdsToReq
+              (pure ())
               ( \objectIds -> WithEffect $ do
                   psaOnReceiveIds numIdsToReq (NonEmpty.toList objectIds)
+                  pure $ goIdle Zero
+              )
+              -- 'MsgServerIdle' completes the request without object IDs
+              ( WithEffect $ do
+                  psaOnReceiveIds numIdsToReq []
                   pure $ goIdle Zero
               )
 

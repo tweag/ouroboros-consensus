@@ -153,7 +153,7 @@ data DecisionContext peerAddr objectId object = DecisionContext
 data DecisionPolicy = DecisionPolicy
   { dpMaxNumObjectIdsReq :: !NumObjectIdsReq
   -- ^ a maximal number of objectIds requested at once.
-  , dpMaxNumObjectsOutstanding :: !NumObjectsOutstanding
+  , dpMaxNumObjectsOutstanding :: !NumObjectsUnacknowledged
   -- ^ maximal number of objects in the outstanding FIFO.
   -- Must be the same as the outbound peer's value.
   , dpMaxNumObjectsInflightPerPeer :: !NumObjectsReq
