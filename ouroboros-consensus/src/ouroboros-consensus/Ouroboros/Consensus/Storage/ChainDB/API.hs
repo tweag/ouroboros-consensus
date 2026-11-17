@@ -135,7 +135,6 @@ import Ouroboros.Consensus.Storage.LedgerDB
   )
 import Ouroboros.Consensus.Storage.PerasCertDB.API
   ( AddPerasCertResult (..)
-  , PerasCertTicketNo
   )
 import Ouroboros.Consensus.Storage.PerasVoteDB.API
   ( AddPerasVoteResult (..)
@@ -483,8 +482,8 @@ data ChainDB m blk = ChainDB
   -- ^ Asynchronously insert a certificate to the DB. If this leads to a fork to
   -- be weightier than our current selection, this will trigger a fork switch.
   , getPerasCertsAfter ::
-      PerasCertTicketNo ->
-      STM m (Map PerasCertTicketNo (m (WithArrivalTime (ValidatedPerasCert blk))))
+      PerasRoundNo ->
+      STM m (Map PerasRoundNo (m (WithArrivalTime (ValidatedPerasCert blk))))
   -- ^ Get all known Peras certs with a ticket number strictly greater than the
   -- given one, in ascending order. The values are 'm' actions to allow
   -- implementations with on-disk storage.
