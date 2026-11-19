@@ -161,6 +161,7 @@ import Ouroboros.Network.ControlMessage
 import Ouroboros.Network.PeerSelection.PeerMetric.Type
   ( HeaderMetricsTracer
   )
+import Ouroboros.Network.PerasSupport (PerasSupport)
 import Ouroboros.Network.Protocol.ChainSync.ClientPipelined
 import Ouroboros.Network.Protocol.ChainSync.PipelineDecision
 
@@ -357,6 +358,7 @@ bracketChainSyncClient ::
   STM m GsmState ->
   peer ->
   NodeToNodeVersion ->
+  PerasSupport ->
   ChainSyncLoPBucketConfig ->
   CSJConfig ->
   DiffusionPipeliningSupport ->
@@ -370,6 +372,7 @@ bracketChainSyncClient
   getGsmState
   peer
   version
+  perasSupport
   csBucketConfig
   csjConfig
   pipelining
@@ -407,6 +410,7 @@ bracketChainSyncClient
           { csCandidate = AF.Empty AF.AnchorGenesis
           , csLatestSlot = SNothing
           , csIdling = False
+          , csPerasSupport = perasSupport
           }
 
     withCSJCallbacks ::
