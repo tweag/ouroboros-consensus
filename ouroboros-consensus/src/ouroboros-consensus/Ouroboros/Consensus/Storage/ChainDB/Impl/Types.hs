@@ -171,7 +171,7 @@ class
   , VolatileDbSerialiseConstraints blk
   , -- Needed for Follower
     EncodeDiskDep (NestedCtxt Header) blk
-  , -- Needed for the PerasImmutableCertDB
+  , -- Needed for the PerasCertDB and the PerasImmutableCertDB
     EncodeDisk blk (PerasCert blk)
   , DecodeDisk blk (PerasCert blk)
   ) =>
