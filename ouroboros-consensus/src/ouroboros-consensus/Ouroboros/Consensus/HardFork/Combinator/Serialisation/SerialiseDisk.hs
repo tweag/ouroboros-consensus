@@ -159,7 +159,7 @@ instance
     cfgs = getPerEraCodecConfig (hardForkCodecConfigPerEra cfg)
 
 {-------------------------------------------------------------------------------
-  Peras certificates (for the PerasImmutableCertDB)
+  Peras certificates (for the PerasCertDB and the PerasImmutableCertDB)
 -------------------------------------------------------------------------------}
 
 instance
