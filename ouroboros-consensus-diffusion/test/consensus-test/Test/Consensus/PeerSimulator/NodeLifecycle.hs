@@ -35,6 +35,9 @@ import Ouroboros.Consensus.Ledger.Tables.MapKind (ValuesMK)
 import Ouroboros.Consensus.MiniProtocol.ChainSync.Client
   ( ChainSyncClientHandleCollection (..)
   )
+import Ouroboros.Consensus.MiniProtocol.ObjectDiffusion.Inbound.State
+  ( ObjectDiffusionInboundHandleCollection (..)
+  )
 import Ouroboros.Consensus.Peras.Context (StateSupportsPerasEpochContext)
 import Ouroboros.Consensus.Storage.ChainDB.API
 import qualified Ouroboros.Consensus.Storage.ChainDB.API as ChainDB
@@ -262,7 +265,8 @@ lifecycleStop resources LiveNode{lnStateViewTracers, lnCopyToImmDb, lnPeers} = d
   releaseAll lrRegistry
   -- Reset the resources in TVars that were allocated by the simulator
   atomically $ do
-    cschcRemoveAllHandles psrHandles
+    cschcRemoveAllHandles psrCSHandles
+    odihcRemoveAllHandles psrCDHandles
     case lrLoEVar of
       LoEEnabled var -> modifyTVar var (const (AF.Empty AF.AnchorGenesis))
       LoEDisabled -> pure ()
@@ -273,6 +277,6 @@ lifecycleStop resources LiveNode{lnStateViewTracers, lnCopyToImmDb, lnPeers} = d
   LiveResources
     { lrRegistry
     , lrTracer
-    , lrPeerSim = PeerSimulatorResources{psrHandles}
+    , lrPeerSim = PeerSimulatorResources{psrCSHandles, psrCDHandles}
     , lrLoEVar
     } = resources

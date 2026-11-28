@@ -61,6 +61,13 @@ import Ouroboros.Consensus.MiniProtocol.ChainSync.Client
   ( ChainSyncClientException (..)
   , ChainSyncState (..)
   )
+import Ouroboros.Consensus.MiniProtocol.ObjectDiffusion.Inbound.State
+  ( NextOutstandingRoundNumber (..)
+  , ObjectDiffusionInboundState (..)
+  )
+import Ouroboros.Consensus.Peras.Weight
+  ( emptyPerasWeightSnapshot
+  )
 import Ouroboros.Consensus.Util.Condense (condense)
 import Ouroboros.Network.AnchoredFragment (AnchoredFragment)
 import qualified Ouroboros.Network.AnchoredFragment as AF
@@ -226,19 +233,32 @@ attachTimeUsingTestConfig = attachSlotTimeToFragment singleNodeTestConfig
 prop_densityDisconnectStatic :: Property
 prop_densityDisconnectStatic =
   forAll gen $ \StaticCandidates{k, sgen, suffixes, loeFrag} -> do
-    let (disconnect, _) = densityDisconnect sgen k (mkState <$> Map.fromList suffixes) suffixes loeFrag
+    let (disconnect, _) =
+          densityDisconnect
+            sgen
+            k
+            (mkCSState <$> Map.fromList suffixes)
+            (mkCDState <$> Map.fromList suffixes)
+            emptyPerasWeightSnapshot
+            suffixes
+            loeFrag
     counterexample "it should disconnect some node" (not (null disconnect))
       .&&. counterexample
         "it should not disconnect the honest peers"
         (not $ any isHonestPeerId disconnect)
  where
-  mkState :: AnchoredFragment (HeaderWithTime TestBlock) -> ChainSyncState TestBlock
-  mkState frag =
+  mkCSState :: AnchoredFragment (HeaderWithTime TestBlock) -> ChainSyncState TestBlock
+  mkCSState frag =
     ChainSyncState
       { csCandidate = frag
       , csLatestSlot = SJust (AF.headSlot frag)
       , csIdling = False
       , csPerasSupport = PerasSupported
+      }
+  mkCDState :: AnchoredFragment (HeaderWithTime TestBlock) -> ObjectDiffusionInboundState TestBlock
+  mkCDState _frag =
+    ObjectDiffusionInboundState
+      { nextOutstandingRoundNumber = CaughtUp
       }
   gen = do
     gt <- genChains (QC.choose (1, 4))
@@ -472,7 +492,7 @@ evolveBranches EvolvingPeers{k, sgen, peers = initialPeers, fullTree} =
       -- Compute the selection.
       curChain = selection (immutableTip ps) (firstBranch ps)
       candidates = candidate . value <$> toMap nextPeers
-      states =
+      csStates =
         candidates <&> \csCandidate ->
           ChainSyncState
             { csCandidate = attachTimeUsingTestConfig csCandidate
@@ -480,6 +500,12 @@ evolveBranches EvolvingPeers{k, sgen, peers = initialPeers, fullTree} =
             , csLatestSlot = SJust (AF.headSlot csCandidate)
             , csPerasSupport = PerasSupported
             }
+      cdStates =
+        candidates
+          <&> const
+            ObjectDiffusionInboundState
+              { nextOutstandingRoundNumber = CaughtUp
+              }
       -- Run GDD.
       (loeFrag, suffixes) =
         sharedCandidatePrefix
@@ -487,7 +513,16 @@ evolveBranches EvolvingPeers{k, sgen, peers = initialPeers, fullTree} =
           ( Map.toList $
               fmap attachTimeUsingTestConfig candidates
           )
-      (killedNow, bounds) = first Set.fromList $ densityDisconnect sgen k states suffixes loeFrag
+      (killedNow, bounds) =
+        first Set.fromList $
+          densityDisconnect
+            sgen
+            k
+            csStates
+            cdStates
+            emptyPerasWeightSnapshot
+            suffixes
+            loeFrag
       event =
         UpdateEvent
           { target
